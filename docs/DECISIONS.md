@@ -259,6 +259,11 @@ training with these priors before accepting their quality contribution.
 
 Date: 2026-06-28
 
+Status: Superseded on 2026-06-29 before either long run was started. Truck is an
+engineering smoke dataset only; the same matched protocol will be instantiated
+for the forthcoming glass-dome target scene after its video, COLMAP model, and
+normal priors are validated.
+
 Question: How should the effect of the completed StableNormal prior set be
 measured without confounding it with resolution, initialization, schedules, or
 debug/checkpoint differences?
@@ -282,8 +287,58 @@ monocular-normal coefficient.
 Paper fidelity: This is a Stage A engineering evaluation protocol. It does not
 change the loss formula, model, renderer, or training implementation.
 
-Impact: The comparison requires two long runs and approximately doubles the
-target-quality compute and output storage. It remains unrun pending user review
-of the prior contact sheet.
+Impact: The documented truck commands must not be run. The future target-scene
+comparison will require two long runs and approximately double the
+target-quality compute and output storage.
 
-Required ablation: The two runs defined above are the required ablation.
+Required ablation: Recreate the matched `lambda_mono=0` versus `0.01` protocol
+for the validated glass-dome target scene, not Truck.
+
+## A-011 — Static-scene video keyframe selection
+
+Date: 2026-06-29
+
+Question: How should a raw glass-dome video be converted into a deterministic,
+COLMAP-ready Stage A image sequence without resizing, silently mixing older
+frames, or selecting blurred and redundant frames?
+
+Chosen implementation: Use `tools/extract_video_keyframes.py`. Require local
+`ffprobe` and `ffmpeg`, probe the first video stream, and uniformly sample JPEG
+candidates with FFmpeg's `fps` filter. Candidate timestamps use the deterministic
+uniform grid `candidate_index / candidate_fps`. Score every candidate with
+Laplacian variance, under/overexposed pixel ratios, a 32x32 grayscale visual
+feature, and temporal separation. Select greedily with a seeded tie-breaker and
+weights `0.70 quality + 0.20 visual novelty + 0.10 temporal coverage`; reject
+exposure violations, candidates closer than the configured time gap, and visual
+similarity at or above the configured duplicate threshold. Sort selected frames
+back into time order and name them `000000.jpg`, `000001.jpg`, and so on.
+
+Write full-resolution JPEGs at quality 98 by default. Store `keyframes.json`,
+`contact_sheet.jpg`, and `selection_report.txt` beside the `images/` directory.
+Dry-run writes only those metadata/preview artifacts. Formal extraction writes
+an atomic in-progress manifest, atomically installs every image, updates progress
+after each frame, and marks the manifest complete only at the end. Existing
+files require matching video fingerprint, parameters, output names, dimensions,
+and manifest state; unexpected or unmanifested files are fatal. Selection
+shortfall is reported and fails instead of silently relaxing thresholds.
+
+Alternatives: Fixed-stride extraction without quality checks; OpenCV video
+decoding; resizing candidates; perceptual neural embeddings; silently appending
+to an existing image directory; or automatically relaxing filters to reach the
+requested count.
+
+Why: FFmpeg handles real-world codecs and timestamps more robustly than an
+application-level decoder. The lightweight deterministic metrics require no new
+model dependency, preserve source resolution, and provide auditable reasons for
+every selection/rejection. Fail-closed resume semantics prevent mixed datasets.
+
+Paper fidelity: This is Stage A input preprocessing and does not change the
+renderer, representation, losses, or training schedule.
+
+Impact: Candidate extraction requires temporary high-quality JPEG storage and
+selection is quadratic in candidate/selected count. A real video run is still
+required before claiming operational extraction success.
+
+Required ablation: None. Inspect the dry-run contact sheet and report before
+formal extraction; adjust target count or thresholds explicitly if selection is
+short.

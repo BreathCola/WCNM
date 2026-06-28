@@ -4,7 +4,7 @@ Current stage: Stage A — 3DGS to 2D Surfel Diffuse Foundation
 
 Current branch: `master`
 
-Last verified commit: `93d962371887801764332ddfc70d66680ceedd31`
+Last verified commit: `8119e01266566be32619d7387ab746aa797d3810`
 
 ## Repository structure
 
@@ -58,10 +58,17 @@ Last verified commit: `93d962371887801764332ddfc70d66680ceedd31`
 - Verified checkpoint save/resume, PLY reload/render, material/geometry gradients,
   densification, and the original 3DGS train/render paths.
 - Ran a 3,000-step low-resolution D-only training pass on `data/tandt/truck`.
+- Created ordinary WIP snapshot commit `8119e01266566be32619d7387ab746aa797d3810`;
+  it is not the Stage A acceptance/rollback commit.
+- Added a deterministic FFprobe/FFmpeg video-keyframe preprocessing tool with
+  blur/exposure/duplicate/time-gap scoring, dry-run reports/contact sheet,
+  atomic writes, and fail-closed resume validation. Unit tests and a tiny
+  synthetic FFmpeg integration test passed, but no real target video has been
+  supplied or extracted.
 
 ## Tests passed
 
-- `conda run -n RT-GS python -m pytest -q tests`: 16 passed.
+- `conda run -n RT-GS python -m pytest -q tests`: 29 passed.
 - Python compile check and `git diff --check` passed.
 - Surfel one-step training, checkpoint resume, 601-step densification smoke,
   3,000-step D-only training, and 251-view G-buffer rendering passed.
@@ -69,9 +76,12 @@ Last verified commit: `93d962371887801764332ddfc70d66680ceedd31`
 
 ## Known failures
 
-- Full truck prior coverage is complete, but the nine-view contact sheet still
-  requires user review and no matched target-quality training comparison has
-  established whether the priors improve normal/depth stability.
+- Truck remains an engineering smoke dataset. Its full prior set and short runs
+  are not Stage A quality evidence, and the previously planned Truck 30,000-step
+  comparison was superseded before execution.
+- The glass-dome target video is not yet present, so real keyframe extraction,
+  COLMAP reconstruction, target-scene priors, quality training, and matched
+  `lambda_mono` comparison remain unrun.
 - The 3,000-step run used `--resolution 8`; final-resolution/30,000-step quality
   acceptance has not run. The final normal map is finite and scene-aligned but
   retains visible high-frequency noise.
@@ -101,12 +111,12 @@ Last verified commit: `93d962371887801764332ddfc70d66680ceedd31`
 
 ## Next exact task
 
-- Obtain user review of the fixed nine-view source/prior contact sheet, then run
-  the documented matched 30,000-step full-resolution Stage A comparison with
-  `lambda_mono=0` versus `0.01`; do not change any other training setting.
+- Place the target video at `data/dome_cat_01/raw/source.mp4`, run keyframe
+  selection in dry-run mode, and inspect `keyframes.json`, `contact_sheet.jpg`,
+  and `selection_report.txt` before formal extraction.
 
 ## Blocked by
 
-- Manual prior-direction/quality review and the matched `lambda_mono=0` versus
-  `0.01` target-quality comparison remain intentionally unrun. Final
-  normal/depth acceptance and rollback commit also remain incomplete.
+- A real glass-dome target video is required. Do not run COLMAP, StableNormal,
+  or training until its dry-run keyframe selection is reviewed. Final
+  normal/depth acceptance and rollback commit remain incomplete.

@@ -90,6 +90,21 @@ The original 3DGS baseline must remain runnable. RT-GS mode must use the new
 - [x] Verify checkpoint resume.
 - [x] Verify an original dataset can train in both RT-GS and baseline modes.
 
+### A-6 — Target-video keyframe preprocessing
+
+- [x] Add `tools/extract_video_keyframes.py` using `ffprobe`/`ffmpeg`.
+- [x] Score uniformly sampled candidates for Laplacian sharpness, exposure,
+  visual duplication, and temporal separation.
+- [x] Preserve source resolution, emit continuous JPEG names, and record full
+  selection provenance plus contact sheet and text report.
+- [x] Support report-only dry-run, atomic writes, and fail-closed resume.
+- [x] Add unit tests for naming, parameters, manifest, duplicate rejection, and
+  dry-run image exclusion.
+- [x] Verify dry-run and formal atomic extraction on a tiny synthetic FFmpeg
+  video; this does not substitute for the real target video.
+- [ ] Run dry-run and formal extraction on the real glass-dome target video;
+  unit tests do not constitute a real extraction result.
+
 ## Explicitly forbidden in Stage A
 
 - Reflection Gaussian or reflection model/optimizer paths.
@@ -125,6 +140,7 @@ The original 3DGS baseline must remain runnable. RT-GS mode must use the new
 git submodule update --init --recursive
 conda run -n RT-GS pip install --no-build-isolation -e submodules/diff-surfel-rasterization
 conda run -n RT-GS python -m pytest -q tests
+conda run -n RT-GS python -m pytest -q tests/test_extract_video_keyframes.py
 conda run -n RT-GS python -m pytest -q tests/test_generate_normal_priors.py tests/test_normal_prior_loading.py
 conda run -n RT-GS python tools/validate_normal_priors.py \
   --scene data/tandt/truck --images images --priors normal_priors \
@@ -191,40 +207,9 @@ length error `1.78813934e-07`. The fixed contact sheet is
 matched target-quality training, normal/depth stability, and rollback remain
 unchecked.
 
-## Planned matched comparison — not run
+## Superseded comparison — do not run
 
-These commands intentionally differ only in output/log path and
-`--lambda_mono`. Both load the same complete prior set so the data path and
-memory behavior remain matched.
-
-```bash
-set -o pipefail
-mkdir -p output/stage_a_compare_mono_0
-CUDA_VISIBLE_DEVICES=0 conda run --no-capture-output -n RT-GS \
-  python train.py \
-  -s data/tandt/truck -m output/stage_a_compare_mono_0 \
-  --model_type surfel \
-  --normal_priors normal_priors --normal_prior_space camera \
-  --resolution 1 --iterations 30000 \
-  --lambda_norm 0.04 --lambda_mono 0 --lambda_perc 0.01 \
-  --test_iterations 7000 15000 30000 \
-  --save_iterations 7000 15000 30000 \
-  --checkpoint_iterations 10000 20000 30000 \
-  --debug_interval 1000 --disable_viewer \
-  2>&1 | tee output/stage_a_compare_mono_0/train.log
-
-set -o pipefail
-mkdir -p output/stage_a_compare_mono_001
-CUDA_VISIBLE_DEVICES=0 conda run --no-capture-output -n RT-GS \
-  python train.py \
-  -s data/tandt/truck -m output/stage_a_compare_mono_001 \
-  --model_type surfel \
-  --normal_priors normal_priors --normal_prior_space camera \
-  --resolution 1 --iterations 30000 \
-  --lambda_norm 0.04 --lambda_mono 0.01 --lambda_perc 0.01 \
-  --test_iterations 7000 15000 30000 \
-  --save_iterations 7000 15000 30000 \
-  --checkpoint_iterations 10000 20000 30000 \
-  --debug_interval 1000 --disable_viewer \
-  2>&1 | tee output/stage_a_compare_mono_001/train.log
-```
+The previously documented Truck 30,000-step comparison was superseded on
+2026-06-29 before execution. Truck is engineering smoke only. Define and run the
+matched `lambda_mono=0` versus `0.01` protocol only after the glass-dome target
+video, COLMAP reconstruction, and normal priors pass their own validation.
