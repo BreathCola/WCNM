@@ -14,6 +14,9 @@ import numpy as np
 from utils.graphics_utils import fov2focal
 from PIL import Image
 import cv2
+import os
+from pathlib import Path
+import torch
 
 WARNED = False
 
@@ -60,10 +63,32 @@ def loadCam(args, id, cam_info, resolution_scale, is_nerf_synthetic, is_test_dat
         scale = float(global_down) * float(resolution_scale)
         resolution = (int(orig_w / scale), int(orig_h / scale))
 
+    normal_prior = None
+    normal_prior_valid = None
+    normal_directory = getattr(args, "normal_priors", "normal_priors")
+    normal_path = os.path.join(args.source_path, normal_directory, Path(cam_info.image_name).stem + ".npy")
+    if os.path.isfile(normal_path):
+        values = np.load(normal_path).astype(np.float32)
+        if values.ndim != 3:
+            raise ValueError(f"normal prior must have three dimensions: {normal_path}")
+        if values.shape[0] == 3 and values.shape[-1] != 3:
+            values = np.moveaxis(values, 0, -1)
+        if values.shape[-1] != 3:
+            raise ValueError(f"normal prior must have three channels: {normal_path}")
+        values = cv2.resize(values, resolution, interpolation=cv2.INTER_LINEAR)
+        finite = np.isfinite(values).all(axis=-1, keepdims=True)
+        norm = np.linalg.norm(np.nan_to_num(values), axis=-1, keepdims=True)
+        valid = finite & (norm > 1e-6)
+        values = np.where(valid, np.nan_to_num(values) / np.maximum(norm, 1e-6), 0.0)
+        normal_prior = torch.from_numpy(values).permute(2, 0, 1).contiguous()
+        normal_prior_valid = torch.from_numpy(valid).permute(2, 0, 1).contiguous()
+
     return Camera(resolution, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, depth_params=cam_info.depth_params,
                   image=image, invdepthmap=invdepthmap,
-                  image_name=cam_info.image_name, uid=id, data_device=args.data_device,
+                  image_name=cam_info.image_name, uid=id,
+                  normal_prior=normal_prior, normal_prior_valid=normal_prior_valid,
+                  normal_prior_space=getattr(args, "normal_prior_space", "camera"), data_device=args.data_device,
                   train_test_exp=args.train_test_exp, is_test_dataset=is_test_dataset, is_test_view=cam_info.is_test)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args, is_nerf_synthetic, is_test_dataset):

@@ -14,7 +14,7 @@ from scene import Scene
 import os
 from tqdm import tqdm
 from os import makedirs
-from gaussian_renderer import render
+from gaussian_renderer import render as render_3dgs
 import torchvision
 from utils.general_utils import safe_state
 from argparse import ArgumentParser
@@ -27,7 +27,7 @@ except:
     SPARSE_ADAM_AVAILABLE = False
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh):
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh, render_fn, is_surfel):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -35,29 +35,44 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     makedirs(gts_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        rendering = render(view, gaussians, pipeline, background, use_trained_exp=train_test_exp, separate_sh=separate_sh)["render"]
+        render_package = render_fn(view, gaussians, pipeline, background, use_trained_exp=train_test_exp, separate_sh=separate_sh)
+        rendering = render_package["render"]
         gt = view.original_image[0:3, :, :]
 
-        if args.train_test_exp:
+        if train_test_exp:
             rendering = rendering[..., rendering.shape[-1] // 2:]
             gt = gt[..., gt.shape[-1] // 2:]
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
+        if is_surfel:
+            from utils.surfel_debug import save_surfel_debug_maps
+            gbuffer_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gbuffer", "{:05d}".format(idx))
+            save_surfel_debug_maps(render_package, gt, gbuffer_path)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, separate_sh: bool):
     with torch.no_grad():
-        gaussians = GaussianModel(dataset.sh_degree)
+        if dataset.model_type == "surfel":
+            from gaussian_renderer.surfel_renderer import render as render_fn
+            from scene.diffuse_surfel_model import DiffuseSurfelModel
+            gaussians = DiffuseSurfelModel(dataset.roughness_min)
+            is_surfel = True
+        elif dataset.model_type == "3dgs":
+            gaussians = GaussianModel(dataset.sh_degree)
+            render_fn = render_3dgs
+            is_surfel = False
+        else:
+            raise ValueError("--model_type must be either '3dgs' or 'surfel'")
         scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh)
+             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel)
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh)
+             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel)
 
 if __name__ == "__main__":
     # Set up command line argument parser

@@ -47,6 +47,10 @@ class ParamGroup:
 class ModelParams(ParamGroup): 
     def __init__(self, parser, sentinel=False):
         self.sh_degree = 3
+        self.model_type = "3dgs"
+        self.roughness_min = 0.03
+        self.normal_priors = "normal_priors"
+        self.normal_prior_space = "camera"
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
@@ -79,6 +83,7 @@ class OptimizationParams(ParamGroup):
         self.position_lr_delay_mult = 0.01
         self.position_lr_max_steps = 30_000
         self.feature_lr = 0.0025
+        self.material_lr = 0.0025
         self.opacity_lr = 0.025
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
@@ -88,6 +93,11 @@ class OptimizationParams(ParamGroup):
         self.exposure_lr_delay_mult = 0.0
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
+        self.lambda_norm = 0.04
+        self.lambda_mono = 0.01
+        self.lambda_perc = 0.01
+        self.require_nonzero_mono = False
+        self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500

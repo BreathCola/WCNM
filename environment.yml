@@ -14,7 +14,9 @@ dependencies:
   - tqdm
   - pip:
     - submodules/diff-gaussian-rasterization
+    - submodules/diff-surfel-rasterization
     - submodules/simple-knn
     - submodules/fused-ssim
+    - pytest
     - opencv-python
     - joblib

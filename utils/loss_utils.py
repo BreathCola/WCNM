@@ -89,3 +89,57 @@ def _ssim(img1, img2, window, window_size, channel, size_average=True):
 def fast_ssim(img1, img2):
     ssim_map = FusedSSIMMap.apply(C1, C2, img1, img2)
     return ssim_map.mean()
+
+
+def normal_depth_consistency_loss(normal, position, alpha=None):
+    """Compare rendered normals with finite-difference normals from position.
+
+    Inputs follow the Stage A HWC output contract. The finite-difference order
+    accounts for image coordinates having a downward-positive vertical axis.
+    """
+    if normal.ndim != 3 or normal.shape[-1] != 3:
+        raise ValueError("normal must have shape [H,W,3]")
+    if position.shape != normal.shape:
+        raise ValueError("position and normal must have the same shape")
+    if normal.shape[0] < 3 or normal.shape[1] < 3:
+        return normal.sum() * 0.0
+
+    diff_vertical = position[2:, 1:-1] - position[:-2, 1:-1]
+    diff_horizontal = position[1:-1, 2:] - position[1:-1, :-2]
+    depth_normal = F.normalize(
+        torch.cross(diff_vertical, diff_horizontal, dim=-1), dim=-1, eps=1e-12
+    )
+    rendered = F.normalize(normal[1:-1, 1:-1], dim=-1, eps=1e-12)
+    alignment = (rendered * depth_normal).sum(dim=-1)
+    valid = torch.isfinite(alignment)
+    valid &= torch.linalg.vector_norm(diff_vertical, dim=-1) > 1e-8
+    valid &= torch.linalg.vector_norm(diff_horizontal, dim=-1) > 1e-8
+    valid &= torch.linalg.vector_norm(normal[1:-1, 1:-1], dim=-1) > 1e-8
+    if alpha is not None:
+        valid &= alpha[1:-1, 1:-1, 0] > 1e-4
+        valid &= alpha[2:, 1:-1, 0] > 1e-4
+        valid &= alpha[:-2, 1:-1, 0] > 1e-4
+        valid &= alpha[1:-1, 2:, 0] > 1e-4
+        valid &= alpha[1:-1, :-2, 0] > 1e-4
+    if not valid.any():
+        return normal.sum() * 0.0
+    return (1.0 - alignment[valid].clamp(-1, 1)).mean()
+
+
+def monocular_normal_loss(normal, prior, alpha=None, prior_valid=None):
+    """Cosine loss for HWC world-space rendered and monocular normals."""
+    if normal.shape != prior.shape or normal.shape[-1] != 3:
+        raise ValueError("normal and prior must both have shape [H,W,3]")
+    rendered = F.normalize(normal, dim=-1, eps=1e-12)
+    target = F.normalize(prior, dim=-1, eps=1e-12)
+    alignment = (rendered * target).sum(dim=-1)
+    valid = torch.isfinite(alignment)
+    valid &= torch.linalg.vector_norm(normal, dim=-1) > 1e-8
+    valid &= torch.linalg.vector_norm(prior, dim=-1) > 1e-8
+    if alpha is not None:
+        valid &= alpha[..., 0] > 1e-4
+    if prior_valid is not None:
+        valid &= prior_valid.squeeze(-1).bool()
+    if not valid.any():
+        return normal.sum() * 0.0
+    return (1.0 - alignment[valid].clamp(-1, 1)).mean()

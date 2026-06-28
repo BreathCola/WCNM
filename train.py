@@ -12,7 +12,7 @@
 import os
 import torch
 from random import randint
-from utils.loss_utils import l1_loss, ssim
+from utils.loss_utils import l1_loss, ssim, normal_depth_consistency_loss, monocular_normal_loss
 from gaussian_renderer import render, network_gui
 import sys
 from scene import Scene, GaussianModel
@@ -42,17 +42,43 @@ except:
 
 def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
 
-    if not SPARSE_ADAM_AVAILABLE and opt.optimizer_type == "sparse_adam":
+    if dataset.model_type not in ("3dgs", "surfel"):
+        raise ValueError("--model_type must be either '3dgs' or 'surfel'")
+    is_surfel = dataset.model_type == "surfel"
+    if is_surfel:
+        if dataset.normal_prior_space not in ("camera", "world"):
+            raise ValueError("--normal_prior_space must be either 'camera' or 'world'")
+        if opt.debug_interval <= 0:
+            raise ValueError("--debug_interval must be positive")
+        from gaussian_renderer.surfel_renderer import render as render_fn
+        from scene.diffuse_surfel_model import DiffuseSurfelModel
+        gaussians = DiffuseSurfelModel(dataset.roughness_min, opt.optimizer_type)
+    else:
+        render_fn = render
+        gaussians = GaussianModel(dataset.sh_degree, opt.optimizer_type)
+
+    if not is_surfel and not SPARSE_ADAM_AVAILABLE and opt.optimizer_type == "sparse_adam":
         sys.exit(f"Trying to use sparse adam but it is not installed, please install the correct rasterizer using pip install [3dgs_accel].")
 
     first_iter = 0
     tb_writer = prepare_output_and_logger(dataset)
-    gaussians = GaussianModel(dataset.sh_degree, opt.optimizer_type)
     scene = Scene(dataset, gaussians)
     gaussians.training_setup(opt)
     if checkpoint:
-        (model_params, first_iter) = torch.load(checkpoint)
+        checkpoint_data = torch.load(checkpoint)
+        if is_surfel:
+            if not isinstance(checkpoint_data, dict) or checkpoint_data.get("format") != "rtgs_stage_a":
+                raise ValueError("surfel mode requires an RT-GS Stage A checkpoint")
+            model_params = checkpoint_data["model_state"]
+            first_iter = checkpoint_data["iteration"]
+        else:
+            model_params, first_iter = checkpoint_data
         gaussians.restore(model_params, opt)
+
+    perceptual_loss_fn = None
+    if is_surfel and opt.lambda_perc > 0:
+        from utils.perceptual_loss import VGG16PerceptualLoss
+        perceptual_loss_fn = VGG16PerceptualLoss(pretrained=True).cuda().eval()
 
     bg_color = [1, 1, 1] if dataset.white_background else [0, 0, 0]
     background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
@@ -60,13 +86,17 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
     iter_start = torch.cuda.Event(enable_timing = True)
     iter_end = torch.cuda.Event(enable_timing = True)
 
-    use_sparse_adam = opt.optimizer_type == "sparse_adam" and SPARSE_ADAM_AVAILABLE 
+    use_sparse_adam = not is_surfel and opt.optimizer_type == "sparse_adam" and SPARSE_ADAM_AVAILABLE
     depth_l1_weight = get_expon_lr_func(opt.depth_l1_weight_init, opt.depth_l1_weight_final, max_steps=opt.iterations)
 
     viewpoint_stack = scene.getTrainCameras().copy()
     viewpoint_indices = list(range(len(viewpoint_stack)))
     ema_loss_for_log = 0.0
     ema_Ll1depth_for_log = 0.0
+    require_nonzero_mono = is_surfel and opt.require_nonzero_mono
+    mono_supervised_steps = 0
+    mono_nonzero_steps = 0
+    mono_max = 0.0
 
     progress_bar = tqdm(range(first_iter, opt.iterations), desc="Training progress")
     first_iter += 1
@@ -78,7 +108,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 net_image_bytes = None
                 custom_cam, do_training, pipe.convert_SHs_python, pipe.compute_cov3D_python, keep_alive, scaling_modifer = network_gui.receive()
                 if custom_cam != None:
-                    net_image = render(custom_cam, gaussians, pipe, background, scaling_modifier=scaling_modifer, use_trained_exp=dataset.train_test_exp, separate_sh=SPARSE_ADAM_AVAILABLE)["render"]
+                    net_image = render_fn(custom_cam, gaussians, pipe, background, scaling_modifier=scaling_modifer, use_trained_exp=dataset.train_test_exp, separate_sh=SPARSE_ADAM_AVAILABLE)["render"]
                     net_image_bytes = memoryview((torch.clamp(net_image, min=0, max=1.0) * 255).byte().permute(1, 2, 0).contiguous().cpu().numpy())
                 network_gui.send(net_image_bytes, dataset.source_path)
                 if do_training and ((iteration < int(opt.iterations)) or not keep_alive):
@@ -108,7 +138,7 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         bg = torch.rand((3), device="cuda") if opt.random_background else background
 
-        render_pkg = render(viewpoint_cam, gaussians, pipe, bg, use_trained_exp=dataset.train_test_exp, separate_sh=SPARSE_ADAM_AVAILABLE)
+        render_pkg = render_fn(viewpoint_cam, gaussians, pipe, bg, use_trained_exp=dataset.train_test_exp, separate_sh=SPARSE_ADAM_AVAILABLE)
         image, viewspace_point_tensor, visibility_filter, radii = render_pkg["render"], render_pkg["viewspace_points"], render_pkg["visibility_filter"], render_pkg["radii"]
 
         if viewpoint_cam.alpha_mask is not None:
@@ -125,9 +155,50 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
         loss = (1.0 - opt.lambda_dssim) * Ll1 + opt.lambda_dssim * (1.0 - ssim_value)
 
+        Lnorm = image.new_zeros(())
+        Lmono = image.new_zeros(())
+        Lperc = image.new_zeros(())
+        if is_surfel:
+            Lnorm = normal_depth_consistency_loss(
+                render_pkg["normal"], render_pkg["position"], render_pkg["alpha"]
+            )
+            loss = loss + opt.lambda_norm * Lnorm
+
+            if viewpoint_cam.normal_prior is not None:
+                from utils.surfel_utils import camera_normals_to_world, face_forward
+                normal_prior = viewpoint_cam.normal_prior.permute(1, 2, 0)
+                if viewpoint_cam.normal_prior_space == "camera":
+                    normal_prior = camera_normals_to_world(viewpoint_cam, normal_prior)
+                elif viewpoint_cam.normal_prior_space != "world":
+                    raise ValueError("normal_prior_space must be 'camera' or 'world'")
+                normal_prior = face_forward(
+                    normal_prior, render_pkg["position"], viewpoint_cam.camera_center
+                )
+                prior_valid = viewpoint_cam.normal_prior_valid.permute(1, 2, 0)
+                Lmono = monocular_normal_loss(
+                    render_pkg["normal"], normal_prior, render_pkg["alpha"], prior_valid
+                )
+                loss = loss + opt.lambda_mono * Lmono
+                if require_nonzero_mono:
+                    mono_value = float(Lmono.detach().item())
+                    mono_supervised_steps += 1
+                    if torch.isfinite(Lmono.detach()).item() and mono_value > 0.0:
+                        mono_nonzero_steps += 1
+                        mono_max = max(mono_max, mono_value)
+                        if mono_nonzero_steps == 1:
+                            print(
+                                "\n[MONO PRIOR] iteration={} view={} L_mono={:.8f}".format(
+                                    iteration, viewpoint_cam.image_name, mono_value
+                                )
+                            )
+
+            if perceptual_loss_fn is not None:
+                Lperc = perceptual_loss_fn(image, gt_image)
+                loss = loss + opt.lambda_perc * Lperc
+
         # Depth regularization
         Ll1depth_pure = 0.0
-        if depth_l1_weight(iteration) > 0 and viewpoint_cam.depth_reliable:
+        if not is_surfel and depth_l1_weight(iteration) > 0 and viewpoint_cam.depth_reliable:
             invDepth = render_pkg["depth"]
             mono_invdepth = viewpoint_cam.invdepthmap.cuda()
             depth_mask = viewpoint_cam.depth_mask.cuda()
@@ -155,7 +226,21 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
                 progress_bar.close()
 
             # Log and save
-            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render, (pipe, background, 1., SPARSE_ADAM_AVAILABLE, None, dataset.train_test_exp), dataset.train_test_exp)
+            if tb_writer and is_surfel:
+                tb_writer.add_scalar('train_loss_patches/normal_depth', Lnorm.item(), iteration)
+                tb_writer.add_scalar('train_loss_patches/monocular_normal', Lmono.item(), iteration)
+                tb_writer.add_scalar('train_loss_patches/perceptual', Lperc.item(), iteration)
+            training_report(tb_writer, iteration, Ll1, loss, l1_loss, iter_start.elapsed_time(iter_end), testing_iterations, scene, render_fn, (pipe, background, 1., SPARSE_ADAM_AVAILABLE, None, dataset.train_test_exp), dataset.train_test_exp)
+            if is_surfel and (iteration % opt.debug_interval == 0 or iteration == opt.iterations):
+                from utils.surfel_debug import save_surfel_debug_maps
+                fixed_views = scene.getTestCameras() or scene.getTrainCameras()
+                fixed_view = fixed_views[0]
+                debug_package = render_fn(
+                    fixed_view, gaussians, pipe, background,
+                    use_trained_exp=dataset.train_test_exp,
+                )
+                debug_directory = os.path.join(scene.model_path, "debug", "iteration_{:06d}".format(iteration))
+                save_surfel_debug_maps(debug_package, fixed_view.original_image.cuda(), debug_directory)
             if (iteration in saving_iterations):
                 print("\n[ITER {}] Saving Gaussians".format(iteration))
                 scene.save(iteration)
@@ -187,7 +272,33 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
 
             if (iteration in checkpoint_iterations):
                 print("\n[ITER {}] Saving Checkpoint".format(iteration))
-                torch.save((gaussians.capture(), iteration), scene.model_path + "/chkpnt" + str(iteration) + ".pth")
+                checkpoint_path = scene.model_path + "/chkpnt" + str(iteration) + ".pth"
+                if is_surfel:
+                    torch.save({
+                        "format": "rtgs_stage_a",
+                        "iteration": iteration,
+                        "model_state": gaussians.capture(),
+                        "config": {
+                            "model_type": dataset.model_type,
+                            "roughness_min": dataset.roughness_min,
+                            "lambda_norm": opt.lambda_norm,
+                            "lambda_mono": opt.lambda_mono,
+                            "lambda_perc": opt.lambda_perc,
+                        },
+                    }, checkpoint_path)
+                else:
+                    torch.save((gaussians.capture(), iteration), checkpoint_path)
+
+    if require_nonzero_mono:
+        print(
+            "\n[MONO PRIOR SUMMARY] supervised_steps={} nonzero_steps={} max_L_mono={:.8f}".format(
+                mono_supervised_steps, mono_nonzero_steps, mono_max
+            )
+        )
+        if mono_nonzero_steps == 0:
+            raise RuntimeError(
+                "--require_nonzero_mono was set, but no positive finite L_mono was observed"
+            )
 
 def prepare_output_and_logger(args):    
     if not args.model_path:
@@ -228,7 +339,8 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                 l1_test = 0.0
                 psnr_test = 0.0
                 for idx, viewpoint in enumerate(config['cameras']):
-                    image = torch.clamp(renderFunc(viewpoint, scene.gaussians, *renderArgs)["render"], 0.0, 1.0)
+                    rendered_package = renderFunc(viewpoint, scene.gaussians, *renderArgs)
+                    image = torch.clamp(rendered_package["render"], 0.0, 1.0)
                     gt_image = torch.clamp(viewpoint.original_image.to("cuda"), 0.0, 1.0)
                     if train_test_exp:
                         image = image[..., image.shape[-1] // 2:]
@@ -237,6 +349,9 @@ def training_report(tb_writer, iteration, Ll1, loss, l1_loss, elapsed, testing_i
                         tb_writer.add_images(config['name'] + "_view_{}/render".format(viewpoint.image_name), image[None], global_step=iteration)
                         if iteration == testing_iterations[0]:
                             tb_writer.add_images(config['name'] + "_view_{}/ground_truth".format(viewpoint.image_name), gt_image[None], global_step=iteration)
+                        if getattr(scene.gaussians, "model_type", None) == "surfel":
+                            tb_writer.add_images(config['name'] + "_view_{}/alpha".format(viewpoint.image_name), rendered_package["alpha"].permute(2, 0, 1)[None], global_step=iteration)
+                            tb_writer.add_images(config['name'] + "_view_{}/normal".format(viewpoint.image_name), (rendered_package["normal"].permute(2, 0, 1)[None] * 0.5 + 0.5).clamp(0, 1), global_step=iteration)
                     l1_test += l1_loss(image, gt_image).mean().double()
                     psnr_test += psnr(image, gt_image).mean().double()
                 psnr_test /= len(config['cameras'])
