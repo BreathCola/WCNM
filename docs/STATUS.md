@@ -2,121 +2,104 @@
 
 Current stage: Stage A — 3DGS to 2D Surfel Diffuse Foundation
 
-Current branch: `master`
+Stage state: the TiHuBird StableNormal D-only baseline is conditionally accepted
+and ready to be frozen on `baseline/stage-a-stablenormal`. Overall Stage A
+closure is deferred while DiffusionRenderer priors are evaluated independently;
+Stage B/C/D are not authorized.
 
-Last verified commit: `8119e01266566be32619d7387ab746aa797d3810`
+Evidence code commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
-## Repository structure
+## Repository and scene
 
-- Clean baseline 3DGS Python training/rendering entry points are present.
-- Baseline Gaussian model: `scene/gaussian_model.py`.
-- Baseline renderer: `gaussian_renderer/`.
-- Baseline CUDA rasterizer remains `diff-gaussian-rasterization`.
-- Stage A true 2D rasterizer is pinned as the recursively initialized
-  `submodules/diff-surfel-rasterization` submodule.
-- RT-GS mode is selected explicitly with `--model_type surfel`; default
-  `--model_type 3dgs` preserves baseline behavior.
-- Root `RTGS_MASTER_PLAN.md` is the sole technical specification.
-- Stage memory files were initialized as the first Stage A task.
+- The original 3DGS baseline remains available through `--model_type 3dgs`.
+- Stage A RT-GS uses `--model_type surfel` and the pinned 2D surfel rasterizer.
+- Diffuse, Reflection, and Transmittance remain separate by design; only the
+  Diffuse branch exists in Stage A.
+- `data/TiHuBird` is the real acceptance scene. Truck artifacts are historical
+  engineering smoke evidence only.
+- TiHuBird has 111 final undistorted PINHOLE images at 3827x2152, 111/111 COLMAP
+  registrations, and 84,989 sparse points.
 
-## Completed
+## StableNormal baseline evidence
 
-- Read the complete root master plan and initialized all required memory files.
-- Implemented `DiffuseSurfelModel` with 2D scales, rotation-derived normals,
-  bounded diffuse/material parameters, optimizer/densification, PLY I/O, and
-  versioned checkpoint state.
-- Integrated the perspective-correct 2D surfel CUDA rasterizer.
-- Implemented the HWC `Cd/alpha/depth/position/normal/roughness/f0/ks` contract,
-  shared material alpha weights, expected-depth unprojection, normal
-  normalization, and face-forward orientation.
-- Added diffuse-only RGB, normal-depth, optional monocular-normal, and frozen
-  VGG-16 perceptual losses.
-- Added `.npy` normal-prior loading, validity masks, camera/world coordinate
-  selection, and normalization.
-- Added a dedicated-environment, fail-closed offline StableNormal generator with
-  atomic HWC float32 priors, resumable validation, and `manifest.json` provenance.
-- Added a default-off smoke-test guard that fails when no positive finite
-  `L_mono` is observed, without changing normal training behavior.
-- Generated and validated a real offline StableNormal prior for deterministic
-  first-view `000063.jpg`: `000063.npy` is HWC `(546,979,3)`, camera-space
-  float32, finite, and unit-normalized. Generation used indoor mode, resolution
-  768, and 10 denoising steps.
-- Verified the real prior end to end in a 200-step surfel smoke run. Iteration 1
-  reported `L_mono=0.39248720`; the summary reported one supervised/nonzero
-  step and the run saved `chkpnt200.pth` before exiting successfully.
-- Completed offline StableNormal generation for all 251 truck images with the
-  same indoor/resolution-768/10-step camera-space configuration. The resumable
-  run generated 250 files and validated/skipped the existing `000063.npy`.
-- Strictly re-read all priors and verified 251 images = 251 `.npy` files = 251
-  manifest entries, with no missing, unexpected, duplicate, non-finite,
-  wrong-dtype, wrong-shape, near-zero, or non-unit artifacts.
-- Exported a fixed nine-view source/prior contact sheet spanning the sequence.
-  Preliminary inspection shows structured, non-flat normals and visible
-  high-frequency noise in foliage/thin structures; user quality approval remains
-  pending and normal/depth stability is not accepted.
-- Added fixed-view Stage A debug export and full-G-buffer export from `render.py`.
-- Verified checkpoint save/resume, PLY reload/render, material/geometry gradients,
-  densification, and the original 3DGS train/render paths.
-- Ran a 3,000-step low-resolution D-only training pass on `data/tandt/truck`.
-- Created ordinary WIP snapshot commit `8119e01266566be32619d7387ab746aa797d3810`;
-  it is not the Stage A acceptance/rollback commit.
-- Added a deterministic FFprobe/FFmpeg video-keyframe preprocessing tool with
-  blur/exposure/duplicate/time-gap scoring, dry-run reports/contact sheet,
-  atomic writes, and fail-closed resume validation. Unit tests and a tiny
-  synthetic FFmpeg integration test passed, but no real target video has been
-  supplied or extracted.
+- Generated all 111 TiHuBird StableNormal priors in
+  `data/TiHuBird/normal_priors/` and passed strict validation: 111 images, 111
+  priors, 111 manifest entries, with empty missing, unexpected, duplicate, and
+  abnormal lists. Evidence:
+  `output/stage_a_tihubird_priors_validate_111.log`.
+- Completed the full-prior 1,000-step smoke at
+  `output/stage_a_tihubird_fullprior_1k_r2`. It reported 1,000 supervised and
+  1,000 nonzero monocular-normal steps, saved the iteration-1,000 checkpoint,
+  and printed `Training complete.`
+- Completed the Gate 6 input freeze. The baseline and accepted retry records are
+  byte-identical and pin code HEAD `829dd82`, `PYTHONHASHSEED=0`, 111 images,
+  111 priors, the image-tree hash, prior-manifest hash, and all three COLMAP
+  hashes.
+- Gate 7 completed from iteration 0 to 30,000 with `lambda_mono=0` at
+  `output/stage_a_tihubird_30k_mono0_r2`.
+- The first Gate 8 attempt at
+  `output/stage_a_tihubird_30k_mono001_r2` stopped around iteration 230 and has
+  no usable checkpoint. It is excluded from comparison.
+- Gate 8 retry1 restarted from iteration 0 and completed at
+  `output/stage_a_tihubird_30k_mono001_r2_retry1`. Only retry1 is the accepted
+  `lambda_mono=0.01` result.
+- Gate 9 matched metrics and the global comparison are present at
+  `output/stage_a_tihubird_30k_matched_metrics.txt` and
+  `output/stage_a_tihubird_30k_matched_comparison.png`.
+- Gate 9.5 completed the six-view and crop audit under
+  `output/stage_a_tihubird_gate9p5/`.
 
-## Tests passed
+## Matched 30,000-step metrics
 
-- `conda run -n RT-GS python -m pytest -q tests`: 29 passed.
-- Python compile check and `git diff --check` passed.
-- Surfel one-step training, checkpoint resume, 601-step densification smoke,
-  3,000-step D-only training, and 251-view G-buffer rendering passed.
-- Original 3DGS one-step training and 251-view rendering passed.
+| Iteration | `lambda_mono=0` L1 | `lambda_mono=0` PSNR | `lambda_mono=0.01` retry1 L1 | `lambda_mono=0.01` retry1 PSNR |
+|---:|---:|---:|---:|---:|
+| 7,000 | 0.0233018197119236 | 25.840939331054688 | 0.022160319611430168 | 26.222691726684573 |
+| 15,000 | 0.022149086557328702 | 26.27469940185547 | 0.020849463716149333 | 26.722418594360352 |
+| 30,000 | 0.01844301298260689 | 27.603187561035156 | 0.017842570878565313 | 27.78533058166504 |
 
-## Known failures
+## Baseline decision
 
-- Truck remains an engineering smoke dataset. Its full prior set and short runs
-  are not Stage A quality evidence, and the previously planned Truck 30,000-step
-  comparison was superseded before execution.
-- The glass-dome target video is not yet present, so real keyframe extraction,
-  COLMAP reconstruction, target-scene priors, quality training, and matched
-  `lambda_mono` comparison remain unrun.
-- The 3,000-step run used `--resolution 8`; final-resolution/30,000-step quality
-  acceptance has not run. The final normal map is finite and scene-aligned but
-  retains visible high-frequency noise.
-- No rollback commit has been created. Stage A must remain current until the
-  remaining quality acceptance and commit are complete.
+- Conditionally accept the StableNormal result as the Stage A D-only baseline.
+- Select `lambda_mono=0.01` for that baseline. Its retry1 result improves both
+  L1 and PSNR over `lambda_mono=0` at all three matched evaluation nodes, and
+  the global, six-view, and crop audits show no obvious RGB degradation.
+- This is not final transparent-scene reconstruction. The D-only representation
+  still mixes the glass surface, reflection, interior bird, and background.
+  Its normal/depth are a foundation for later separation, not final transparent
+  geometry or a final bird reconstruction.
 
-## Current metrics
+## DiffusionRenderer prior extension
 
-- Dataset: `data/tandt/truck`, 3,000 iterations, resolution divisor 8.
-- Validation train-view PSNR: 25.6296 dB; L1: 0.03405.
-- Total training loss: 0.38218 at step 1 to 0.07305 at step 3,000.
-- Normal-depth loss: 0.79331 to 0.25569; all logged values finite.
-- VGG perceptual loss: 1.27682 to 0.51705; all logged values finite.
-- Surfel count: 136,029 initial to 211,880 at step 3,000.
-- Debug output: `output/stage_a_3000/debug/iteration_003000/`.
-- Real-prior smoke: `output/stage_a_mono_smoke_20260628_231429`, 200 iterations,
-  resolution divisor 8, `L_mono=0.39248720` on `000063.jpg`, one supervised and
-  one nonzero monocular-normal step, checkpoint saved, exit code 0.
-- Prior set: 251 files, 1.6 GiB, HWC camera-space float32, indoor, resolution
-  768, 10 steps. Strict validation: 0 missing/unexpected/duplicates/abnormal;
-  max unit-length error `1.78813934e-07`; component range
-  `[-0.999984622, 0.999984622]`.
-- Full resumable generation produced 250 new files in about 247 seconds including
-  model load; one existing valid file was skipped.
-- Prior debug outputs: `output/stage_a_normal_priors/generate.log`,
-  `validate.log`, and `representative_9_source_prior.png`.
+- DR-1A used the final undistorted TiHuBird training images for a 24-frame raw
+  pilot at `output/stage_a_tihubird_dr_pilot_24/`.
+- DR-1B generated raw priors from all 111 final training images at
+  `output/stage_a_tihubird_dr_raw_111/`.
+- Raw outputs contain `normal`, `depth`, `basecolor`, and `diffuse_albedo`.
+  The 111 real-frame mappings and the final chunk's nine padding slots are
+  recorded explicitly.
+- No DiffusionRenderer normal adapter or normal-axis mapping has been selected
+  or validated. No DiffusionRenderer prior loss has been connected, no training
+  has used these priors, and the StableNormal baseline has not been replaced.
+- `basecolor` and `diffuse_albedo` remain audit-only and are not training
+  supervision.
 
-## Next exact task
+## Tests and verified behavior
 
-- Place the target video at `data/dome_cat_01/raw/source.mp4`, run keyframe
-  selection in dry-run mode, and inspect `keyframes.json`, `contact_sheet.jpg`,
-  and `selection_report.txt` before formal extraction.
+- `conda run -n RT-GS python -m pytest -q tests`: 29 passed at the Stage A code
+  evidence commit.
+- Original 3DGS and surfel training/render paths, checkpoint resume, PLY reload,
+  densification, material gradients, and Stage A debug exports have passed their
+  documented checks.
+- Both accepted 30k runs saved checkpoints at 10k/20k/30k and PLY outputs at
+  7k/15k/30k.
 
-## Blocked by
+## Current boundary and next task
 
-- A real glass-dome target video is required. Do not run COLMAP, StableNormal,
-  or training until its dry-run keyframe selection is reviewed. Final
-  normal/depth acceptance and rollback commit remain incomplete.
+- Remain in Stage A. Stage B/C/D are forbidden without separate authorization.
+- Freeze this StableNormal D-only baseline as a rollback branch and conduct the
+  DiffusionRenderer normal adapter and axis audit only on the independent
+  `feature/stage-a-diffrender-priors` branch.
+- Do not overwrite `data/TiHuBird/normal_priors/` or either accepted StableNormal
+  30k output directory.
+- Final Stage A closure remains deferred until the DiffusionRenderer experiment
+  is evaluated and an explicit closure decision is made.

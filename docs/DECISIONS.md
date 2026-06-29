@@ -252,33 +252,50 @@ The default-off `--require_nonzero_mono` smoke-test guard reports supervised and
 nonzero steps and fails the run if no positive finite monocular loss is observed;
 it does not alter sampling or the loss when disabled.
 
-Required ablation: Compare Stage A training with `lambda_mono=0` and the same
-training with these priors before accepting their quality contribution.
+Required ablation: Satisfied by the matched TiHuBird 30,000-step
+`lambda_mono=0` versus `0.01` comparison recorded in A-010 and A-013.
 
 ## A-010 — Matched monocular-normal comparison protocol
 
 Date: 2026-06-28
 
-Status: Superseded on 2026-06-29 before either long run was started. Truck is an
-engineering smoke dataset only; the same matched protocol will be instantiated
-for the forthcoming glass-dome target scene after its video, COLMAP model, and
-normal priors are validated.
+Status: Completed on 2026-06-29 for TiHuBird. Truck remains historical
+engineering smoke only.
 
 Question: How should the effect of the completed StableNormal prior set be
 measured without confounding it with resolution, initialization, schedules, or
 debug/checkpoint differences?
 
-Chosen implementation: Run two sequential 30,000-iteration, native-resolution
-truck trainings under the repository's deterministic seed. Both runs load the
-same complete camera-space prior set and use identical Stage A settings,
-including `lambda_norm=0.04`, `lambda_perc=0.01`, debug output every 1,000 steps,
-test/save milestones at 7,000/15,000/30,000, and checkpoints at
-10,000/20,000/30,000. The only loss-setting difference is `lambda_mono=0` versus
-`lambda_mono=0.01`; output directories and log paths necessarily differ.
+Chosen implementation: After all 111 TiHuBird priors pass strict and manual
+quality validation, run two fresh 30,000-iteration TiHuBird trainings using the
+candidate `--resolution 2`. Run A uses `lambda_mono=0`; run B uses
+`lambda_mono=0.01`. Apart from the unavoidable output/log paths, the only
+configuration difference is `lambda_mono`.
 
-Alternatives: Compare against the earlier resolution-divisor-8 run; omit loading
-priors in the zero-weight run; change random seeds; or enable different
-checkpoint/debug schedules.
+Both runs must use exactly the same `data/TiHuBird` scene, final undistorted
+`images/`, `sparse/0/`, complete `normal_priors/` path, model initialization,
+repository deterministic seed, `lambda_norm=0.04`, `lambda_perc=0.01`, 30,000
+iterations, resolution, optimizer/densification schedule, evaluation and save
+nodes at 7,000/15,000/30,000, and checkpoint nodes at
+10,000/20,000/30,000. Both runs load the same priors so the zero-weight run
+exercises the same data path. Both launch environments explicitly export
+`PYTHONHASHSEED=0`.
+
+Before either long run starts, record the same frozen-input identity in each
+run's new output directory: repository HEAD, SHA-256 of the prior manifest and
+all three COLMAP binary files, and image/prior counts. The two records must match
+exactly except for their enclosing output paths. Any input change between runs
+invalidates the comparison.
+
+Neither 30,000-step run may use `--require_nonzero_mono`: adding it only to run B
+would introduce a second configuration difference, while adding it to run A
+would fail by design because its weighted `L_mono` is not the acceptance
+variable. `--require_nonzero_mono` is restricted to short mono-chain and
+full-prior debug smokes.
+
+Alternatives: Compare against Truck; use resolution divisor 1, 4, or 8; omit
+loading priors in the zero-weight run; change initialization or seed; use
+different schedules/nodes; or enable `--require_nonzero_mono` in a long run.
 
 Why: Loading the same data in both runs preserves memory and data-path behavior,
 while deterministic initialization and identical schedules isolate the
@@ -287,12 +304,44 @@ monocular-normal coefficient.
 Paper fidelity: This is a Stage A engineering evaluation protocol. It does not
 change the loss formula, model, renderer, or training implementation.
 
-Impact: The documented truck commands must not be run. The future target-scene
-comparison will require two long runs and approximately double the
-target-quality compute and output storage.
+Verified outcome: all 111 priors passed strict validation, and the full-prior
+1,000-step smoke completed. Gate 6 produced byte-identical frozen-input records
+for the two accepted runs. Gate 7 (`lambda_mono=0`) completed to 30,000. The
+first Gate 8 attempt stopped around iteration 230 without a usable checkpoint;
+`retry1` restarted from iteration 0 and completed to 30,000, and only retry1 is
+used in the comparison. Both accepted runs saved checkpoints at
+10,000/20,000/30,000 and evaluation/PLY nodes at 7,000/15,000/30,000.
 
-Required ablation: Recreate the matched `lambda_mono=0` versus `0.01` protocol
-for the validated glass-dome target scene, not Truck.
+The matched metrics were:
+
+| Iteration | `lambda_mono=0` L1 | `lambda_mono=0` PSNR | `lambda_mono=0.01` retry1 L1 | `lambda_mono=0.01` retry1 PSNR |
+|---:|---:|---:|---:|---:|
+| 7,000 | 0.0233018197119236 | 25.840939331054688 | 0.022160319611430168 | 26.222691726684573 |
+| 15,000 | 0.022149086557328702 | 26.27469940185547 | 0.020849463716149333 | 26.722418594360352 |
+| 30,000 | 0.01844301298260689 | 27.603187561035156 | 0.017842570878565313 | 27.78533058166504 |
+
+Gate 9 produced the matched metrics/global comparison, and Gate 9.5 completed
+the six-view and crop audit. These checks support a conditional StableNormal
+D-only baseline decision; they do not close all of Stage A or authorize a later
+stage.
+
+Required ablation: Completed for the StableNormal D-only baseline. A separate
+DiffusionRenderer prior experiment remains a Stage A extension and must not be
+mixed into this matched comparison.
+
+Documentation-only audit note (2026-06-29): source review confirmed that an
+all-image invocation of `generate_normal_priors.py` strictly validates and
+prints `SKIP verified` for an existing valid prior without replacing its `.npy`.
+Its manifest update merges entries by output filename and writes the merged JSON
+atomically, preserving prior provenance fields while updating verification and
+invocation metadata. This audit modified only `STATUS.md`, `DECISIONS.md`, and
+`STAGE_A.md`; it ran no prior generation, training, COLMAP, rendering, or tests
+and created no Git commit.
+
+The sole operator procedure for this protocol is the ordered 11-gate TiHuBird
+Operator Runbook in `docs/stages/STAGE_A.md`. Chat-history commands, the former
+A–I summary, and Truck commands are not alternative runbooks. Each gate must
+pass and return its requested evidence before the next command is authorized.
 
 ## A-011 — Static-scene video keyframe selection
 
@@ -342,3 +391,133 @@ required before claiming operational extraction success.
 Required ablation: None. Inspect the dry-run contact sheet and report before
 formal extraction; adjust target count or thresholds explicitly if selection is
 short.
+
+## A-012 — TiHuBird single-camera COLMAP preparation
+
+Date: 2026-06-29
+
+Question: How should the fixed TiHuBird video keyframes be reconstructed into a
+COLMAP scene that preserves the raw sequence and is accepted by the actual
+RT-GS/3DGS loader?
+
+Chosen implementation: Reuse the operation sequence in the repository's
+`convert.py`, but run its COLMAP commands explicitly in
+`output/stage_a_tihubird_colmap/` because the script hard-codes an `input/`
+source and writes/moves files in the scene root. Extract SIFT features from the
+fixed `images_raw/` sequence with one shared OPENCV camera, use exhaustive
+guided matching and incremental mapping, and retain the single successful
+reconstruction. Do not silently fall back to per-frame intrinsics.
+
+Run COLMAP image undistortion at full resolution because
+`scene/dataset_readers.py` accepts only final SIMPLE_PINHOLE or PINHOLE cameras.
+Install the 111 undistorted images as `images/` and only the required
+`cameras.bin`, `images.bin`, and `points3D.bin` as `sparse/0/`. Preserve
+`images_raw/` byte-for-byte and keep the prior raw copy of `images/` in the
+ignored COLMAP log directory for recovery.
+
+Verified result: COLMAP 3.14.0.dev0 registered 111/111 images in one model with
+one final PINHOLE camera at 3827x2152, 84,989 points, 651,521 observations,
+mean track length 7.665945, and mean reprojection error 1.098552 px. Final image
+names, model image names, and keyframe manifest names match exactly. The RT-GS
+loader read all 111 cameras and all finite sparse points from an isolated
+read-only check scene.
+
+Alternatives: Invoke `convert.py` after renaming/moving the formal raw images;
+use per-frame cameras; train directly from the distorted OPENCV model; use
+sequential matching instead of the repository's exhaustive flow; or overwrite
+the raw keyframes in place.
+
+Why: Explicit isolated commands preserve the fixed input and complete logs
+while retaining the repository's established reconstruction flow. A shared
+camera matches the single-device video capture. Undistortion is mandatory for
+the loader rather than a subjective quality choice.
+
+Paper fidelity: This is Stage A data preparation only. It changes no renderer,
+loss, model representation, training schedule, or later-stage feature.
+
+Impact: Later TiHuBird priors and training must use the undistorted 3827x2152
+`images/`, not `images_raw/`. The sparse model contains a low-density distant
+point tail, plausibly including background or reflected features; camera motion
+is smooth, but this remains a visual-quality risk rather than grounds for
+silently changing the camera model.
+
+Required ablation: None. If later scene review exposes a reconstruction defect,
+report it and discuss an explicit remapping configuration before changing the
+shared-camera assumption.
+
+## A-013 — Conditional StableNormal D-only baseline selection
+
+Date: 2026-06-29
+
+Question: Which matched TiHuBird Stage A run should be frozen as the verified
+StableNormal D-only baseline before independent DiffusionRenderer experiments?
+
+Chosen implementation: Conditionally accept the completed StableNormal
+`lambda_mono=0.01` retry1 result as the Stage A D-only baseline. Preserve the
+matched `lambda_mono=0` run as its ablation and exclude the interrupted first
+`lambda_mono=0.01` attempt from all formal comparison.
+
+Evidence: `output/stage_a_tihubird_priors_validate_111.log` reports 111 images,
+111 priors, 111 manifest entries, and `STRICT_VALIDATION=PASS`.
+`output/stage_a_tihubird_fullprior_1k_r2.log` reports 1,000 supervised/nonzero
+steps, checkpoint save, and `Training complete.` The accepted 30k logs are
+`output/stage_a_tihubird_30k_mono0_r2.log` and
+`output/stage_a_tihubird_30k_mono001_r2_retry1.log`; their input-freeze records
+are byte-identical. The first mono log ends around iteration 230 and its output
+directory contains no checkpoint. Gate 9 evidence is
+`output/stage_a_tihubird_30k_matched_metrics.txt` plus
+`output/stage_a_tihubird_30k_matched_comparison.png`. Gate 9.5 evidence is the
+six-view comparison and six crop audits under
+`output/stage_a_tihubird_gate9p5/`.
+
+Why: Retry1 improves L1 and PSNR over `lambda_mono=0` at all three matched
+7k/15k/30k nodes. The global, six-view, and crop audits show no obvious RGB
+degradation. The conclusion is conditional because D-only still entangles the
+glass surface, reflection, interior bird, and background.
+
+Alternatives: Select `lambda_mono=0`; use the interrupted first mono attempt;
+or claim that this comparison solves transparent-scene decomposition.
+
+Paper fidelity: This selects a Stage A baseline configuration; it changes no
+renderer, representation, loss formula, or schedule.
+
+Impact: The frozen baseline uses `lambda_mono=0.01`. Its normal/depth are a
+foundation for later reflection/transmittance separation, not final transparent
+geometry or a final bird reconstruction. Overall Stage A closure remains
+deferred and Stage B/C/D remain unauthorized.
+
+Required ablation: The matched `lambda_mono=0` run is complete and retained.
+
+## A-014 — DiffusionRenderer raw-prior experiment boundary
+
+Date: 2026-06-29
+
+Question: What DiffusionRenderer evidence may be recorded before a normal
+adapter or any training integration exists?
+
+Chosen implementation: Preserve the StableNormal baseline unchanged and treat
+DiffusionRenderer as an independent Stage A prior extension. DR-1A generated a
+24-frame raw pilot from final undistorted TiHuBird training images under
+`output/stage_a_tihubird_dr_pilot_24/`. DR-1B generated all 111 real frames
+under `output/stage_a_tihubird_dr_raw_111/`, with `normal`, `depth`,
+`basecolor`, and `diffuse_albedo` raw PNGs. Its manifest records five chunks,
+111 real mappings, and nine final-chunk padding slots separately.
+
+Alternatives: Reuse the earlier GLINT inputs/outputs; overwrite
+`data/TiHuBird/normal_priors/`; assume a normal coordinate mapping; or connect
+raw buffers directly to a loss.
+
+Why: Final-image-domain provenance and explicit padding separation are required
+before semantic conversion. Keeping artifacts isolated prevents accidental
+replacement of the accepted StableNormal baseline.
+
+Paper fidelity: Raw-prior generation changes no RT-GS model, renderer, loss, or
+training schedule.
+
+Impact: No normal adapter exists, no normal axis mapping is selected or
+validated, no DiffusionRenderer prior loss is connected, and no training has
+used these raw outputs. `basecolor` and `diffuse_albedo` remain audit-only.
+
+Required ablation: None at the raw-generation step. Adapter/axis validation and
+any later training comparison must occur only on the independent
+`feature/stage-a-diffrender-priors` branch.
