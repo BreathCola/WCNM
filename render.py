@@ -27,7 +27,8 @@ except:
     SPARSE_ADAM_AVAILABLE = False
 
 
-def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp, separate_sh, render_fn, is_surfel):
+def render_set(model_path, name, iteration, views, gaussians, pipeline, background, train_test_exp,
+               separate_sh, render_fn, is_surfel, is_stage_b=False):
     render_path = os.path.join(model_path, name, "ours_{}".format(iteration), "renders")
     gts_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gt")
 
@@ -45,14 +46,51 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
 
         torchvision.utils.save_image(rendering, os.path.join(render_path, '{0:05d}'.format(idx) + ".png"))
         torchvision.utils.save_image(gt, os.path.join(gts_path, '{0:05d}'.format(idx) + ".png"))
-        if is_surfel:
+        if is_stage_b:
+            from utils.reflection_debug import save_reflection_debug_maps
+            gbuffer_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gbuffer", "{:05d}".format(idx))
+            save_reflection_debug_maps(
+                render_package,
+                gt,
+                gbuffer_path,
+                specular_mask=view.specular_mask,
+                mask_sha256=view.specular_mask_sha256,
+            )
+        elif is_surfel:
             from utils.surfel_debug import save_surfel_debug_maps
             gbuffer_path = os.path.join(model_path, name, "ours_{}".format(iteration), "gbuffer", "{:05d}".format(idx))
             save_surfel_debug_maps(render_package, gt, gbuffer_path)
 
 def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParams, skip_train : bool, skip_test : bool, separate_sh: bool):
     with torch.no_grad():
-        if dataset.model_type == "surfel":
+        is_stage_b = getattr(dataset, "stage", "stage_a") == "stage_b"
+        if is_stage_b:
+            if dataset.model_type != "surfel":
+                raise ValueError("Stage B render requires --model_type surfel")
+            from gaussian_renderer.reflection_renderer import StageBRenderState, render as render_fn
+            from scene.diffuse_surfel_model import DiffuseSurfelModel
+            from scene.reflection_surfel_model import ReflectionSurfelModel
+            from scene.stage_b_scene import StageBScene
+            diffuse = DiffuseSurfelModel(dataset.roughness_min)
+            reflection = ReflectionSurfelModel()
+            scene = StageBScene(
+                dataset, diffuse, reflection, load_iteration=iteration, shuffle=False, write_metadata=False
+            )
+            gaussians = StageBRenderState(
+                diffuse=diffuse,
+                reflection=reflection,
+                scene_radius=scene.cameras_extent,
+                ray_chunk_size=dataset.ray_chunk_size,
+                ray_cutoff_sigma=dataset.ray_cutoff_sigma,
+                ray_hit_threshold=dataset.ray_hit_threshold,
+                ray_epsilon_scale=dataset.ray_epsilon_scale,
+                material_alpha_threshold=dataset.material_alpha_threshold,
+                roughness_min=diffuse.roughness_min,
+                roughness_remap=dataset.roughness_remap,
+                ray_background=dataset.ray_background,
+            )
+            is_surfel = False
+        elif dataset.model_type == "surfel":
             from gaussian_renderer.surfel_renderer import render as render_fn
             from scene.diffuse_surfel_model import DiffuseSurfelModel
             gaussians = DiffuseSurfelModel(dataset.roughness_min)
@@ -63,16 +101,17 @@ def render_sets(dataset : ModelParams, iteration : int, pipeline : PipelineParam
             is_surfel = False
         else:
             raise ValueError("--model_type must be either '3dgs' or 'surfel'")
-        scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
+        if not is_stage_b:
+            scene = Scene(dataset, gaussians, load_iteration=iteration, shuffle=False)
 
         bg_color = [1,1,1] if dataset.white_background else [0, 0, 0]
         background = torch.tensor(bg_color, dtype=torch.float32, device="cuda")
 
         if not skip_train:
-             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel)
+             render_set(dataset.model_path, "train", scene.loaded_iter, scene.getTrainCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel, is_stage_b)
 
         if not skip_test:
-             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel)
+             render_set(dataset.model_path, "test", scene.loaded_iter, scene.getTestCameras(), gaussians, pipeline, background, dataset.train_test_exp, separate_sh, render_fn, is_surfel, is_stage_b)
 
 if __name__ == "__main__":
     # Set up command line argument parser

@@ -40,7 +40,15 @@ try:
 except:
     SPARSE_ADAM_AVAILABLE = False
 
-def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from):
+def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations, checkpoint, debug_from,
+             diffuse_init_checkpoint=None):
+
+    if getattr(dataset, "stage", "stage_a") == "stage_b":
+        from stage_b_training import training_stage_b
+        return training_stage_b(
+            dataset, opt, pipe, testing_iterations, saving_iterations, checkpoint_iterations,
+            checkpoint, diffuse_init_checkpoint, debug_from, prepare_output_and_logger,
+        )
 
     if dataset.model_type not in ("3dgs", "surfel"):
         raise ValueError("--model_type must be either '3dgs' or 'surfel'")
@@ -382,6 +390,7 @@ if __name__ == "__main__":
     parser.add_argument('--disable_viewer', action='store_true', default=False)
     parser.add_argument("--checkpoint_iterations", nargs="+", type=int, default=[])
     parser.add_argument("--start_checkpoint", type=str, default = None)
+    parser.add_argument("--diffuse_init_checkpoint", type=str, default=None)
     args = parser.parse_args(sys.argv[1:])
     args.save_iterations.append(args.iterations)
     
@@ -394,7 +403,7 @@ if __name__ == "__main__":
     if not args.disable_viewer:
         network_gui.init(args.ip, args.port)
     torch.autograd.set_detect_anomaly(args.detect_anomaly)
-    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from)
+    training(lp.extract(args), op.extract(args), pp.extract(args), args.test_iterations, args.save_iterations, args.checkpoint_iterations, args.start_checkpoint, args.debug_from, args.diffuse_init_checkpoint)
 
     # All done
     print("\nTraining complete.")

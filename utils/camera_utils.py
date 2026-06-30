@@ -16,6 +16,7 @@ from PIL import Image
 import cv2
 import os
 from pathlib import Path
+import hashlib
 import torch
 
 WARNED = False
@@ -83,12 +84,37 @@ def loadCam(args, id, cam_info, resolution_scale, is_nerf_synthetic, is_test_dat
         normal_prior = torch.from_numpy(values).permute(2, 0, 1).contiguous()
         normal_prior_valid = torch.from_numpy(valid).permute(2, 0, 1).contiguous()
 
+    specular_mask = None
+    specular_mask_sha256 = None
+    specular_directory = getattr(args, "specular_masks", "")
+    if specular_directory:
+        mask_path = os.path.join(args.source_path, specular_directory, Path(cam_info.image_name).stem + ".png")
+        with open(mask_path, "rb") as handle:
+            mask_bytes = handle.read()
+        specular_mask_sha256 = hashlib.sha256(mask_bytes).hexdigest()
+        mask_image = Image.open(mask_path)
+        if mask_image.mode not in ("1", "L", "I", "F"):
+            raise ValueError(f"specular soft mask must be single-channel: {mask_path}")
+        if mask_image.size != (orig_w, orig_h):
+            raise ValueError(
+                f"specular soft mask size {mask_image.size} does not match image {(orig_w, orig_h)}: {mask_path}"
+            )
+        mask_values = np.asarray(mask_image.convert("F"), dtype=np.float32)
+        if mask_values.max(initial=0.0) > 1.0:
+            mask_values = mask_values / 255.0
+        if not np.isfinite(mask_values).all() or mask_values.min(initial=0.0) < 0.0 or mask_values.max(initial=0.0) > 1.0:
+            raise ValueError(f"specular soft mask must be finite in [0,1]: {mask_path}")
+        mask_values = cv2.resize(mask_values, resolution, interpolation=cv2.INTER_LINEAR)
+        specular_mask = torch.from_numpy(mask_values[None].copy())
+
     return Camera(resolution, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, depth_params=cam_info.depth_params,
                   image=image, invdepthmap=invdepthmap,
                   image_name=cam_info.image_name, uid=id,
                   normal_prior=normal_prior, normal_prior_valid=normal_prior_valid,
-                  normal_prior_space=getattr(args, "normal_prior_space", "camera"), data_device=args.data_device,
+                  normal_prior_space=getattr(args, "normal_prior_space", "camera"),
+                  specular_mask=specular_mask, specular_mask_sha256=specular_mask_sha256,
+                  data_device=args.data_device,
                   train_test_exp=args.train_test_exp, is_test_dataset=is_test_dataset, is_test_view=cam_info.is_test)
 
 def cameraList_from_camInfos(cam_infos, resolution_scale, args, is_nerf_synthetic, is_test_dataset):

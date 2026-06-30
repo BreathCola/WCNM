@@ -48,9 +48,21 @@ class ModelParams(ParamGroup):
     def __init__(self, parser, sentinel=False):
         self.sh_degree = 3
         self.model_type = "3dgs"
+        self.stage = "stage_a"
         self.roughness_min = 0.03
         self.normal_priors = "normal_priors"
         self.normal_prior_space = "camera"
+        self.specular_masks = ""
+        self.reflection_init_mode = "random_bbox"
+        self.reflection_init_count = 0
+        self.reflection_init_seed = 0
+        self.ray_background = "scene"
+        self.ray_chunk_size = 4096
+        self.ray_cutoff_sigma = 3.0
+        self.ray_hit_threshold = 0.0001
+        self.ray_epsilon_scale = 0.0001
+        self.material_alpha_threshold = 0.0001
+        self.roughness_remap = False
         self._source_path = ""
         self._model_path = ""
         self._images = "images"
@@ -97,6 +109,8 @@ class OptimizationParams(ParamGroup):
         self.lambda_mono = 0.01
         self.lambda_perc = 0.01
         self.require_nonzero_mono = False
+        self.lambda_spec = 0.2
+        self.specular_k0 = 0.9
         self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
@@ -107,6 +121,21 @@ class OptimizationParams(ParamGroup):
         self.depth_l1_weight_final = 0.01
         self.random_background = False
         self.optimizer_type = "default"
+        self.reflection_position_lr_init = 0.00016
+        self.reflection_position_lr_final = 0.0000016
+        self.reflection_position_lr_delay_mult = 0.01
+        self.reflection_position_lr_max_steps = 20_000
+        self.reflection_color_lr = 0.0025
+        self.reflection_opacity_lr = 0.025
+        self.reflection_scaling_lr = 0.005
+        self.reflection_rotation_lr = 0.001
+        self.reflection_percent_dense = 0.01
+        self.reflection_densify_from_iter = 100
+        self.reflection_densify_until_iter = 5_000
+        self.reflection_densification_interval = 100
+        self.reflection_densify_grad_threshold = 0.0002
+        self.reflection_min_opacity = 0.005
+        self.reflection_prune_unhit_after = 500
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

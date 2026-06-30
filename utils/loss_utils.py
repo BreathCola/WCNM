@@ -143,3 +143,16 @@ def monocular_normal_loss(normal, prior, alpha=None, prior_valid=None):
     if not valid.any():
         return normal.sum() * 0.0
     return (1.0 - alignment[valid].clamp(-1, 1)).mean()
+
+
+def specular_constraint_loss(ks, soft_mask, k0=0.9):
+    """Stage B soft-mask constraint from the master plan."""
+    if ks.ndim != 3 or ks.shape[-1] != 1:
+        raise ValueError("ks must have shape [H,W,1]")
+    if soft_mask.shape != ks.shape and soft_mask.ndim == 3 and soft_mask.shape[0] == 1:
+        soft_mask = soft_mask.permute(1, 2, 0)
+    if soft_mask.shape != ks.shape:
+        raise ValueError("soft_mask must match ks")
+    if not torch.isfinite(soft_mask).all() or (soft_mask < 0).any() or (soft_mask > 1).any():
+        raise ValueError("soft_mask must be finite in [0,1]")
+    return (soft_mask * torch.relu(float(k0) - ks)).mean()

@@ -19,6 +19,7 @@ import cv2
 class Camera(nn.Module):
     def __init__(self, resolution, colmap_id, R, T, FoVx, FoVy, depth_params, image, invdepthmap,
                  image_name, uid, normal_prior=None, normal_prior_valid=None, normal_prior_space="camera",
+                 specular_mask=None, specular_mask_sha256=None,
                  trans=np.array([0.0, 0.0, 0.0]), scale=1.0, data_device = "cuda",
                  train_test_exp = False, is_test_dataset = False, is_test_view = False
                  ):
@@ -68,6 +69,8 @@ class Camera(nn.Module):
         self.image_height = self.original_image.shape[1]
         self.normal_prior = None if normal_prior is None else normal_prior.to(self.data_device)
         self.normal_prior_valid = None if normal_prior_valid is None else normal_prior_valid.to(self.data_device)
+        self.specular_mask = None if specular_mask is None else specular_mask.to(self.data_device)
+        self.specular_mask_sha256 = specular_mask_sha256
 
         self.invdepthmap = None
         self.depth_reliable = False

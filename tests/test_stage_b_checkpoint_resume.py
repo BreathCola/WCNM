@@ -10,6 +10,7 @@ from scene.stage_b_state import (
     restore_stage_b_checkpoint,
     sha256_file,
 )
+from scene.stage_b_scene import StageBScene
 from tests.test_reflection_surfel_model import reflection_args
 
 
@@ -118,3 +119,16 @@ def test_checkpoint_format_rejections(tmp_path):
         assert "rtgs_stage_a" in str(error)
     else:
         raise AssertionError("wrong checkpoint format was accepted")
+
+
+def test_stage_b_scene_exports_diffuse_and_reflection_to_separate_paths(tmp_path):
+    diffuse = initialized_diffuse()
+    reflection = ReflectionSurfelModel()
+    reflection.create_random_bbox(torch.zeros(3), torch.ones(3), 4, 0)
+    scene = StageBScene.__new__(StageBScene)
+    scene.model_path = str(tmp_path)
+    scene.diffuse = diffuse
+    scene.reflection = reflection
+    scene.save(7)
+    assert (tmp_path / "point_cloud" / "diffuse" / "iteration_7" / "point_cloud.ply").is_file()
+    assert (tmp_path / "point_cloud" / "reflection" / "iteration_7" / "point_cloud.ply").is_file()
