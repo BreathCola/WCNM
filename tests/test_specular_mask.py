@@ -5,7 +5,7 @@ import pytest
 import torch
 from PIL import Image
 
-from stage_b_training import _validate_stage_b_args
+from stage_b_training import _config, _validate_stage_b_args
 from utils.loss_utils import specular_constraint_loss
 from utils.specular_mask import validate_specular_mask_set
 
@@ -57,3 +57,29 @@ def test_specular_constraint_and_lambda_zero_mask_boundary():
     opt.lambda_spec = 0.2
     with pytest.raises(ValueError, match="requires a complete"):
         _validate_stage_b_args(dataset, opt, None, "diffuse.pth")
+
+
+def test_stage_b_checkpoint_config_records_both_schedules():
+    dataset = SimpleNamespace(
+        roughness_remap=False, material_alpha_threshold=1e-4, ray_background="scene",
+        ray_chunk_size=16, ray_cutoff_sigma=3.0, ray_hit_threshold=1e-4,
+        ray_epsilon_scale=1e-4,
+    )
+    opt = SimpleNamespace(
+        lambda_norm=0.04, lambda_mono=0.01, lambda_perc=0.01, lambda_spec=0.0, specular_k0=0.9,
+        position_lr_init=1e-4, position_lr_final=1e-6, position_lr_delay_mult=0.01,
+        position_lr_max_steps=100, densify_from_iter=10, densify_until_iter=50,
+        densification_interval=5, densify_grad_threshold=2e-4,
+        reflection_position_lr_init=2e-4, reflection_position_lr_final=2e-6,
+        reflection_position_lr_delay_mult=0.02, reflection_position_lr_max_steps=80,
+        reflection_color_lr=2e-3, reflection_opacity_lr=2e-2, reflection_scaling_lr=3e-3,
+        reflection_rotation_lr=4e-3, reflection_percent_dense=0.02,
+        reflection_densify_from_iter=4, reflection_densify_until_iter=60,
+        reflection_densification_interval=6, reflection_densify_grad_threshold=3e-4,
+        reflection_min_opacity=0.01, reflection_prune_unhit_after=20,
+    )
+    diffuse = SimpleNamespace(roughness_min=0.03)
+    config = _config(dataset, opt, diffuse, None)
+    assert config["diffuse_schedule"]["position_lr_max_steps"] == 100
+    assert config["reflection_schedule"]["position_lr_init"] == 2e-4
+    assert config["reflection_schedule"]["prune_unhit_after"] == 20

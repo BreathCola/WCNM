@@ -51,6 +51,33 @@ def _config(dataset, opt, diffuse, mask_manifest):
         "lambda_perc": float(opt.lambda_perc),
         "lambda_spec": float(opt.lambda_spec),
         "specular_k0": float(opt.specular_k0),
+        "diffuse_schedule": {
+            "position_lr_init": float(opt.position_lr_init),
+            "position_lr_final": float(opt.position_lr_final),
+            "position_lr_delay_mult": float(opt.position_lr_delay_mult),
+            "position_lr_max_steps": int(opt.position_lr_max_steps),
+            "densify_from_iter": int(opt.densify_from_iter),
+            "densify_until_iter": int(opt.densify_until_iter),
+            "densification_interval": int(opt.densification_interval),
+            "densify_grad_threshold": float(opt.densify_grad_threshold),
+        },
+        "reflection_schedule": {
+            "position_lr_init": float(opt.reflection_position_lr_init),
+            "position_lr_final": float(opt.reflection_position_lr_final),
+            "position_lr_delay_mult": float(opt.reflection_position_lr_delay_mult),
+            "position_lr_max_steps": int(opt.reflection_position_lr_max_steps),
+            "color_lr": float(opt.reflection_color_lr),
+            "opacity_lr": float(opt.reflection_opacity_lr),
+            "scaling_lr": float(opt.reflection_scaling_lr),
+            "rotation_lr": float(opt.reflection_rotation_lr),
+            "percent_dense": float(opt.reflection_percent_dense),
+            "densify_from_iter": int(opt.reflection_densify_from_iter),
+            "densify_until_iter": int(opt.reflection_densify_until_iter),
+            "densification_interval": int(opt.reflection_densification_interval),
+            "densify_grad_threshold": float(opt.reflection_densify_grad_threshold),
+            "min_opacity": float(opt.reflection_min_opacity),
+            "prune_unhit_after": int(opt.reflection_prune_unhit_after),
+        },
         "specular_mask": None if mask_manifest is None else {
             "role": mask_manifest["role"],
             "count": mask_manifest["count"],
@@ -143,6 +170,7 @@ def training_stage_b(
         for key in (
             "roughness_remap", "material_alpha_threshold", "ray_background", "ray_cutoff_sigma",
             "ray_hit_threshold", "ray_epsilon_scale", "bsdf_weight_mode",
+            "diffuse_schedule", "reflection_schedule",
         ):
             if saved_config.get(key) != current_config.get(key):
                 raise ValueError(f"Stage B resume config mismatch for {key}")
