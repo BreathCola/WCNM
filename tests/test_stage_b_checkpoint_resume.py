@@ -6,8 +6,8 @@ from scene.diffuse_surfel_model import DiffuseSurfelModel
 from scene.reflection_surfel_model import ReflectionSurfelModel
 from scene.stage_b_state import (
     initialize_stage_b_from_diffuse,
+    load_stage_b_checkpoint,
     make_stage_b_checkpoint,
-    restore_stage_b_checkpoint,
     sha256_file,
 )
 from scene.stage_b_scene import StageBScene
@@ -90,14 +90,17 @@ def test_stage_a_initialization_and_stage_b_round_trip_keep_namespaces_separate(
     )
     assert checkpoint["format"] == "rtgs_stage_b"
     assert set(checkpoint) >= {"diffuse", "reflection", "global_iteration", "reflection_iteration"}
+    stage_b_path = tmp_path / "stage_b.pth"
+    torch.save(checkpoint, stage_b_path)
     restored_d = DiffuseSurfelModel()
     restored_r = ReflectionSurfelModel()
-    values = restore_stage_b_checkpoint(
-        checkpoint,
+    values = load_stage_b_checkpoint(
+        stage_b_path,
         restored_d,
         restored_r,
         diffuse_args(),
         reflection_args(),
+        map_location="cpu",
         restore_rng=False,
     )
     assert values[:2] == (15002, 2)
