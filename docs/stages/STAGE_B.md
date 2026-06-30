@@ -174,6 +174,7 @@ bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a
 30dd8be5d05d6da9081b0a1f4b80a555234b74f3  B-1b
 953334009a8db3d63cc68179842687ba306186c2  B-1c
 c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
+f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 ```
 
 Implemented and tested does not mean accepted. The first TiHuBird Stage B smoke
