@@ -1066,3 +1066,57 @@ disabling it, plus a read-only restoration check of the user checkpoint. The
 operator retry must use a new output directory and preserve the failed attempt.
 
 Required ablation: None.
+
+## B-010 — Close B-1d diagnostics and authorize only a 100-step health pilot
+
+Date: 2026-06-30
+
+Question: Does the successful diagnostic resume show an LBVH or BRDF/debug
+failure that must be corrected before a short Reflection health pilot?
+
+Chosen implementation: Accept the B-1d observability gate using the
+user-operated output
+`output/stage_b_tihubird_reflection_dr_c03_resume_diag_15003_retry1/`.
+Its checkpoint is `rtgs_stage_b` at global iteration 15,003 and Reflection local
+step 3, with 346,118 Diffuse and 4,096 Reflection surfels and no non-finite D/R
+checkpoint state.
+
+The fixed debug view contains 128,582 valid rays. LBVH AABB candidate counts
+have p50/p95/p99 `111/205/256`; exact plane/ellipse intersections have
+p50/p95/p99 `28/64/76`. Candidate p99 is 6.25% of the 4,096-surfel field, and
+the mean exact/candidate fraction is about 25.8%. Raytrace wall time is about
+152 ms for 128,582 rays; traversal and exact intersection/compositing CUDA times
+are about 69.6 ms and 75.7 ms. Incremental peak allocation is 333,931,008 bytes,
+about 319 MiB.
+
+The raw microfacet D values lie in the narrow finite interval `1.270–1.276`.
+Its nearly white physical/log display is therefore an honest low-variance map,
+not a visualization or BRDF failure. Reflection contribution remains finite and
+nonzero with mean `6.73e-5`, p99 `3.79e-4`, maximum `8.40e-4`, and nonzero
+fraction about 99.998%; its p99-scaled companion is spatially informative.
+
+Authorize only a controlled additional 100-step `lambda_spec=0` health pilot
+from this exact 15,003/3 checkpoint. Do not change Reflection count, initial
+scale, initialization mode, BRDF, BVH, densification, or any optimizer/loss/data
+hyperparameter. Debug nodes must be exactly +25/+50/+75/+100, and checkpoint plus
+independent D/R PLY must be written only at +100. If the current CLI cannot
+express that schedule exactly, the pilot is blocked and no code workaround or
+training run is authorized.
+
+Alternatives: Treat near-complete final alpha hits as BVH brute force; change R
+scale/count before measurement; start a long run; enable a fabricated mask; or
+advance to Stage C/D.
+
+Why: Candidate density, exact-intersection density, timing, and memory show that
+the LBVH prunes the 4,096-surfel field materially and does not degenerate to a
+full scan. The remaining question is short-horizon numerical and optimization
+health, not acceleration correctness or 100-step image quality.
+
+Paper fidelity: This closes a Stage B engineering diagnostic gate and defines a
+short experiment boundary. It changes no representation, rendering formula,
+loss, schedule, or checkpoint contract.
+
+Impact: Stage B remains unaccepted. A real 111/111 manual soft-mask set and
+`L_spec` behavior are still unverified. Stage C and Stage D remain forbidden.
+
+Required ablation: None before the controlled health pilot.

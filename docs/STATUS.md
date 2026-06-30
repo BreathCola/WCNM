@@ -13,11 +13,12 @@ fixed code and produced a valid Stage B checkpoint, independent D/R PLYs, and
 real debug maps. Review found nearly complete ray hits plus physical-scale maps
 that quantized black/saturated white, so B-1d debug-only observability is now
 implemented and tested but awaits a user-operated one-step resume smoke. Stage B
-is neither complete nor accepted. The first diagnostic resume attempt stopped
-before iteration 15,003 on the RNG map-location bug fixed by
-`9156b1eed7ecab41b873ef796d27783289723f6d`; a new user retry is pending. The
-frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
-Stage C and Stage D have not started.
+is neither complete nor accepted. After the first diagnostic resume stopped on
+the RNG map-location bug, `resume_diag_15003_retry1` completed and verified B-1d
+at global 15,003 / R local 3. A controlled additional 100-step health pilot is
+authorized only if the existing CLI can express its exact debug/save schedule.
+The frozen StableNormal baseline and C03 initialization artifacts remain
+unchanged. Stage C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -152,16 +153,24 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   loader validates RNG uint8 tensors, restores contiguous CPU copies for both
   CPU and CUDA generators, passes an on-disk CUDA-map-location test, and restored
   the real user checkpoint RNG read-only.
+- The corrected user resume completed from global 15,002 / R local 2 to global
+  15,003 / R local 3 and wrote a finite checkpoint plus separate D/R PLYs. Its
+  fixed view reports candidate p50/p95/p99 `111/205/256`, exact-intersection
+  p50/p95/p99 `28/64/76`, about 152 ms raytrace time for 128,582 rays, and about
+  319 MiB incremental peak allocation. Candidate p99 is 6.25% of the field, so
+  the LBVH is not behaving as a 4,096-surfel brute-force scan.
+- Microfacet D is finite and tightly distributed over `1.270–1.276`; its nearly
+  white visualization is correct. Reflection contribution is nonzero and
+  spatially structured in the companion map. No Reflection count or initial
+  scale adjustment is justified before the controlled pilot.
 
 ## Current boundary and next exact task
 
-- The next action is a user-operated one-step resume smoke from the read-only
-  `output/stage_b_tihubird_reflection_dr_c03_smoke_2_retry1/chkpnt15002.pth`
-  with `lambda_spec=0`, using a new retry output path that preserves the failed
-  diagnostic attempt.
-- Inspect the new raw statistics, candidate/exact-intersection distributions,
-  timing/memory metadata, and companion maps before changing Reflection count,
-  scale, initialization, or training duration.
+- The next action is to verify that the current CLI can express an additional
+  100-step pilot from global 15,003 / R local 3 with debug exactly at
+  15,028/15,053/15,078/15,103 and checkpoint/D-R PLY only at 15,103.
+- Run nothing if that exact schedule is not expressible. Do not change code or
+  experiment settings to work around the CLI boundary.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
   Enabling the constraint later requires a complete real 111/111 manual soft
   mask set with matching dimensions and recorded aggregate hash.
@@ -172,7 +181,6 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Blocked by: the user-operated one-step diagnostic resume and review of its
-candidate density, exact intersections, timing/memory, and display companions;
-then a real 111/111 manual soft-mask set before enabling `lambda_spec>0`. Stage B
-acceptance cannot advance before that evidence exists.
+Blocked by: exact CLI expressibility and completion/review of the controlled
+100-step health pilot; then a real 111/111 manual soft-mask set before enabling
+`lambda_spec>0`. Stage B acceptance cannot advance before that evidence exists.

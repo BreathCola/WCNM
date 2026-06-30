@@ -120,12 +120,31 @@ may be introduced.
   companions for sub-8-bit reflection contribution and unbounded microfacet D.
 - [x] Record raw finite/count/min/mean/p50/p95/p99/max statistics and display
   scales without reading target-image colors.
-- [ ] Verify these diagnostics in a user-operated one-step TiHuBird resume.
+- [x] Verify these diagnostics in a user-operated one-step TiHuBird resume.
 
 The first diagnostic resume attempt stopped before iteration 15,003 because
 checkpoint `map_location="cuda"` moved the CPU RNG ByteTensor onto CUDA. B-009
 defines the corrected device contract; the real checkpoint now passes read-only
-RNG restoration, while a new user retry remains required.
+RNG restoration. That failed attempt is preserved separately from the corrected
+retry below.
+
+The corrected retry completed at global 15,003 / R local 3. Candidate
+p50/p95/p99 is `111/205/256`, exact-intersection p50/p95/p99 is `28/64/76`,
+raytrace wall time is about 152 ms for 128,582 rays, and incremental peak memory
+is about 319 MiB. D/R checkpoint state is finite. Microfacet D lies in
+`1.270–1.276`, so its nearly white map is a real low-variance result. The LBVH is
+not a full-field brute-force traversal; R count and initial scale remain fixed.
+
+### Controlled 100-step health pilot
+
+- [ ] Resume exactly from global 15,003 / R local 3 without resetting any state.
+- [ ] Keep `lambda_spec=0` and load/create no mask.
+- [ ] Keep all model, renderer, BVH, densification, and training settings fixed.
+- [ ] Emit debug exactly at 15,028 / 15,053 / 15,078 / 15,103.
+- [ ] Save checkpoint and independent D/R PLY only at 15,103.
+- [ ] Stop at global 15,103 / R local 103 and classify health without treating
+  a flat 100-step PSNR as automatic failure.
+- [ ] Do not run if the existing CLI cannot express every node exactly.
 
 ## Debug outputs required before Stage B acceptance
 
@@ -188,7 +207,7 @@ dummy outputs are permitted in Stage B.
 - [x] Stage A test suite and original code paths do not regress in the 70-test run.
 - [x] The first successful Stage B smoke was run by the user and produced real
   checkpoint, D/R PLY, and debug evidence.
-- [ ] B-1d candidate density, exact intersections, timing/memory, and display
+- [x] B-1d candidate density, exact intersections, timing/memory, and display
   companions are verified by the user-operated resume smoke.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
   reality before any Stage C transition.
