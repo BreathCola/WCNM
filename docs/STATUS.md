@@ -8,11 +8,13 @@ Stage state: Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then
 aborted before its first optimization step on an ASCII-locale CUDA JIT path
-error. Commit `36b7fdfdd98ec7f3d04d256cf76830189a6a10a9` stages JIT inputs under
-ASCII-only paths and passes targeted compilation/tests, but the user has not yet
-run the retry. Stage B is neither complete nor accepted. The frozen StableNormal
-baseline and C03 initialization artifacts remain unchanged. Stage C and Stage D
-have not started.
+error. The user-operated `smoke_2_retry1` then completed 2/2 steps from the
+fixed code and produced a valid Stage B checkpoint, independent D/R PLYs, and
+real debug maps. Review found nearly complete ray hits plus physical-scale maps
+that quantized black/saturated white, so B-1d debug-only observability is now
+implemented and tested but awaits a user-operated one-step resume smoke. Stage B
+is neither complete nor accepted. The frozen StableNormal baseline and C03
+initialization artifacts remain unchanged. Stage C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -26,6 +28,8 @@ bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a model/math/checkpoint foundation
 c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
 f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
+8cd03e861f89487472144d5c9d4fcd7d62915e19  B-008 diagnostics decision
+9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
 ```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
@@ -104,8 +108,8 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 67 passed on 2026-06-30. This includes the complete Stage A
-  regression plus 29 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
+  tests` → 69 passed on 2026-06-30. This includes the complete Stage A
+  regression plus 31 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
   staging tests.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
@@ -125,15 +129,26 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - A fresh forced-C-locale CUDA compile reported preferred encoding
   `ANSI_X3.4-1968` and loaded the extension successfully from the new ASCII-only
   staging path. No real manual soft-mask set exists yet.
+- The user-operated `smoke_2_retry1` completed at global iteration 15,002 and R
+  local step 2. Its `rtgs_stage_b` checkpoint contains 346,118 Diffuse and 4,096
+  Reflection surfels, separate optimizer namespaces, and no non-finite tensor in
+  recursive D/R state inspection. The independent D/R PLYs and both debug nodes
+  are present. C03 source checkpoint and PLY hashes remain unchanged.
+- The reviewed fixed view had 128,582 valid rays and 128,579 final alpha hits.
+  Reflection color/alpha/depth were spatially structured, but the physical
+  reflection contribution quantized to black and microfacet D display-clamped
+  to white. B-1d now preserves these physical images while adding p99/log
+  companion views, raw statistics, candidate/exact-intersection counts, CUDA
+  phase timing, and peak-memory metadata only on requested debug renders.
 
 ## Current boundary and next exact task
 
-- The next action is a user-operated retry of the two-step structural Stage B
-  smoke from the read-only C03 15k checkpoint with `lambda_spec=0`, using a new
-  output path that preserves the failed `smoke_2` attempt.
-- Inspect its real checkpoint, independent D/R PLYs, valid-ray/hit counts,
-  reflection maps, microfacet maps, and contribution maps before changing any
-  implementation or quality setting.
+- The next action is a user-operated one-step resume smoke from the read-only
+  `output/stage_b_tihubird_reflection_dr_c03_smoke_2_retry1/chkpnt15002.pth`
+  with `lambda_spec=0`, using a new output path.
+- Inspect the new raw statistics, candidate/exact-intersection distributions,
+  timing/memory metadata, and companion maps before changing Reflection count,
+  scale, initialization, or training duration.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
   Enabling the constraint later requires a complete real 111/111 manual soft
   mask set with matching dimensions and recorded aggregate hash.
@@ -144,5 +159,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Blocked by: the user-operated Stage B smoke retry and human review of its real
-debug evidence. Stage B acceptance cannot advance before that evidence exists.
+Blocked by: the user-operated one-step diagnostic resume and review of its
+candidate density, exact intersections, timing/memory, and display companions;
+then a real 111/111 manual soft-mask set before enabling `lambda_spec>0`. Stage B
+acceptance cannot advance before that evidence exists.

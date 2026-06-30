@@ -42,8 +42,9 @@ Stage C and Stage D have not started.
   is authorized for the first experiment.
 - No Reflection model instance, ray tracer, BRDF implementation, mask pipeline,
   or Stage B training existed at entry. B-1 implementation now exists, but no
-  TiHuBird Stage B optimization step has completed. The first user smoke attempt
-  stopped at 0/2 steps on the CUDA JIT non-ASCII-path issue recorded in B-007.
+  long Stage B training has run. The first user smoke attempt stopped at 0/2
+  steps on the CUDA JIT non-ASCII-path issue recorded in B-007; the preserved
+  `smoke_2_retry1` completed 2/2 steps and was reviewed before B-1d began.
 
 ## B-0 — Read-only implementation audit
 
@@ -107,6 +108,20 @@ may be introduced.
 - [x] Apply `L_spec` only where the accepted mask is valid and keep mask use out
   of full-image RGB cropping.
 
+### B-1d debug-only observability
+
+- [x] Reuse LBVH offsets for exact per-ray candidate counts without a second
+  traversal or any production fallback.
+- [x] Report exact plane/ellipse intersection counts separately from final alpha
+  hits.
+- [x] Collect CUDA phase timing and peak-memory data only when diagnostics are
+  explicitly requested by fixed debug/offline renders.
+- [x] Preserve physical-scale images and add recorded p99/log display-only
+  companions for sub-8-bit reflection contribution and unbounded microfacet D.
+- [x] Record raw finite/count/min/mean/p50/p95/p99/max statistics and display
+  scales without reading target-image colors.
+- [ ] Verify these diagnostics in a user-operated one-step TiHuBird resume.
+
 ## Debug outputs required before Stage B acceptance
 
 ```text
@@ -127,6 +142,10 @@ transparent_mask.png       # only after an accepted real mask exists
 overlay.png                 # only after an accepted real mask exists
 diffuse_contribution.png
 reflection_contribution.png
+reflection_contribution_vis.png  # display-only p99 scale; raw image preserved
+microfacet_D_log.png             # display-only log1p/p99 scale
+ray_candidate_count.png          # display-only p99 scale; raw stats in JSON
+ray_exact_intersection_count.png # display-only p99 scale; raw stats in JSON
 ```
 
 No inside/outside/transmittance, near/far, two-hit, mesh, or depth-violation
@@ -144,22 +163,27 @@ dummy outputs are permitted in Stage B.
   composition tests.
 - [ ] Real-mask loading/validation and `L_spec` masking tests before enabling
   the specular constraint.
-- [x] Existing Stage A regression suite: full repository result is 67 passed.
+- [x] Candidate/exact-intersection chunking, timing/memory, physical-map
+  preservation, and companion-scale tests.
+- [x] Existing Stage A regression suite: full repository result is 69 passed.
 
 ## Acceptance checklist
 
 - [x] Independent Reflection Gaussian exists and passed synthetic tests.
 - [x] Ray tracer runs on R and satisfies its tested differentiability contract.
 - [x] Reflection-ray direction and scene-scaled epsilon are correct in tests.
-- [ ] Reflection color/alpha/depth/hit maps are real and visualized.
+- [x] Reflection color/alpha/depth/hit maps are real and visualized in the
+  successful user smoke.
 - [x] D and R optimizers, densification, checkpoints, and exports are separate.
 - [x] Full microfacet BRDF runs without split-sum approximation in tests.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
-- [ ] Outputs and gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 67-test run.
-- [ ] The first Stage B smoke is run by the user from reviewed prerequisites and
-  produces the required debug evidence.
+- [x] Reviewed smoke checkpoint tensors and tested gradients contain no NaN or Inf.
+- [x] Stage A test suite and original code paths do not regress in the 69-test run.
+- [x] The first successful Stage B smoke was run by the user and produced real
+  checkpoint, D/R PLY, and debug evidence.
+- [ ] B-1d candidate density, exact intersections, timing/memory, and display
+  companions are verified by the user-operated resume smoke.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
   reality before any Stage C transition.
 - [x] Separate B-1a, B-1b, and B-1c rollback commits exist.
@@ -177,8 +201,10 @@ bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a
 c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
 f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
+8cd03e861f89487472144d5c9d4fcd7d62915e19  B-008 diagnostics decision
+9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
 ```
 
-Implemented and tested does not mean accepted. The first TiHuBird Stage B smoke
-attempt was user-run but aborted before step one and produced no checkpoint or
-D/R PLY save. Its retry and review of real debug outputs remain user-only.
+Implemented and tested does not mean accepted. The successful user smoke proved
+the structural Stage B path, while the B-1d diagnostic resume and real manual
+soft-mask evidence remain user-only. Stage C and Stage D remain forbidden.
