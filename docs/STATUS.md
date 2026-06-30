@@ -13,8 +13,11 @@ fixed code and produced a valid Stage B checkpoint, independent D/R PLYs, and
 real debug maps. Review found nearly complete ray hits plus physical-scale maps
 that quantized black/saturated white, so B-1d debug-only observability is now
 implemented and tested but awaits a user-operated one-step resume smoke. Stage B
-is neither complete nor accepted. The frozen StableNormal baseline and C03
-initialization artifacts remain unchanged. Stage C and Stage D have not started.
+is neither complete nor accepted. The first diagnostic resume attempt stopped
+before iteration 15,003 on the RNG map-location bug fixed by
+`9156b1eed7ecab41b873ef796d27783289723f6d`; a new user retry is pending. The
+frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
+Stage C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -30,6 +33,8 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
 8cd03e861f89487472144d5c9d4fcd7d62915e19  B-008 diagnostics decision
 9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
+47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
+9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
 ```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
@@ -108,8 +113,8 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 69 passed on 2026-06-30. This includes the complete Stage A
-  regression plus 31 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
+  tests` → 70 passed on 2026-06-30. This includes the complete Stage A
+  regression plus 32 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
   staging tests.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
@@ -140,12 +145,20 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   to white. B-1d now preserves these physical images while adding p99/log
   companion views, raw statistics, candidate/exact-intersection counts, CUDA
   phase timing, and peak-memory metadata only on requested debug renders.
+- The first B-1d resume attempt loaded all cameras and the Stage B checkpoint,
+  then stopped at 0 steps because `map_location="cuda"` moved the CPU PyTorch
+  RNG ByteTensor onto CUDA. Its partial output contains only configuration,
+  camera/input, and event artifacts; no checkpoint or D/R PLY. The corrected
+  loader validates RNG uint8 tensors, restores contiguous CPU copies for both
+  CPU and CUDA generators, passes an on-disk CUDA-map-location test, and restored
+  the real user checkpoint RNG read-only.
 
 ## Current boundary and next exact task
 
 - The next action is a user-operated one-step resume smoke from the read-only
   `output/stage_b_tihubird_reflection_dr_c03_smoke_2_retry1/chkpnt15002.pth`
-  with `lambda_spec=0`, using a new output path.
+  with `lambda_spec=0`, using a new retry output path that preserves the failed
+  diagnostic attempt.
 - Inspect the new raw statistics, candidate/exact-intersection distributions,
   timing/memory metadata, and companion maps before changing Reflection count,
   scale, initialization, or training duration.

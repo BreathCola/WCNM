@@ -122,6 +122,11 @@ may be introduced.
   scales without reading target-image colors.
 - [ ] Verify these diagnostics in a user-operated one-step TiHuBird resume.
 
+The first diagnostic resume attempt stopped before iteration 15,003 because
+checkpoint `map_location="cuda"` moved the CPU RNG ByteTensor onto CUDA. B-009
+defines the corrected device contract; the real checkpoint now passes read-only
+RNG restoration, while a new user retry remains required.
+
 ## Debug outputs required before Stage B acceptance
 
 ```text
@@ -165,7 +170,8 @@ dummy outputs are permitted in Stage B.
   the specular constraint.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
-- [x] Existing Stage A regression suite: full repository result is 69 passed.
+- [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
+- [x] Existing Stage A regression suite: full repository result is 70 passed.
 
 ## Acceptance checklist
 
@@ -179,7 +185,7 @@ dummy outputs are permitted in Stage B.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [x] Reviewed smoke checkpoint tensors and tested gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 69-test run.
+- [x] Stage A test suite and original code paths do not regress in the 70-test run.
 - [x] The first successful Stage B smoke was run by the user and produced real
   checkpoint, D/R PLY, and debug evidence.
 - [ ] B-1d candidate density, exact intersections, timing/memory, and display
@@ -203,6 +209,8 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
 8cd03e861f89487472144d5c9d4fcd7d62915e19  B-008 diagnostics decision
 9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
+47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
+9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
 ```
 
 Implemented and tested does not mean accepted. The successful user smoke proved
