@@ -1026,3 +1026,43 @@ Required ablation: None. If candidate p50/p95 approaches the full Reflection
 count or exact intersections remain unexpectedly dense, measure an explicitly
 documented Reflection scale/count initialization change in a later short pilot;
 do not silently alter the current initialization first.
+
+## B-009 — Canonical CPU ByteTensor contract for checkpoint RNG state
+
+Date: 2026-06-30
+
+Question: How should Stage B restore CPU and CUDA RNG states when model and
+optimizer tensors are loaded directly onto CUDA with `map_location="cuda"`?
+
+Chosen implementation: RNG byte tensors are logically device-independent
+checkpoint metadata. `capture_rng_state` continues to serialize the CPU PyTorch
+state and the per-device CUDA states as the ByteTensors returned by PyTorch.
+Before calling either `torch.set_rng_state` or `torch.cuda.set_rng_state_all`,
+the restore path validates that every state is a uint8 tensor and moves it to a
+contiguous CPU ByteTensor. Model, optimizer, and densification tensors continue
+to obey the requested checkpoint `map_location`.
+
+Do not change the Stage B checkpoint version: existing checkpoints already
+contain the correct bytes, and only the loader incorrectly allowed
+`map_location` to move those bytes onto CUDA. Invalid or non-uint8 RNG entries
+fail closed rather than being cast silently.
+
+Alternatives: Load the complete checkpoint on CPU and manually migrate every
+model/optimizer tensor; disable RNG restoration on production resume; store RNG
+bytes outside the checkpoint; or cast arbitrary tensors to uint8.
+
+Why: The first user-operated B-1d resume read the 15,002 checkpoint successfully
+but stopped before iteration 15,003 because `torch.load(...,
+map_location="cuda")` moved `rng_state["torch"]` to CUDA and
+`torch.set_rng_state` requires a CPU ByteTensor. The partial resume output has no
+checkpoint or D/R PLY and remains failed evidence.
+
+Paper fidelity: This is deterministic checkpoint-resume plumbing only. It
+changes no model state, random sequence bytes, renderer, ray tracer, BRDF, loss,
+schedule, or Stage B diagnostic definition.
+
+Impact: Add an on-disk CUDA-map-location round-trip that restores RNG instead of
+disabling it, plus a read-only restoration check of the user checkpoint. The
+operator retry must use a new output directory and preserve the failed attempt.
+
+Required ablation: None.
