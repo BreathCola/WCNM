@@ -961,3 +961,68 @@ output path for the retry so the failed attempt is preserved.
 
 Required ablation: None. Retain an ASCII-locale compile/load regression and the
 existing CUDA/oracle/gradient tests.
+
+## B-008 — Debug-only raytrace observability after the first successful smoke
+
+Date: 2026-06-30
+
+Question: How should Stage B distinguish useful Reflection coverage from an
+over-broad random field, and preserve physically meaningful debug values when
+8-bit visualization makes a nonzero contribution black or an unbounded GGX D
+term white?
+
+Chosen implementation: Add an explicit diagnostics request that is disabled on
+ordinary training renders and enabled only for fixed debug/offline Stage B
+renders. Reuse the exact LBVH offsets to report per-ray AABB candidate counts,
+and report per-ray exact plane/ellipse intersection counts from the existing
+differentiable intersection pass. Do not change candidate selection, hit
+thresholds, compositing, gradients, or optimizer inputs.
+
+Diagnostics record chunk count, Reflection surfel count, BVH rebuild/refit
+deltas, raytrace wall time, CUDA time for BVH synchronization, traversal, and
+exact intersection/compositing, and peak allocated CUDA memory. Timing uses
+CUDA events and synchronizes only when diagnostics are explicitly requested.
+The ordinary training render remains unsynchronized by this instrumentation.
+
+Keep every existing physical-scale debug PNG unchanged. Add display-only
+companions:
+
+```text
+reflection_contribution_vis.png  linear scale by finite valid-pixel p99
+microfacet_D_log.png             log1p scale by finite valid-pixel p99
+ray_candidate_count.png          linear scale by valid-ray p99
+ray_exact_intersection_count.png linear scale by valid-ray p99
+```
+
+Every display scale and raw finite/count/min/mean/p50/p95/p99/max statistic is
+written to `reflection_metadata.json`. Scaling never feeds back into rendering,
+losses, checkpoints, or training. Statistics use only renderer outputs and
+raytrace bookkeeping; no ground-truth, target pixel, or training-image color is
+read to define a scale.
+
+Alternatives: Replace the physical PNGs with normalized images; globally enable
+synchronizing timers during training; infer acceleration quality from the final
+hit mask alone; add a second CUDA traversal; or change the Reflection
+initialization before measuring it.
+
+Why: The successful user `smoke_2_retry1` completed two steps and produced real
+Reflection color/alpha/depth plus a valid Stage B checkpoint, but 128,579 of
+128,582 valid rays passed the final alpha hit threshold. Its physical
+`reflection_contribution.png` quantized to black while 6,632 final-image channel
+values still increased by one 8-bit level, and `microfacet_D.png` saturated to
+white. These observations prove the path is not a dummy, but the current maps
+cannot reveal whether the nearly complete coverage is efficient or over-broad.
+
+Paper fidelity: This is Stage B debug and performance instrumentation only. It
+does not modify the RT-GS representation, reflection rays, Gaussian support,
+BRDF, final composite, losses, schedules, or checkpoint contract.
+
+Impact: A new user-operated one-step resume smoke is required after the
+instrumentation passes synthetic/CUDA regression. It must use a new output
+directory and resume the read-only `smoke_2_retry1/chkpnt15002.pth`; Codex does
+not run that TiHuBird command.
+
+Required ablation: None. If candidate p50/p95 approaches the full Reflection
+count or exact intersections remain unexpectedly dense, measure an explicitly
+documented Reflection scale/count initialization change in a later short pilot;
+do not silently alter the current initialization first.
