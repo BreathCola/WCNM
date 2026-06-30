@@ -912,3 +912,52 @@ TiHuBird rays remain unverified until the user smoke.
 
 Required ablation: None for correctness. Profile candidate counts, chunk size,
 refit/rebuild time, and peak memory before selecting a long-run configuration.
+
+## B-007 — ASCII-only CUDA JIT staging for non-ASCII repository paths
+
+Date: 2026-06-30
+
+Question: How can the fail-closed CUDA LBVH JIT compile reproducibly when the
+repository path contains non-ASCII characters and the operator's Python process
+uses an ASCII locale for text files?
+
+Chosen implementation: Continue to prefer an explicitly installed
+`rtgs_bvh_cuda` module. When JIT compilation is required, read the two canonical
+CUDA source files from the repository and atomically stage their exact bytes
+under this default ASCII-only cache layout:
+
+```text
+/tmp/rtgs-bvh-jit-<uid>/<build-fingerprint>/sources/
+/tmp/rtgs-bvh-jit-<uid>/<build-fingerprint>/build/
+```
+
+The fingerprint covers both source contents plus the PyTorch version, PyTorch
+CUDA version, Python ABI tag and executable, CUDA home, and C++ ABI setting.
+Pass only the staged ASCII source paths and the explicit ASCII build directory
+to `torch.utils.cpp_extension.load`. `RTGS_BVH_JIT_ROOT` may override the cache
+root for controlled environments, but a resolved non-ASCII override is rejected
+before compilation. Compilation and loading remain fail-closed, with no
+brute-force production fallback.
+
+Alternatives: Require the operator to rename or move the repository; require a
+UTF-8 locale; install the extension manually before every run; or retry through
+the Python brute-force oracle.
+
+Why: The first user-operated TiHuBird smoke restored D, initialized R, and then
+failed before its first optimization step because PyTorch wrote a Ninja file in
+the repository-derived build path using ASCII encoding. Keeping generated build
+inputs in a content-addressed ASCII path removes that locale/path interaction
+without weakening the tracer's production contract or changing canonical CUDA
+sources.
+
+Paper fidelity: This is a build-path and reproducibility decision. It changes no
+ray, surfel, BRDF, compositing, loss, or training semantics.
+
+Impact: The failed `smoke_2` directory is evidence of an aborted attempt, not a
+training result; it contains no Stage B checkpoint or D/R PLY save. A forced-C-
+locale compile reported `ANSI_X3.4-1968` and successfully built and loaded the
+hashed CUDA module from the ASCII staging directory. The operator must use a new
+output path for the retry so the failed attempt is preserved.
+
+Required ablation: None. Retain an ASCII-locale compile/load regression and the
+existing CUDA/oracle/gradient tests.

@@ -6,9 +6,13 @@ Current branch: `feature/stage-b-reflection-dr-c03`
 
 Stage state: Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
-No TiHuBird Stage B training or user smoke has run, so Stage B is neither
-complete nor accepted. The frozen StableNormal baseline and C03 initialization
-artifacts remain unchanged. Stage C and Stage D have not started.
+The first user-operated TiHuBird smoke restored D and initialized R, then
+aborted before its first optimization step on an ASCII-locale CUDA JIT path
+error. Commit `36b7fdfdd98ec7f3d04d256cf76830189a6a10a9` stages JIT inputs under
+ASCII-only paths and passes targeted compilation/tests, but the user has not yet
+run the retry. Stage B is neither complete nor accepted. The frozen StableNormal
+baseline and C03 initialization artifacts remain unchanged. Stage C and Stage D
+have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -21,6 +25,7 @@ bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a model/math/checkpoint foundation
 953334009a8db3d63cc68179842687ba306186c2  B-1c train/render/debug integration
 c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
 f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
+36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
 ```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
@@ -99,8 +104,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 65 passed on 2026-06-30. This includes the complete Stage A
-  regression plus 27 Stage B model/ray/BRDF/checkpoint/render/debug/mask tests.
+  tests` → 67 passed on 2026-06-30. This includes the complete Stage A
+  regression plus 29 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
+  staging tests.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -111,13 +117,20 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Synthetic Stage B rendering produced real reflection hit/color/alpha/depth,
   D/F/G/fr/wr, and diffuse/reflection contribution tensors and debug files in
   pytest temporary directories only.
-- No `train.py` invocation, TiHuBird training, user smoke, or real Stage B
-  output directory was created. No real manual soft-mask set exists yet.
+- The user-operated `smoke_2` attempt created only initialization/config/event
+  artifacts and stopped at 0/2 steps before any checkpoint or D/R PLY save. Its
+  attached log identifies `UnicodeEncodeError` while PyTorch writes the CUDA JIT
+  Ninja file from the non-ASCII repository path. Codex did not run this smoke or
+  modify its partial output.
+- A fresh forced-C-locale CUDA compile reported preferred encoding
+  `ANSI_X3.4-1968` and loaded the extension successfully from the new ASCII-only
+  staging path. No real manual soft-mask set exists yet.
 
 ## Current boundary and next exact task
 
-- The next action is the first user-operated two-step structural Stage B smoke
-  from the read-only C03 15k checkpoint with `lambda_spec=0`.
+- The next action is a user-operated retry of the two-step structural Stage B
+  smoke from the read-only C03 15k checkpoint with `lambda_spec=0`, using a new
+  output path that preserves the failed `smoke_2` attempt.
 - Inspect its real checkpoint, independent D/R PLYs, valid-ray/hit counts,
   reflection maps, microfacet maps, and contribution maps before changing any
   implementation or quality setting.
@@ -131,5 +144,5 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Blocked by: the user-operated Stage B smoke and human review of its real debug
-evidence. Stage B acceptance cannot advance before that evidence exists.
+Blocked by: the user-operated Stage B smoke retry and human review of its real
+debug evidence. Stage B acceptance cannot advance before that evidence exists.

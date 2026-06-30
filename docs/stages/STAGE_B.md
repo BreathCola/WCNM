@@ -42,7 +42,8 @@ Stage C and Stage D have not started.
   is authorized for the first experiment.
 - No Reflection model instance, ray tracer, BRDF implementation, mask pipeline,
   or Stage B training existed at entry. B-1 implementation now exists, but no
-  TiHuBird Stage B training or user smoke has run.
+  TiHuBird Stage B optimization step has completed. The first user smoke attempt
+  stopped at 0/2 steps on the CUDA JIT non-ASCII-path issue recorded in B-007.
 
 ## B-0 — Read-only implementation audit
 
@@ -143,7 +144,7 @@ dummy outputs are permitted in Stage B.
   composition tests.
 - [ ] Real-mask loading/validation and `L_spec` masking tests before enabling
   the specular constraint.
-- [x] Existing Stage A regression suite: full repository result is 65 passed.
+- [x] Existing Stage A regression suite: full repository result is 67 passed.
 
 ## Acceptance checklist
 
@@ -156,7 +157,7 @@ dummy outputs are permitted in Stage B.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [ ] Outputs and gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 65-test run.
+- [x] Stage A test suite and original code paths do not regress in the 67-test run.
 - [ ] The first Stage B smoke is run by the user from reviewed prerequisites and
   produces the required debug evidence.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
@@ -175,7 +176,9 @@ bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a
 953334009a8db3d63cc68179842687ba306186c2  B-1c
 c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
 f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
+36b7fdfdd98ec7f3d04d256cf76830189a6a10a9  ASCII-only CUDA JIT staging fix
 ```
 
 Implemented and tested does not mean accepted. The first TiHuBird Stage B smoke
-and review of its real debug outputs remain user-only and have not run.
+attempt was user-run but aborted before step one and produced no checkpoint or
+D/R PLY save. Its retry and review of real debug outputs remain user-only.
