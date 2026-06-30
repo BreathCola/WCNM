@@ -603,3 +603,262 @@ hypothesis.
 Required ablation: If the first Stage B result warrants it, compare C03 and
 StableNormal under a matched Stage B protocol in a later explicitly authorized
 experiment. Do not run that comparison concurrently with the first smoke.
+
+## B-002 — Gaussian raytrace value, hit, miss, and background semantics
+
+Date: 2026-06-30
+
+Question: What exactly do the Stage B Gaussian ray tracer outputs mean, and how
+is a reflection miss converted into a color without consulting training images?
+
+Chosen implementation: Ray directions are normalized inside the public
+`raytrace` wrapper. Reflection surfels are two-sided. A candidate contributes
+only when the ray is not parallel to its plane, its normalized ray distance is
+positive, and its local elliptical radius satisfies `r2 <= 9`, i.e. the fixed
+three-standard-deviation support used to build its finite AABB. Its effective
+opacity is:
+
+```python
+a_i = sigmoid(opacity_raw_i) * exp(-0.5 * r2_i)
+```
+
+Contributions are sorted by increasing ray distance and composed front to back:
+
+```python
+w_i = a_i * product(1 - a_j for j before i)
+color = sum(w_i * sigmoid(color_raw_i))
+alpha = sum(w_i)
+expected_depth = sum(w_i * t_i) / max(alpha, 1e-8)
+hit = alpha > 1e-4
+```
+
+`color` is foreground-premultiplied and contains no background. A miss returns
+exact zero color, alpha, and depth, with `hit=False`. The generic ray tracer
+never reads a ground-truth image, target pixel, camera image, or training-image
+color. `--ray_background scene` means exactly the deterministic renderer
+background already selected from `dataset.white_background`: `[1,1,1]` for a
+white-background scene and `[0,0,0]` otherwise. Reflection shading expands the
+raytrace foreground to a background-composited radiance with:
+
+```python
+Cr = color + (1.0 - alpha) * renderer_background
+```
+
+Alternatives: Return background-composited color from `raytrace`; sample a GT
+pixel on miss; use an image-dependent environment lookup; use an unbounded
+Gaussian support; or silently truncate a fixed top-K candidate list.
+
+Why: Premultiplied foreground plus explicit alpha is the reusable contract in
+the master plan and keeps background policy outside the tracer. A fixed renderer
+background is reproducible and cannot leak the training target. Three-sigma
+support provides a finite conservative AABB, while two-pass candidate allocation
+will fail instead of silently dropping intersections.
+
+Paper fidelity: The master plan specifies color/alpha/expected-depth/hit and a
+scene-scaled origin epsilon but does not publish cutoff, hit threshold, two-sided
+behavior, or miss compositing. These are Stage B engineering definitions.
+
+Impact: `reflection_color.png` visualizes `Cr`; raw premultiplied raytrace color
+remains separately available for tests. Expected depth is distance along the
+normalized reflection ray, not camera-z depth. CUDA failure is fatal for
+training; the Python brute-force implementation is test-oracle-only.
+
+Required ablation: Compare the three-sigma cutoff and hit threshold if reflection
+coverage is visibly unstable. Never replace miss background with target-image
+color in an ablation.
+
+## B-003 — Stage A G-buffer decoding and full Stage B microfacet composite
+
+Date: 2026-06-30
+
+Question: How are Stage A premultiplied buffers decoded for BRDF evaluation, and
+what numerical and alpha/background rules define the Stage B final image?
+
+Chosen implementation: Let `A` be the Stage A diffuse alpha and `B` the constant
+renderer background. The Stage A color rasterizer has already composited its
+foreground over `B`, whereas roughness, f0, and ks were rendered with a zero
+background. For valid pixels, recover conditional surface quantities with:
+
+```python
+denom = clamp(A, min=1e-4)
+Cd_premul = Cd_rendered - (1.0 - A) * B
+Cd_surface = clamp(Cd_premul / denom, 0.0, 1.0)
+roughness = clamp(roughness_premul / denom, roughness_min, 1.0)
+f0 = clamp(f0_premul / denom, 0.0, 1.0)
+ks = clamp(ks_premul / denom, 0.0, 1.0)
+```
+
+The Stage A normal is used directly because it is already normalized and
+face-forward. It is never alpha-divided or alpha-normalized again.
+
+The optional PBRT roughness remap uses the documented PBRT polynomial before
+GGX evaluation:
+
+```python
+x = log(max(roughness, 1e-3))
+alpha_ggx = 1.62142 + 0.819955*x + 0.1734*x**2 \
+            + 0.0171201*x**3 + 0.000640711*x**4
+```
+
+When remapping is disabled, `alpha_ggx = roughness`. In both modes it is
+clamped to `[roughness_min, 1]`. Stage B uses `wi=d_ref`, `wo=-d_cam`, Schlick
+Fresnel, the master-plan GGX/Trowbridge-Reitz D, and separable exact Smith GGX:
+
+```python
+G1(NoX) = 2*NoX / (NoX + sqrt(alpha_ggx**2
+                               + (1-alpha_ggx**2)*NoX**2))
+G = G1(NoV) * G1(NoL)
+fr = D * G * F / (4*NoV*NoL + 1e-6)
+wr = fr * NoL
+```
+
+Raw `NoV` and `NoL` must both be strictly positive; otherwise D/F/G/fr/wr and
+the reflection contribution are zero. Inside that gate, dot products are
+clamped to `[1e-6,1]`, square-root and BRDF denominators use `1e-6`, D is clamped
+nonnegative without an artificial upper cap, F and G to `[0,1]`, and fr/wr
+nonnegative without an artificial upper cap. Any non-finite intermediate is a
+hard error. The full surface and image composite is:
+
+```python
+C_surface = (1.0 - ks) * Cd_surface + ks * wr * Cr
+C = A * C_surface + (1.0 - A) * B
+```
+
+`C` is clamped to `[0,1]` only at the final RGB output used by the existing
+sRGB-domain reconstruction loss and image writer. D/F/G/fr/wr remain available
+unclamped except for the bounds above and are visualized with display-only
+clamping.
+
+Alternatives: Feed premultiplied material maps directly to GGX; alpha-divide the
+normal; omit the background subtraction from Cd; use split-sum; clamp BRDF
+weights to one; or add reflection after background compositing without the
+diffuse alpha gate.
+
+Why: Conditional material values are required for a stable physical BRDF at
+partially covered pixels. Separating the surface composite from the final
+alpha-over prevents background pixels from receiving reflection and preserves
+the existing Stage A renderer-background convention.
+
+Paper fidelity: D, F, G, fr, wr, and the Stage B reflection-only composition
+follow the master plan. PBRT mapping, safe premultiplied decoding, exact Smith
+form, epsilons, and output clamp are engineering details not fully published.
+
+Impact: Checkpoints must store `roughness_remap`, `roughness_min`, the numerical
+epsilon, the material-alpha threshold, and `bsdf_weight_mode`, which is fixed to
+`brdf_times_cosine` for this Stage B path.
+
+Required ablation: PBRT remap on/off is required if roughness stability or
+reflection sharpness materially changes. Split-sum remains forbidden in Stage B
+and is reserved for the explicit Stage E ablation.
+
+## B-004 — Valid diffuse surface gate and reflection-ray generation
+
+Date: 2026-06-30
+
+Question: Which diffuse pixels may create reflection rays and enter the BRDF?
+
+Chosen implementation: A pixel is a valid Stage B diffuse surface only when all
+of the following hold:
+
+```text
+diffuse alpha > 1e-4
+depth is finite and strictly positive
+position is finite
+normal is finite and has norm > 1e-6
+roughness/f0/ks buffers are finite
+the face-forward normal has dot(normal, wo) > 0
+```
+
+For valid pixels only:
+
+```python
+d_cam = normalize(position - camera_center, eps=1e-8)
+wo = -d_cam
+d_ref = normalize(d_cam - 2*dot(d_cam, normal)*normal, eps=1e-8)
+ray_eps = ray_epsilon_scale * scene_radius
+origin = position + ray_eps * d_ref
+```
+
+The default `ray_epsilon_scale` is `1e-4`, and `scene_radius` is
+`Scene.cameras_extent`. Invalid pixels are compacted out before ray tracing and
+BRDF evaluation, then receive exactly the renderer background in the final
+alpha-over image. No placeholder reflection result is generated for them.
+
+Alternatives: Trace every image pixel; use diffuse alpha as a transparent mask;
+reflect an unnormalized direction; offset along the normal rather than the ray;
+or admit non-finite/zero normals.
+
+Why: Compaction prevents undefined rays and unnecessary BVH work. The direction
+and scene-scaled epsilon match the master-plan convention. Diffuse alpha remains
+a surface-validity signal only and is not reinterpreted as a transparent-object
+mask.
+
+Paper fidelity: Reflection direction and epsilon follow the master plan. The
+finite-value and alpha thresholds are engineering safety gates.
+
+Impact: Debug metadata must report valid-ray count and fraction. A view with no
+valid surface pixels returns the constant renderer background and empty, real
+reflection buffers without calling the tracer.
+
+Required ablation: Revisit the diffuse-alpha threshold only if edge coverage is
+visibly unstable; do not couple it to the Reflection hit threshold implicitly.
+
+## B-005 — Independent Reflection initialization, schedule, densification, and checkpoint
+
+Date: 2026-06-30
+
+Question: How does the first Stage B run restore C03 Diffuse state while creating
+and maintaining a separate Reflection field?
+
+Chosen implementation: `--diffuse_init_checkpoint` is accepted only for a new
+Stage B run and must contain `format=rtgs_stage_a`; `--start_checkpoint` resumes
+only `format=rtgs_stage_b`, and the two options are mutually exclusive. The C03
+Diffuse model, optimizer, exposure optimizer, and densification state are
+restored at global iteration 15,000 without modifying the source artifact.
+Reflection starts at local step zero and uses its own optimizer and scheduler.
+
+The mandatory `random_bbox` initializer samples seeded uniform positions over
+the complete Diffuse xyz AABB, without quantile cropping. It requires an explicit
+surfel count and records seed, actual count, and exact bbox. Rotations are seeded
+normalized random quaternions, initial color is `0.5`, initial opacity is `0.01`,
+and both tangent scales are half the nominal uniform-volume spacing:
+
+```python
+spacing = cbrt(max(product(bbox_extent), eps) / reflection_count)
+scale_u = scale_v = 0.5 * spacing
+```
+
+Reflection densification accumulates per-surfel xyz gradient norm and ray-hit
+weight/count. It clones small high-gradient surfels, splits large high-gradient
+surfels in their tangent plane, and prunes low-opacity or persistently unhit
+surfels only after an explicit warmup. These tensors and all R optimizer state
+remain separate from D. Topology changes increment an R topology version and
+force a BVH rebuild; ordinary parameter updates require a BVH refit.
+
+Stage B checkpoints use a versioned `rtgs_stage_b` dictionary with separate
+`diffuse` and `reflection` namespaces, global and reflection iterations, both
+model/optimizer/densification states, initialization provenance and source hash,
+renderer/raytracer/BRDF/loss configuration, and RNG state. Derived BVH nodes are
+not serialized and must be rebuilt fail-closed on resume. PLY exports use
+separate Diffuse and Reflection paths under the new Stage B output directory.
+
+Alternatives: Reuse D tensors as R; initialize R from the C03 PLY; reset D's
+optimizer; use a shared global R scheduler; crop the AABB to a foreground box;
+or serialize stale BVH nodes.
+
+Why: The master plan requires physically separate fields and state. The Stage A
+checkpoint, unlike PLY, contains the optimizer/exposure/densification state.
+Local R time prevents a global 15k start from skipping all Reflection warmup and
+densification. Full AABB initialization retains the external environment.
+
+Paper fidelity: Independent D/R fields are required. Initialization values,
+local schedule, densification statistics, and checkpoint layout are engineering
+definitions.
+
+Impact: The first smoke may use a small explicit R count but is structural only.
+The large C03 AABB can make uniform initialization sparse; its actual reflection
+coverage must be inspected by the user before any quality conclusion.
+
+Required ablation: Reflection count/initial scale and random_bbox versus the
+optional uniform-grid mode may be ablated later. Do not launch a concurrent
+StableNormal-initialized Stage B run during the first experiment.
