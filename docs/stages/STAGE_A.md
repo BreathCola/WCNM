@@ -12,6 +12,12 @@ Cd / alpha / depth / position / normal / roughness / f0 / ks
 The original 3DGS baseline must remain runnable. RT-GS mode must use the new
 `DiffuseSurfelModel`.
 
+Stage A was formally closed by explicit user authorization on 2026-06-30. The
+frozen accepted D-only baseline remains the StableNormal `lambda_mono=0.01`
+30,000-step retry1 result. The independent DiffusionRenderer C03 experiment
+stops at 15,000 iterations and enters Stage B only as an initialization
+candidate for the reflection hypothesis.
+
 ## Tasks
 
 ### A-0 — Long-term project memory
@@ -139,8 +145,8 @@ rerun as if they were still pending. Actual execution is recorded in A-9: Gates
 1–7 completed as planned; the first Gate 8 attempt stopped around iteration 230
 without a checkpoint, so retry1 restarted from iteration 0 and is the only
 accepted mono result; Gates 9 and 9.5 then completed. Final overall Stage A
-closure is deferred while the independent DiffusionRenderer Stage A prior
-extension is evaluated.
+closure was subsequently authorized after the independent DiffusionRenderer
+C03 15,000-step result was evaluated.
 
 #### Gate 1 — Generate the remaining 110 priors
 
@@ -460,14 +466,13 @@ in A-9. Never use the interrupted directory in formal metrics.
 - [x] Record that no obvious RGB degradation is visible in the global,
   six-view, or crop audit.
 
-#### Gate 11 — Final overall Stage A closure (deferred)
+#### Gate 11 — Final overall Stage A closure
 
-- Status: not executed as overall Stage A closure. The StableNormal D-only
-  baseline is conditionally accepted and frozen separately, while final Stage A
-  closure remains deferred for the independent DiffusionRenderer prior
-  experiment. Stage B/C/D remain forbidden.
-- Historical command retained below for provenance only; do not execute it as
-  part of the baseline snapshot.
+- Status: completed by the 2026-06-30 explicit user authorization after review
+  of the independent C03 15,000-step result. The documentation transition is
+  committed on `feature/stage-b-reflection-dr-c03`; no C03 30k run is required.
+- Historical command retained below for provenance only; it is not the command
+  used by the current Stage B transition.
 - Command:
 
   ```bash
@@ -481,8 +486,8 @@ in A-9. Never use the interrupted directory in formal metrics.
   git rev-parse HEAD
   ```
 
-- Success: truthful final conclusions, clean checks, rollback commit hash; Stage
-  remains A until a separate explicit Stage B transition approval.
+- Success: truthful final conclusions, clean checks, rollback commit hash, and
+  explicit Stage B transition approval.
 - Return: final diff summary, checks, commit hash.
 - Failure: stop and remain in Stage A; no Stage B work.
 
@@ -529,13 +534,36 @@ not final transparent geometry or final bird reconstruction.
   `output/stage_a_tihubird_dr_raw_111/`.
 - [x] Record all 111 real mappings and the last chunk's nine padding slots
   separately.
-- [ ] Implement a normal adapter.
-- [ ] Select and validate a normal axis mapping.
-- [ ] Connect any DiffusionRenderer prior loss or run training with it.
+- [x] Implement the DiffusionRenderer normal adapter on the independent branch.
+- [x] Select C03 as the audited normal-axis candidate for its isolated D-only
+  experiment.
+- [x] Complete the isolated C03 D-only run to 15,000 iterations at
+  `output/stage_a_tihubird_drnormal_c03_15k/`.
+- [x] Verify the 15,000-step checkpoint, PLY, debug maps, completion log, and
+  StableNormal comparison image.
+- [x] Record that C03 trained stably without the front glass surface swallowing
+  the bird, but did not establish a clear D-only RGB/normal/depth advantage over
+  the frozen StableNormal baseline.
+- [x] Stop the C03 D-only experiment at 15,000 and do not run C03 30k.
 
-The raw buffers do not replace the StableNormal baseline. `basecolor` and
-`diffuse_albedo` remain audit-only. All adapter, test, and experiment work must
-continue on `feature/stage-a-diffrender-priors` without entering Stage B/C/D.
+The raw buffers and C03 result do not replace the StableNormal baseline.
+`basecolor` and `diffuse_albedo` remain audit-only. C03 15k is only the first
+Stage B reflection experiment's D initialization candidate.
+
+### A-11 — Formal Stage A closure and Stage B handoff
+
+- [x] Keep `baseline/stage-a-stablenormal` as the frozen rollback branch.
+- [x] Keep
+  `output/stage_a_tihubird_30k_mono001_r2_retry1/` as the frozen StableNormal
+  `lambda_mono=0.01` 30k D-only baseline.
+- [x] Preserve
+  `output/stage_a_tihubird_drnormal_c03_15k/chkpnt15000.pth` and
+  `point_cloud/iteration_15000/` without moving, overwriting, or modifying them.
+- [x] Record C03 as an independent exploratory branch that is not proven better
+  than StableNormal for D-only reconstruction.
+- [x] Receive explicit authorization to enter Stage B for reflection only.
+- [x] Keep transmission, bird/background separation, transparent mesh,
+  two-hit geometry, Stage C, and Stage D out of the handoff claim.
 
 ## Explicitly forbidden in Stage A
 
@@ -569,10 +597,10 @@ continue on `feature/stage-a-diffrender-priors` without entering Stage B/C/D.
 - [x] The StableNormal D-only baseline is conditionally accepted with
   `lambda_mono=0.01` and frozen by the baseline snapshot commit containing this
   record.
-- [ ] Overall Stage A closure remains deferred during the independent
+- [x] Overall Stage A closure is authorized after the independent C03 15k
   DiffusionRenderer prior experiment.
-- [ ] Only after an explicit future closure decision may `docs/STATUS.md` point
-  to Stage B; Stage B/C/D are currently forbidden.
+- [x] `docs/STATUS.md` points to Stage B after explicit authorization; Stage C
+  and Stage D remain forbidden.
 
 ## Verified commands
 

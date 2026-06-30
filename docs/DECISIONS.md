@@ -4,7 +4,7 @@ This log records implementation choices required where the paper or master plan
 does not fully specify behavior. New entries must use the decision template from
 `RTGS_MASTER_PLAN.md`.
 
-No engineering decisions outside Stage A have been made.
+Stage A decisions and the authorized Stage B entry decision are recorded below.
 
 ## A-001 — Single master-plan location
 
@@ -521,3 +521,85 @@ used these raw outputs. `basecolor` and `diffuse_albedo` remain audit-only.
 Required ablation: None at the raw-generation step. Adapter/axis validation and
 any later training comparison must occur only on the independent
 `feature/stage-a-diffrender-priors` branch.
+
+## A-015 — Stop DiffusionRenderer C03 at 15k and close Stage A
+
+Date: 2026-06-30
+
+Question: Does the independent DiffusionRenderer C03 D-only experiment warrant
+continuing from 15,000 to 30,000 iterations before Stage B begins?
+
+Chosen implementation: Stop C03 at 15,000 iterations and do not run C03 30k.
+Keep the StableNormal `lambda_mono=0.01` retry1 30k result as the frozen Stage A
+D-only baseline. Close Stage A under explicit user authorization and advance the
+project to Stage B.
+
+Evidence: `output/stage_a_tihubird_drnormal_c03_15k.log` records a completed
+15,000-step run, saves at 7,000/15,000, checkpoints at
+7,000/10,000/15,000, and final train metrics L1
+`0.021616848371922973`, PSNR `26.401429367065433`. The C03 checkpoint reports
+format `rtgs_stage_a`, iteration 15,000, and 346,118 Diffuse surfels with finite
+core parameter and densification tensors. The 15,000-step PLY and
+`comparison_vs_stablenormal_15k.png` are present. C03 trained stably and did not
+show the bird being swallowed by the front glass surface, but its D-only
+RGB/normal/depth audit did not establish a clear advantage over StableNormal.
+
+Alternatives: Continue C03 D-only training to 30,000 iterations; replace the
+StableNormal baseline with C03; or defer Stage B indefinitely for more D-only
+prior comparisons.
+
+Why: Extending a configuration that still has no Reflection Gaussian cannot
+directly test the intended value of the DiffusionRenderer front-interface prior.
+The existing 15,000-step evidence is sufficient for the D-only question and
+does not justify displacing the verified StableNormal baseline.
+
+Paper fidelity: This is an experimental-stage and initialization decision. It
+does not change the representation, rendering formulas, losses, or training
+schedule.
+
+Impact: No C03 30k run is authorized. Stage A is complete; the StableNormal
+baseline and both output trees remain read-only. Stage B may test reflection but
+must not reinterpret C03 as a proven best D-only prior.
+
+Required ablation: A matched StableNormal-versus-C03 Stage B comparison may be
+run later if needed, but it is explicitly not part of the first Stage B
+experiment and no second training is started now.
+
+## B-001 — Stage B reflection hypothesis starts from the C03 15k D candidate
+
+Date: 2026-06-30
+
+Question: Which existing Diffuse state may initialize the first Stage B
+reflection experiment, and what conclusion may be drawn from that choice?
+
+Chosen implementation: Use
+`output/stage_a_tihubird_drnormal_c03_15k/chkpnt15000.pth` as the fixed Diffuse
+initialization candidate for the first Stage B reflection hypothesis. Preserve
+its associated `point_cloud/iteration_15000/` as read-only recovery/export
+evidence. A new Reflection field must be independent from D and must not modify
+the Stage A output directory.
+
+Alternatives: Initialize D from the frozen StableNormal 30k checkpoint; train a
+fresh D; extend C03 to 30k; or launch both C03- and StableNormal-initialized Stage
+B runs together.
+
+Why: C03 is a plausible interface-prior candidate whose intended benefit can be
+tested only after an actual Reflection branch exists. Using it for the first
+hypothesis isolates that question without spending another D-only long run or
+starting two experiments simultaneously.
+
+Paper fidelity: The master plan requires independent D and R fields but does not
+prescribe which accepted D checkpoint initializes the first reflection
+experiment. This is an engineering experiment choice.
+
+Impact: C03 15k remains only an initialization candidate, not a new D-only
+baseline. The frozen StableNormal branch
+`baseline/stage-a-stablenormal` and output
+`output/stage_a_tihubird_30k_mono001_r2_retry1/` remain unchanged. Stage B is
+limited to Reflection Gaussian, differentiable tracing, reflection rays,
+microfacet reflection, and the minimum specular constraint needed for that
+hypothesis.
+
+Required ablation: If the first Stage B result warrants it, compare C03 and
+StableNormal under a matched Stage B protocol in a later explicitly authorized
+experiment. Do not run that comparison concurrently with the first smoke.

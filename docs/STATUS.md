@@ -1,55 +1,53 @@
 # RT-GS Status
 
-Current stage: Stage A — 3DGS to 2D Surfel Diffuse Foundation
+Current stage: Stage B — Differentiable Ray Tracing and Reflection
 
-Stage state: the TiHuBird StableNormal D-only baseline is conditionally accepted
-and ready to be frozen on `baseline/stage-a-stablenormal`. Overall Stage A
-closure is deferred while DiffusionRenderer priors are evaluated independently;
-Stage B/C/D are not authorized.
+Current branch: `feature/stage-b-reflection-dr-c03`
 
-Evidence code commit: `829dd82dc74f4c5dce640201448626df24afa25a`
+Stage state: Stage A is formally closed by user authorization on 2026-06-30.
+The frozen StableNormal D-only baseline remains unchanged, the independent
+DiffusionRenderer C03 D-only experiment stops at 15,000 iterations, and Stage B
+is authorized to test the reflection hypothesis only. Stage C and Stage D have
+not started.
+
+Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
+
+Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
 ## Repository and scene
 
 - The original 3DGS baseline remains available through `--model_type 3dgs`.
-- Stage A RT-GS uses `--model_type surfel` and the pinned 2D surfel rasterizer.
-- Diffuse, Reflection, and Transmittance remain separate by design; only the
-  Diffuse branch exists in Stage A.
+- RT-GS uses `--model_type surfel` and the pinned 2D surfel rasterizer.
+- Diffuse, Reflection, and Transmittance are required to remain separate. At
+  the Stage B entry point only the Diffuse model exists; no Reflection or
+  Transmittance instance has been created yet.
 - `data/TiHuBird` is the real acceptance scene. Truck artifacts are historical
   engineering smoke evidence only.
 - TiHuBird has 111 final undistorted PINHOLE images at 3827x2152, 111/111 COLMAP
   registrations, and 84,989 sparse points.
 
-## StableNormal baseline evidence
+## Frozen StableNormal Stage A baseline
 
+- The frozen rollback branch is `baseline/stage-a-stablenormal` at
+  `3e9f62ae8b34eaaf77ce67ba86a077041aaa5f04`.
+- The accepted D-only output is
+  `output/stage_a_tihubird_30k_mono001_r2_retry1/` with
+  `lambda_mono=0.01`. Its 30,000-step checkpoint and point cloud remain present
+  and must not be overwritten, moved, or modified.
 - Generated all 111 TiHuBird StableNormal priors in
   `data/TiHuBird/normal_priors/` and passed strict validation: 111 images, 111
   priors, 111 manifest entries, with empty missing, unexpected, duplicate, and
   abnormal lists. Evidence:
   `output/stage_a_tihubird_priors_validate_111.log`.
-- Completed the full-prior 1,000-step smoke at
-  `output/stage_a_tihubird_fullprior_1k_r2`. It reported 1,000 supervised and
-  1,000 nonzero monocular-normal steps, saved the iteration-1,000 checkpoint,
-  and printed `Training complete.`
-- Completed the Gate 6 input freeze. The baseline and accepted retry records are
-  byte-identical and pin code HEAD `829dd82`, `PYTHONHASHSEED=0`, 111 images,
-  111 priors, the image-tree hash, prior-manifest hash, and all three COLMAP
-  hashes.
-- Gate 7 completed from iteration 0 to 30,000 with `lambda_mono=0` at
-  `output/stage_a_tihubird_30k_mono0_r2`.
-- The first Gate 8 attempt at
-  `output/stage_a_tihubird_30k_mono001_r2` stopped around iteration 230 and has
-  no usable checkpoint. It is excluded from comparison.
-- Gate 8 retry1 restarted from iteration 0 and completed at
-  `output/stage_a_tihubird_30k_mono001_r2_retry1`. Only retry1 is the accepted
-  `lambda_mono=0.01` result.
+- The matched `lambda_mono=0` and `lambda_mono=0.01` retry1 runs completed to
+  30,000 iterations. The first `lambda_mono=0.01` attempt stopped around
+  iteration 230 without a usable checkpoint and remains excluded.
 - Gate 9 matched metrics and the global comparison are present at
   `output/stage_a_tihubird_30k_matched_metrics.txt` and
-  `output/stage_a_tihubird_30k_matched_comparison.png`.
-- Gate 9.5 completed the six-view and crop audit under
-  `output/stage_a_tihubird_gate9p5/`.
+  `output/stage_a_tihubird_30k_matched_comparison.png`; Gate 9.5 six-view and
+  crop evidence remains under `output/stage_a_tihubird_gate9p5/`.
 
-## Matched 30,000-step metrics
+## Matched StableNormal 30,000-step metrics
 
 | Iteration | `lambda_mono=0` L1 | `lambda_mono=0` PSNR | `lambda_mono=0.01` retry1 L1 | `lambda_mono=0.01` retry1 PSNR |
 |---:|---:|---:|---:|---:|
@@ -57,49 +55,60 @@ Evidence code commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 | 15,000 | 0.022149086557328702 | 26.27469940185547 | 0.020849463716149333 | 26.722418594360352 |
 | 30,000 | 0.01844301298260689 | 27.603187561035156 | 0.017842570878565313 | 27.78533058166504 |
 
-## Baseline decision
+## DiffusionRenderer C03 exploratory result
 
-- Conditionally accept the StableNormal result as the Stage A D-only baseline.
-- Select `lambda_mono=0.01` for that baseline. Its retry1 result improves both
-  L1 and PSNR over `lambda_mono=0` at all three matched evaluation nodes, and
-  the global, six-view, and crop audits show no obvious RGB degradation.
-- This is not final transparent-scene reconstruction. The D-only representation
-  still mixes the glass surface, reflection, interior bird, and background.
-  Its normal/depth are a foundation for later separation, not final transparent
-  geometry or a final bird reconstruction.
+- DiffusionRenderer priors were evaluated independently on
+  `feature/stage-a-diffrender-priors`; they never replaced or modified the
+  StableNormal baseline.
+- C03 completed 15,000 D-only iterations at
+  `output/stage_a_tihubird_drnormal_c03_15k/`. The log
+  `output/stage_a_tihubird_drnormal_c03_15k.log` records saves at 7,000 and
+  15,000, checkpoint saves at 7,000/10,000/15,000, and `Training complete.`
+- Its 15,000-step train metrics are L1 `0.021616848371922973` and PSNR
+  `26.401429367065433`. The matched StableNormal retry1 15,000-step metrics are
+  L1 `0.020849463716149333` and PSNR `26.722418594360352`.
+- C03 trained stably and did not show the front glass surface swallowing the
+  bird subject. The RGB/normal/depth audit nevertheless did not establish a
+  clear D-only advantage over the frozen StableNormal baseline. Therefore C03
+  will not be extended to 30,000 D-only iterations.
+- The comparison image is
+  `output/stage_a_tihubird_drnormal_c03_15k/comparison_vs_stablenormal_15k.png`.
+- The C03 15,000-step checkpoint is a readable `rtgs_stage_a` checkpoint at
+  iteration 15,000 with 346,118 finite Diffuse surfels. Its usable initialization
+  artifacts are:
 
-## DiffusionRenderer prior extension
+  ```text
+  output/stage_a_tihubird_drnormal_c03_15k/chkpnt15000.pth
+  output/stage_a_tihubird_drnormal_c03_15k/point_cloud/iteration_15000/
+  ```
 
-- DR-1A used the final undistorted TiHuBird training images for a 24-frame raw
-  pilot at `output/stage_a_tihubird_dr_pilot_24/`.
-- DR-1B generated raw priors from all 111 final training images at
-  `output/stage_a_tihubird_dr_raw_111/`.
-- Raw outputs contain `normal`, `depth`, `basecolor`, and `diffuse_albedo`.
-  The 111 real-frame mappings and the final chunk's nine padding slots are
-  recorded explicitly.
-- No DiffusionRenderer normal adapter or normal-axis mapping has been selected
-  or validated. No DiffusionRenderer prior loss has been connected, no training
-  has used these priors, and the StableNormal baseline has not been replaced.
-- `basecolor` and `diffuse_albedo` remain audit-only and are not training
-  supervision.
+- These C03 artifacts are read-only Stage B initialization candidates. C03 is
+  not a proven replacement for the StableNormal D-only configuration.
 
 ## Tests and verified behavior
 
-- `conda run -n RT-GS python -m pytest -q tests`: 29 passed at the Stage A code
-  evidence commit.
+- Last recorded Stage A suite at the code evidence commit:
+  `conda run -n RT-GS python -m pytest -q tests` → 29 passed.
 - Original 3DGS and surfel training/render paths, checkpoint resume, PLY reload,
   densification, material gradients, and Stage A debug exports have passed their
   documented checks.
-- Both accepted 30k runs saved checkpoints at 10k/20k/30k and PLY outputs at
-  7k/15k/30k.
+- This Stage B transition is documentation-only. No training, renderer test,
+  Reflection instance, ray tracer, BRDF, transparent mesh, or two-hit path was
+  run or created during the transition.
 
-## Current boundary and next task
+## Current boundary and next exact task
 
-- Remain in Stage A. Stage B/C/D are forbidden without separate authorization.
-- Freeze this StableNormal D-only baseline as a rollback branch and conduct the
-  DiffusionRenderer normal adapter and axis audit only on the independent
-  `feature/stage-a-diffrender-priors` branch.
-- Do not overwrite `data/TiHuBird/normal_priors/` or either accepted StableNormal
-  30k output directory.
-- Final Stage A closure remains deferred until the DiffusionRenderer experiment
-  is evaluated and an explicit closure decision is made.
+- Perform Stage B-0 as a read-only implementation audit of the existing
+  training, rendering, Diffuse model, checkpoint/resume, material-map, and
+  renderer structure.
+- B-1 may then implement only the smallest tested Reflection/ray-tracing path
+  permitted by `docs/stages/STAGE_B.md`; its first smoke remains operator-run.
+- Stage B solves reflection only. It must not claim transmission,
+  bird/background separation, transparent mesh, or two-hit geometry.
+- Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
+  It may be designed later if the reflection hypothesis requires it.
+- Stage C and Stage D remain forbidden until their own acceptance and explicit
+  stage transitions.
+
+Blocked by: Stage B-0 audit and a reviewed B-1 implementation plan; no code or
+training blocker is claimed yet.
