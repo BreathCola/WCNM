@@ -291,7 +291,9 @@ def training_stage_b(
             _report(iteration, testing_iterations, scene, state, pipe, background)
             if iteration % opt.debug_interval == 0 or iteration == opt.iterations:
                 fixed = (scene.getTestCameras() or scene.getTrainCameras())[0]
-                debug = render(fixed, state, pipe, background)
+                debug = render(
+                    fixed, state, pipe, background, return_ray_diagnostics=True
+                )
                 directory = os.path.join(scene.model_path, "debug", f"iteration_{iteration:06d}")
                 save_reflection_debug_maps(
                     debug,

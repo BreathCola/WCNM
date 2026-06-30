@@ -13,6 +13,21 @@ class RaytraceAux:
     contributing_weights: torch.Tensor
 
 
+@dataclass
+class CandidateTraceDiagnostics:
+    exact_intersection_counts: torch.Tensor
+
+
+def _package_trace_result(outputs, aux, diagnostics, return_aux, return_diagnostics):
+    if return_aux and return_diagnostics:
+        return outputs, aux, diagnostics
+    if return_aux:
+        return outputs, aux
+    if return_diagnostics:
+        return outputs, diagnostics
+    return outputs
+
+
 def trace_candidates(
     model,
     origins: torch.Tensor,
@@ -22,6 +37,7 @@ def trace_candidates(
     cutoff_sigma: float,
     hit_threshold: float,
     return_aux: bool = False,
+    return_diagnostics: bool = False,
 ):
     ray_count = origins.shape[0]
     counts = offsets[1:] - offsets[:-1]
@@ -32,9 +48,17 @@ def trace_candidates(
             origins.new_zeros((ray_count, 1)),
             torch.zeros((ray_count, 1), dtype=torch.bool, device=origins.device),
         )
-        if return_aux:
-            return empty, RaytraceAux(candidates.new_empty((0,)), origins.new_empty((0,)))
-        return empty
+        aux = (
+            RaytraceAux(candidates.new_empty((0,)), origins.new_empty((0,)))
+            if return_aux else None
+        )
+        diagnostics = (
+            CandidateTraceDiagnostics(torch.zeros_like(counts))
+            if return_diagnostics else None
+        )
+        return _package_trace_result(
+            empty, aux, diagnostics, return_aux, return_diagnostics
+        )
 
     max_count = int(counts.max().item())
     padded = torch.full((ray_count, max_count), -1, dtype=torch.long, device=origins.device)
@@ -62,6 +86,7 @@ def trace_candidates(
     local_v = (relative * tangent_v).sum(dim=-1) / scaling[..., 1]
     radius2 = local_u.square() + local_v.square()
     exact_valid = candidate_valid & (~parallel) & (distance > 0.0) & (radius2 <= float(cutoff_sigma) ** 2)
+    exact_intersection_counts = exact_valid.sum(dim=1) if return_diagnostics else None
     opacity = model.get_opacity[safe, 0] * torch.exp(-0.5 * radius2)
     opacity = torch.where(exact_valid, opacity.clamp(0.0, 1.0 - 1e-6), torch.zeros_like(opacity))
     sort_distance = torch.where(exact_valid, distance, torch.full_like(distance, torch.inf))
@@ -82,8 +107,15 @@ def trace_candidates(
     output_depth = torch.where(output_alpha > 0.0, output_depth, torch.zeros_like(output_depth))
     output_hit = output_alpha > float(hit_threshold)
     outputs = output_color, output_alpha, output_depth, output_hit
-    if not return_aux:
-        return outputs
-    contributing = (weights > 0.0) & (sorted_indices >= 0)
-    aux = RaytraceAux(sorted_indices[contributing], weights[contributing])
-    return outputs, aux
+    if return_aux:
+        contributing = (weights > 0.0) & (sorted_indices >= 0)
+        aux = RaytraceAux(sorted_indices[contributing], weights[contributing])
+    else:
+        aux = None
+    diagnostics = (
+        CandidateTraceDiagnostics(exact_intersection_counts.detach())
+        if return_diagnostics else None
+    )
+    return _package_trace_result(
+        outputs, aux, diagnostics, return_aux, return_diagnostics
+    )

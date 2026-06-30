@@ -50,15 +50,26 @@ def test_stage_b_renderer_composes_real_reflection_and_gradients(monkeypatch):
     monkeypatch.setattr(reflection_renderer, "render_diffuse", lambda *args, **kwargs: package)
     state = StageBRenderState(diffuse=object(), reflection=_reflection(), scene_radius=1.0, ray_chunk_size=8)
     camera = SimpleNamespace(camera_center=torch.zeros(3, device="cuda"))
-    output = reflection_renderer.render(camera, state, SimpleNamespace(), torch.zeros(3, device="cuda"), return_ray_aux=True)
+    output = reflection_renderer.render(
+        camera,
+        state,
+        SimpleNamespace(),
+        torch.zeros(3, device="cuda"),
+        return_ray_aux=True,
+        return_ray_diagnostics=True,
+    )
     required = {
         "final", "reflection_color", "reflection_alpha", "reflection_depth", "reflection_hit_mask",
         "microfacet_D", "microfacet_F", "microfacet_G", "microfacet_fr", "microfacet_wr",
         "diffuse_contribution", "reflection_contribution",
+        "ray_candidate_count", "ray_exact_intersection_count", "ray_diagnostics",
     }
     assert required <= set(output)
     assert output["valid_ray_count"] == 1
     assert output["reflection_hit_mask"][0, 0, 0] == 1
+    assert output["ray_candidate_count"][0, 0, 0] >= output["ray_exact_intersection_count"][0, 0, 0]
+    assert output["ray_exact_intersection_count"][0, 0, 0] >= 1
+    assert output["ray_diagnostics"].reflection_surfel_count == 1
     assert torch.allclose(
         output["final"],
         (output["diffuse_contribution"] + output["reflection_contribution"]).clamp(0, 1),

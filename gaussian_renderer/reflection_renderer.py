@@ -51,6 +51,7 @@ def render(
     override_color=None,
     use_trained_exp: bool = False,
     return_ray_aux: bool = False,
+    return_ray_diagnostics: bool = False,
 ):
     diffuse = render_diffuse(
         viewpoint_camera,
@@ -89,12 +90,20 @@ def render(
             cutoff_sigma=state.ray_cutoff_sigma,
             hit_threshold=state.ray_hit_threshold,
             return_aux=return_ray_aux,
+            return_diagnostics=return_ray_diagnostics,
         )
-        if return_ray_aux:
+        if return_ray_aux and return_ray_diagnostics:
+            (raw_color, reflection_alpha, reflection_depth, reflection_hit), ray_aux, ray_diagnostics = traced
+        elif return_ray_aux:
             (raw_color, reflection_alpha, reflection_depth, reflection_hit), ray_aux = traced
+            ray_diagnostics = None
+        elif return_ray_diagnostics:
+            (raw_color, reflection_alpha, reflection_depth, reflection_hit), ray_diagnostics = traced
+            ray_aux = None
         else:
             raw_color, reflection_alpha, reflection_depth, reflection_hit = traced
             ray_aux = None
+            ray_diagnostics = None
         reflection_color = raw_color + (1.0 - reflection_alpha) * background
         flat = lambda name: decoded[name].reshape(-1, decoded[name].shape[-1])[indices]
         material = microfacet_reflection(
@@ -129,6 +138,7 @@ def render(
         reflection_contribution = raw_color
         final_valid = raw_color
         ray_aux = None
+        ray_diagnostics = None
 
     final = bg_color.reshape(1, 1, 3).expand(height, width, 3).clone()
     if indices.numel():
@@ -159,6 +169,26 @@ def render(
             "ray_aux": ray_aux,
         }
     )
+    if return_ray_diagnostics:
+        candidate_counts = (
+            ray_diagnostics.candidate_counts.to(diffuse["alpha"])
+            if ray_diagnostics is not None else diffuse["alpha"].new_zeros((indices.numel(),))
+        )
+        exact_counts = (
+            ray_diagnostics.exact_intersection_counts.to(diffuse["alpha"])
+            if ray_diagnostics is not None else diffuse["alpha"].new_zeros((indices.numel(),))
+        )
+        output.update(
+            {
+                "ray_candidate_count": _scatter(
+                    candidate_counts[:, None], indices, height, width, 1, 0.0
+                ),
+                "ray_exact_intersection_count": _scatter(
+                    exact_counts[:, None], indices, height, width, 1, 0.0
+                ),
+                "ray_diagnostics": ray_diagnostics,
+            }
+        )
     for name in (
         "final", "reflection_color", "reflection_alpha", "reflection_depth",
         "microfacet_D", "microfacet_F", "microfacet_G", "microfacet_fr", "microfacet_wr",

@@ -36,7 +36,13 @@ def render_set(model_path, name, iteration, views, gaussians, pipeline, backgrou
     makedirs(gts_path, exist_ok=True)
 
     for idx, view in enumerate(tqdm(views, desc="Rendering progress")):
-        render_package = render_fn(view, gaussians, pipeline, background, use_trained_exp=train_test_exp, separate_sh=separate_sh)
+        render_kwargs = {
+            "use_trained_exp": train_test_exp,
+            "separate_sh": separate_sh,
+        }
+        if is_stage_b:
+            render_kwargs["return_ray_diagnostics"] = True
+        render_package = render_fn(view, gaussians, pipeline, background, **render_kwargs)
         rendering = render_package["render"]
         gt = view.original_image[0:3, :, :]
 

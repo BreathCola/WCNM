@@ -58,6 +58,47 @@ def test_lbvh_refits_parameter_updates_and_rebuilds_topology_updates():
     assert acceleration.rebuild_count == 2
 
 
+def test_raytrace_diagnostics_report_candidates_exact_hits_timing_and_memory():
+    model = _model()
+    origins = torch.tensor(
+        [[0.05, 0.02, 0.0], [0.4, 0.0, 0.0], [4.0, 4.0, 0.0]], device="cuda"
+    )
+    directions = torch.tensor(
+        [[0.02, 0.01, 1.0], [-0.03, 0.0, 1.0], [0.0, 0.0, 1.0]], device="cuda"
+    )
+    outputs, diagnostics = raytrace(
+        model, origins, directions, chunk_size=2, return_diagnostics=True
+    )
+    plain_outputs = raytrace(model, origins, directions, chunk_size=1)
+    for diagnosed, plain in zip(outputs[:3], plain_outputs[:3]):
+        assert torch.allclose(diagnosed, plain, atol=1e-7, rtol=1e-6)
+    assert torch.equal(outputs[3], plain_outputs[3])
+
+    _, single_chunk_diagnostics = raytrace(
+        model, origins, directions, chunk_size=3, return_diagnostics=True
+    )
+
+    assert diagnostics.candidate_counts.shape == (3,)
+    assert diagnostics.exact_intersection_counts.shape == (3,)
+    assert torch.all(diagnostics.candidate_counts >= diagnostics.exact_intersection_counts)
+    assert torch.all(diagnostics.exact_intersection_counts >= outputs[3][:, 0])
+    assert torch.equal(diagnostics.candidate_counts, single_chunk_diagnostics.candidate_counts)
+    assert torch.equal(
+        diagnostics.exact_intersection_counts,
+        single_chunk_diagnostics.exact_intersection_counts,
+    )
+    assert diagnostics.chunk_count == 2
+    assert diagnostics.reflection_surfel_count == 2
+    assert diagnostics.bvh_rebuild_delta == 1
+    assert diagnostics.bvh_refit_delta == 0
+    assert diagnostics.peak_memory_allocated_bytes > 0
+    assert diagnostics.peak_memory_delta_bytes >= 0
+    assert set(diagnostics.timing_ms) == {
+        "bvh_sync_cuda", "traversal_cuda", "intersection_composite_cuda", "raytrace_wall"
+    }
+    assert all(torch.isfinite(torch.tensor(value)) and value >= 0 for value in diagnostics.timing_ms.values())
+
+
 def test_production_tracer_is_fail_closed_on_cpu():
     model = ReflectionSurfelModel()
     model._xyz = torch.nn.Parameter(torch.zeros((1, 3)))
