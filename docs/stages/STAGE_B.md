@@ -143,7 +143,7 @@ dummy outputs are permitted in Stage B.
   composition tests.
 - [ ] Real-mask loading/validation and `L_spec` masking tests before enabling
   the specular constraint.
-- [x] Existing Stage A regression suite: full repository result is 64 passed.
+- [x] Existing Stage A regression suite: full repository result is 65 passed.
 
 ## Acceptance checklist
 
@@ -156,7 +156,7 @@ dummy outputs are permitted in Stage B.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [ ] Outputs and gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 64-test run.
+- [x] Stage A test suite and original code paths do not regress in the 65-test run.
 - [ ] The first Stage B smoke is run by the user from reviewed prerequisites and
   produces the required debug evidence.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
@@ -173,6 +173,7 @@ Passing B-0 alone does not authorize Stage C or Stage D.
 bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a
 30dd8be5d05d6da9081b0a1f4b80a555234b74f3  B-1b
 953334009a8db3d63cc68179842687ba306186c2  B-1c
+c6b918442eb1891eeba1c5914a8db0b85763ec4b  checkpoint schedule metadata fix
 ```
 
 Implemented and tested does not mean accepted. The first TiHuBird Stage B smoke
