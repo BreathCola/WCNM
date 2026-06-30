@@ -1,17 +1,74 @@
 """CUDA Morton-ordered linear BVH for finite Reflection surfel support."""
 
+import hashlib
 import importlib
 import math
+import os
 from pathlib import Path
+import sys
+import uuid
 
 import torch
-from torch.utils.cpp_extension import load
+from torch.utils.cpp_extension import CUDA_HOME, load
 
 from utils.surfel_utils import quaternion_to_rotation_matrix
 
 
 _EXTENSION = None
 _EXTENSION_ERROR = None
+
+
+def _write_staged_source(destination: Path, contents: bytes):
+    if destination.is_file() and destination.read_bytes() == contents:
+        return
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_bytes(contents)
+        os.replace(temporary, destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def _prepare_ascii_jit_build():
+    """Stage extension inputs under ASCII-only paths for Ninja/Python C locales."""
+    source_root = Path(__file__).resolve().parent / "csrc"
+    source_items = [
+        ("bvh_bindings.cpp", (source_root / "bvh_bindings.cpp").read_bytes()),
+        ("bvh_cuda.cu", (source_root / "bvh_cuda.cu").read_bytes()),
+    ]
+    fingerprint = hashlib.sha256()
+    for name, contents in source_items:
+        fingerprint.update(name.encode("ascii"))
+        fingerprint.update(contents)
+    build_identity = (
+        torch.__version__,
+        torch.version.cuda or "none",
+        sys.implementation.cache_tag or "none",
+        sys.executable,
+        str(CUDA_HOME),
+        str(getattr(torch._C, "_GLIBCXX_USE_CXX11_ABI", "unknown")),
+    )
+    fingerprint.update("\0".join(build_identity).encode("utf-8"))
+    digest = fingerprint.hexdigest()[:16]
+
+    default_root = f"/tmp/rtgs-bvh-jit-{getattr(os, 'getuid', lambda: 0)()}"
+    cache_root = Path(os.environ.get("RTGS_BVH_JIT_ROOT", default_root)).expanduser().resolve()
+    if not str(cache_root).isascii():
+        raise RuntimeError("RTGS_BVH_JIT_ROOT must resolve to an ASCII-only path")
+
+    extension_root = cache_root / digest
+    source_directory = extension_root / "sources"
+    build_directory = extension_root / "build"
+    source_directory.mkdir(parents=True, exist_ok=True)
+    build_directory.mkdir(parents=True, exist_ok=True)
+    staged_sources = []
+    for name, contents in source_items:
+        destination = source_directory / name
+        _write_staged_source(destination, contents)
+        staged_sources.append(str(destination))
+
+    module_name = f"rtgs_bvh_cuda_{digest}"
+    return module_name, staged_sources, str(build_directory)
 
 
 def load_cuda_extension():
@@ -25,10 +82,11 @@ def load_cuda_extension():
         try:
             _EXTENSION = importlib.import_module("rtgs_bvh_cuda")
         except ImportError:
-            root = Path(__file__).resolve().parent
+            module_name, sources, build_directory = _prepare_ascii_jit_build()
             _EXTENSION = load(
-                name="rtgs_bvh_cuda_v1",
-                sources=[str(root / "csrc" / "bvh_bindings.cpp"), str(root / "csrc" / "bvh_cuda.cu")],
+                name=module_name,
+                sources=sources,
+                build_directory=build_directory,
                 extra_cflags=["-O2"],
                 extra_cuda_cflags=["-O2"],
                 verbose=False,
