@@ -862,3 +862,53 @@ coverage must be inspected by the user before any quality conclusion.
 Required ablation: Reflection count/initial scale and random_bbox versus the
 optional uniform-grid mode may be ablated later. Do not launch a concurrent
 StableNormal-initialized Stage B run during the first experiment.
+
+## B-006 — CUDA LBVH division of responsibility and fail-closed execution
+
+Date: 2026-06-30
+
+Question: Which parts of Stage B ray tracing live in the custom CUDA extension,
+how is differentiability retained, and what happens when the extension is
+unavailable?
+
+Chosen implementation: Build a complete balanced hierarchy over Morton-sorted
+Reflection leaf AABBs on CUDA tensors. Each leaf AABB conservatively encloses
+the oriented three-sigma elliptical surfel support. The custom C++/CUDA
+extension performs stack-based ray/AABB traversal in two passes: the first
+counts every candidate and the second allocates/fills the exact flat candidate
+array. It has no fixed top-K truncation. Parameter updates refit all leaf and
+internal AABBs; Reflection topology-version changes rebuild Morton ordering and
+the hierarchy.
+
+Exact two-sided plane intersection, local ellipse evaluation, Gaussian opacity,
+depth sorting, and front-to-back compositing operate on CUDA PyTorch tensors
+gathered from the BVH candidates. Candidate topology is discrete, while all
+continuous hit math remains under autograd. This supplies gradients to xyz,
+rotation, scaling, opacity, color, ray origin, and ray direction away from
+discrete candidate/support boundaries.
+
+The production `raytrace` API requires CUDA model/ray tensors and a successfully
+loaded or JIT-compiled extension. Compilation, loading, input, or traversal
+failure raises immediately. It never imports or invokes the brute-force oracle
+as a fallback. `raytracer/reference.py` remains test-only.
+
+Alternatives: Implement a custom analytical backward in CUDA; traverse all
+surfels; use an OptiX SDK dependency; use a fixed candidate cap; build a CPU BVH;
+or silently call the Python oracle on failure.
+
+Why: Separating discrete acceleration from differentiable exact CUDA-tensor math
+keeps the first implementation auditable and permits direct oracle and
+finite-difference checks. Two-pass allocation preserves correctness, and
+fail-closed behavior prevents an accidental production complexity explosion.
+
+Paper fidelity: The master plan requires CUDA/OptiX production acceleration,
+chunking, synchronization, and all listed gradients. The Morton-balanced tree
+and autograd division are engineering choices.
+
+Impact: The extension compiled successfully with PyTorch 2.0.1/CUDA 11.8 on the
+current RTX 3090. Tests matched the brute-force oracle and finite differences
+for all required gradient inputs. Performance and memory on full-resolution
+TiHuBird rays remain unverified until the user smoke.
+
+Required ablation: None for correctness. Profile candidate counts, chunk size,
+refit/rebuild time, and peak memory before selecting a long-run configuration.

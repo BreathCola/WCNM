@@ -4,13 +4,22 @@ Current stage: Stage B — Differentiable Ray Tracing and Reflection
 
 Current branch: `feature/stage-b-reflection-dr-c03`
 
-Stage state: Stage A is formally closed by user authorization on 2026-06-30.
-The frozen StableNormal D-only baseline remains unchanged, the independent
-DiffusionRenderer C03 D-only experiment stops at 15,000 iterations, and Stage B
-is authorized to test the reflection hypothesis only. Stage C and Stage D have
-not started.
+Stage state: Stage A is formally closed. Stage B-0 was approved by the user and
+B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
+No TiHuBird Stage B training or user smoke has run, so Stage B is neither
+complete nor accepted. The frozen StableNormal baseline and C03 initialization
+artifacts remain unchanged. Stage C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
+
+Stage B implementation commits:
+
+```text
+7ad0b8881b9b2a00e9f766b68be7ff051c74281e  rendering/path decisions
+bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a model/math/checkpoint foundation
+30dd8be5d05d6da9081b0a1f4b80a555234b74f3  B-1b fail-closed CUDA LBVH
+953334009a8db3d63cc68179842687ba306186c2  B-1c train/render/debug integration
+```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
@@ -18,9 +27,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
 - The original 3DGS baseline remains available through `--model_type 3dgs`.
 - RT-GS uses `--model_type surfel` and the pinned 2D surfel rasterizer.
-- Diffuse, Reflection, and Transmittance are required to remain separate. At
-  the Stage B entry point only the Diffuse model exists; no Reflection or
-  Transmittance instance has been created yet.
+- Diffuse and Reflection now have separate Stage B models, optimizers,
+  schedulers, densification state, checkpoint namespaces, PLY exports, and debug
+  outputs. No Transmittance model or Stage C/D path exists.
 - `data/TiHuBird` is the real acceptance scene. Truck artifacts are historical
   engineering smoke evidence only.
 - TiHuBird has 111 final undistorted PINHOLE images at 3827x2152, 111/111 COLMAP
@@ -87,22 +96,32 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
 ## Tests and verified behavior
 
-- Last recorded Stage A suite at the code evidence commit:
-  `conda run -n RT-GS python -m pytest -q tests` → 29 passed.
+- `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
+  tests` → 64 passed on 2026-06-30. This includes the complete Stage A
+  regression plus 26 Stage B model/ray/BRDF/checkpoint/render/debug/mask tests.
+- The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
+  RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
+  finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
+  origin/ray direction passed.
 - Original 3DGS and surfel training/render paths, checkpoint resume, PLY reload,
   densification, material gradients, and Stage A debug exports have passed their
   documented checks.
-- This Stage B transition is documentation-only. No training, renderer test,
-  Reflection instance, ray tracer, BRDF, transparent mesh, or two-hit path was
-  run or created during the transition.
+- Synthetic Stage B rendering produced real reflection hit/color/alpha/depth,
+  D/F/G/fr/wr, and diffuse/reflection contribution tensors and debug files in
+  pytest temporary directories only.
+- No `train.py` invocation, TiHuBird training, user smoke, or real Stage B
+  output directory was created. No real manual soft-mask set exists yet.
 
 ## Current boundary and next exact task
 
-- Perform Stage B-0 as a read-only implementation audit of the existing
-  training, rendering, Diffuse model, checkpoint/resume, material-map, and
-  renderer structure.
-- B-1 may then implement only the smallest tested Reflection/ray-tracing path
-  permitted by `docs/stages/STAGE_B.md`; its first smoke remains operator-run.
+- The next action is the first user-operated two-step structural Stage B smoke
+  from the read-only C03 15k checkpoint with `lambda_spec=0`.
+- Inspect its real checkpoint, independent D/R PLYs, valid-ray/hit counts,
+  reflection maps, microfacet maps, and contribution maps before changing any
+  implementation or quality setting.
+- `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
+  Enabling the constraint later requires a complete real 111/111 manual soft
+  mask set with matching dimensions and recorded aggregate hash.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
@@ -110,5 +129,5 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Blocked by: Stage B-0 audit and a reviewed B-1 implementation plan; no code or
-training blocker is claimed yet.
+Blocked by: the user-operated Stage B smoke and human review of its real debug
+evidence. Stage B acceptance cannot advance before that evidence exists.

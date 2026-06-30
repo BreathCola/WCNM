@@ -41,25 +41,28 @@ Stage C and Stage D have not started.
   A matched Stage B comparison may be considered later, but no second training
   is authorized for the first experiment.
 - No Reflection model instance, ray tracer, BRDF implementation, mask pipeline,
-  or Stage B training exists at entry.
+  or Stage B training existed at entry. B-1 implementation now exists, but no
+  TiHuBird Stage B training or user smoke has run.
 
 ## B-0 — Read-only implementation audit
 
-- [ ] Read `AGENTS.md`, `RTGS_MASTER_PLAN.md`, `docs/STATUS.md`,
+- [x] Read `AGENTS.md`, `RTGS_MASTER_PLAN.md`, `docs/STATUS.md`,
   `docs/DECISIONS.md`, and this file.
-- [ ] Audit `train.py`, `render.py`, `scene/diffuse_surfel_model.py`,
+- [x] Audit `train.py`, `render.py`, `scene/diffuse_surfel_model.py`,
   `gaussian_renderer/`, checkpoint/load/resume logic, and the current
   position/normal/roughness/f0/ks maps.
-- [ ] Specify the independent Reflection model, optimizer, densification, and
+- [x] Specify the independent Reflection model, optimizer, densification, and
   checkpoint contracts without implementing them.
-- [ ] Specify how D resumes from C03 15k while R starts independently.
-- [ ] Specify the minimum correct differentiable tracer path, ray convention,
+- [x] Specify how D resumes from C03 15k while R starts independently.
+- [x] Specify the minimum correct differentiable tracer path, ray convention,
   epsilon, miss/background behavior, and microfacet inputs/outputs.
-- [ ] Specify the minimum honest specular constraint possible before a final
+- [x] Specify the minimum honest specular constraint possible before a final
   transparent mask exists.
-- [ ] Define B-1 file scope, tests, debug maps, smoke acceptance, command, and
+- [x] Define B-1 file scope, tests, debug maps, smoke acceptance, command, and
   operator-run prerequisites.
-- [ ] Do not modify rendering code or run training during B-0.
+- [x] Do not modify rendering code or run training during B-0.
+
+User approved B-0 before B-1 implementation began.
 
 ## B-1 — Minimal implementation sequence
 
@@ -69,38 +72,38 @@ may be introduced.
 
 ### Reflection model contract
 
-- [ ] Add `scene/reflection_surfel_model.py` with independent `xyz`, `rotation`,
+- [x] Add `scene/reflection_surfel_model.py` with independent `xyz`, `rotation`,
   `scaling_2d`, `opacity_raw`, and `color_raw` tensors.
-- [ ] Give R its own optimizer, scheduler, densification/pruning state,
+- [x] Give R its own optimizer, scheduler, densification/pruning state,
   serialization namespace, and exported PLY.
-- [ ] Never merge R tensors or optimizer state into D arrays.
+- [x] Never merge R tensors or optimizer state into D arrays.
 
 ### Differentiable ray tracer contract
 
-- [ ] Provide the shared `raytrace(model, origins, directions, ...)` contract
+- [x] Provide the shared `raytrace(model, origins, directions, ...)` contract
   returning color, alpha, expected depth, and hit mask.
-- [ ] Support gradients required by the master plan, chunked rays, and an
+- [x] Support gradients required by the master plan, chunked rays, and an
   acceleration structure whose state is synchronized after parameter changes.
-- [ ] Keep any PyTorch brute-force tracer test-only and small-scene-only.
+- [x] Keep any PyTorch brute-force tracer test-only and small-scene-only.
 
 ### Reflection ray and shading contract
 
-- [ ] Generate reflection rays from Diffuse position and face-forward normal
+- [x] Generate reflection rays from Diffuse position and face-forward normal
   using the master-plan direction convention.
-- [ ] Offset every origin by scene-scaled epsilon and define explicit
+- [x] Offset every origin by scene-scaled epsilon and define explicit
   hit/miss/background behavior.
-- [ ] Implement GGX/Trowbridge-Reitz D, Schlick F, Smith GGX G, and the complete
+- [x] Implement GGX/Trowbridge-Reitz D, Schlick F, Smith GGX G, and the complete
   non-split-sum reflection weight.
-- [ ] Keep Stage B composition limited to
+- [x] Keep Stage B composition limited to
   `C = (1 - ks) * Cd + ks * wr * Cr`.
 
 ### Specular constraint contract
 
 - [ ] Load, validate, and visualize only a real mask source accepted for the
   Stage B smoke.
-- [ ] Never fabricate a transparent mask or claim a temporary proxy is the
+- [x] Never fabricate a transparent mask or claim a temporary proxy is the
   final Stage C mask.
-- [ ] Apply `L_spec` only where the accepted mask is valid and keep mask use out
+- [x] Apply `L_spec` only where the accepted mask is valid and keep mask use out
   of full-image RGB cropping.
 
 ## Debug outputs required before Stage B acceptance
@@ -130,35 +133,47 @@ dummy outputs are permitted in Stage B.
 
 ## Tests required before Stage B acceptance
 
-- [ ] Reflection model activation, shapes, independent storage, optimizer, PLY,
+- [x] Reflection model activation, shapes, independent storage, optimizer, PLY,
   densification/pruning, and checkpoint round-trip tests.
-- [ ] Reflection direction, face-forward normal, epsilon, hit/miss, and
+- [x] Reflection direction, face-forward normal, epsilon, hit/miss, and
   background tests.
-- [ ] Raytrace output-contract, chunking equivalence, finite output, gradient,
+- [x] Raytrace output-contract, chunking equivalence, finite output, gradient,
   and acceleration-state synchronization tests.
-- [ ] GGX finite-value, limiting-angle, Fresnel monotonicity, and full
+- [x] GGX finite-value, limiting-angle, Fresnel monotonicity, and full
   composition tests.
 - [ ] Real-mask loading/validation and `L_spec` masking tests before enabling
   the specular constraint.
-- [ ] Existing Stage A regression suite.
+- [x] Existing Stage A regression suite: full repository result is 64 passed.
 
 ## Acceptance checklist
 
-- [ ] Independent Reflection Gaussian exists.
-- [ ] Ray tracer runs on R and satisfies its differentiability contract.
-- [ ] Reflection-ray direction and scene-scaled epsilon are correct.
+- [x] Independent Reflection Gaussian exists and passed synthetic tests.
+- [x] Ray tracer runs on R and satisfies its tested differentiability contract.
+- [x] Reflection-ray direction and scene-scaled epsilon are correct in tests.
 - [ ] Reflection color/alpha/depth/hit maps are real and visualized.
-- [ ] D and R optimizers, densification, checkpoints, and exports are separate.
-- [ ] Full microfacet BRDF runs without split-sum approximation.
+- [x] D and R optimizers, densification, checkpoints, and exports are separate.
+- [x] Full microfacet BRDF runs without split-sum approximation in tests.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [ ] Outputs and gradients contain no NaN or Inf.
-- [ ] Stage A functionality and the original 3DGS baseline do not regress.
+- [x] Stage A test suite and original code paths do not regress in the 64-test run.
 - [ ] The first Stage B smoke is run by the user from reviewed prerequisites and
   produces the required debug evidence.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
   reality before any Stage C transition.
-- [ ] A rollback commit exists.
+- [x] Separate B-1a, B-1b, and B-1c rollback commits exist.
 
 The project remains in Stage B until every applicable item above is verified.
 Passing B-0 alone does not authorize Stage C or Stage D.
+
+## B-1 implementation commits and current stop point
+
+```text
+7ad0b8881b9b2a00e9f766b68be7ff051c74281e  B-002 through B-005 decisions
+bb5eb072e757a32735ad378b38a3d4b489ac1a57  B-1a
+30dd8be5d05d6da9081b0a1f4b80a555234b74f3  B-1b
+953334009a8db3d63cc68179842687ba306186c2  B-1c
+```
+
+Implemented and tested does not mean accepted. The first TiHuBird Stage B smoke
+and review of its real debug outputs remain user-only and have not run.
