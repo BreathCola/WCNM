@@ -1,5 +1,8 @@
+import random
 from types import SimpleNamespace
 
+import numpy as np
+import pytest
 import torch
 
 from scene.diffuse_surfel_model import DiffuseSurfelModel
@@ -122,6 +125,55 @@ def test_checkpoint_format_rejections(tmp_path):
         assert "rtgs_stage_a" in str(error)
     else:
         raise AssertionError("wrong checkpoint format was accepted")
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA map-location RNG restore test")
+def test_on_disk_cuda_map_location_restores_cpu_and_cuda_rng_states(tmp_path):
+    diffuse = initialized_diffuse()
+    reflection = ReflectionSurfelModel()
+    reflection.create_random_bbox(torch.zeros(3), torch.ones(3), 4, 0)
+    reflection.training_setup(reflection_args())
+    checkpoint = make_stage_b_checkpoint(
+        diffuse,
+        reflection,
+        global_iteration=15002,
+        reflection_iteration=2,
+        provenance={},
+        config={"ray_background": "scene"},
+    )
+    expected_torch = checkpoint["rng_state"]["torch"].clone()
+    expected_cuda = [value.clone() for value in checkpoint["rng_state"]["cuda"]]
+    path = tmp_path / "stage_b_cuda_map.pth"
+    torch.save(checkpoint, path)
+
+    previous_python = random.getstate()
+    previous_numpy = np.random.get_state()
+    previous_torch = torch.get_rng_state()
+    previous_cuda = torch.cuda.get_rng_state_all()
+    try:
+        restored_d = DiffuseSurfelModel()
+        restored_r = ReflectionSurfelModel()
+        values = load_stage_b_checkpoint(
+            path,
+            restored_d,
+            restored_r,
+            diffuse_args(),
+            reflection_args(),
+            map_location="cuda",
+            restore_rng=True,
+        )
+        assert values[:2] == (15002, 2)
+        assert restored_d.get_xyz.is_cuda and restored_r.get_xyz.is_cuda
+        assert torch.equal(torch.get_rng_state(), expected_torch)
+        assert all(
+            torch.equal(actual, expected)
+            for actual, expected in zip(torch.cuda.get_rng_state_all(), expected_cuda)
+        )
+    finally:
+        random.setstate(previous_python)
+        np.random.set_state(previous_numpy)
+        torch.set_rng_state(previous_torch)
+        torch.cuda.set_rng_state_all(previous_cuda)
 
 
 def test_stage_b_scene_exports_diffuse_and_reflection_to_separate_paths(tmp_path):

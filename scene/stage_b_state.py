@@ -71,14 +71,24 @@ def capture_rng_state() -> Dict:
     return state
 
 
+def _cpu_rng_byte_tensor(value, name: str) -> torch.Tensor:
+    if not torch.is_tensor(value) or value.dtype != torch.uint8:
+        raise ValueError(f"{name} must be a torch uint8 RNG state tensor")
+    return value.detach().to(device="cpu").contiguous()
+
+
 def restore_rng_state(state: Optional[Dict]) -> None:
     if not state:
         return
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
-    torch.set_rng_state(state["torch"])
+    torch.set_rng_state(_cpu_rng_byte_tensor(state["torch"], "rng_state.torch"))
     if state.get("cuda") is not None and torch.cuda.is_available():
-        torch.cuda.set_rng_state_all(state["cuda"])
+        cuda_states = [
+            _cpu_rng_byte_tensor(value, f"rng_state.cuda[{index}]")
+            for index, value in enumerate(state["cuda"])
+        ]
+        torch.cuda.set_rng_state_all(cuda_states)
 
 
 def make_stage_b_checkpoint(
