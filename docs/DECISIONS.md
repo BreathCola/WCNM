@@ -1175,3 +1175,64 @@ it in the next fresh health pilot.
 Required ablation: None. Stage B remains unaccepted; complete the controlled
 health pilot from the original 15,003/3 checkpoint and later verify the real
 111/111 manual soft-mask path before any stage transition.
+
+## B-012 — Accept the post-repair 100-step run as a health pilot only
+
+Date: 2026-07-01
+
+Question: After removing the candidate-gradient bottleneck, does 100-step
+continuous training remain numerically and operationally healthy, and what does
+the allocator evidence permit next?
+
+Chosen implementation: Run exactly one fresh pilot from the original read-only
+global 15,003 / Reflection-local 3 checkpoint through global 15,103 / local 103.
+Keep resolution 8, 4,096 Reflection surfels, chunk size 4,096, all renderer,
+loss, optimizer, scheduler, densification, and RNG state unchanged. Keep
+`lambda_spec=0` and load no mask. Use the existing 15,025/15,050/15,075/15,100
+debug/evaluation nodes plus the accepted final 15,103 debug behavior; save only
+the final checkpoint and independent D/R PLYs.
+
+The completed run has ordinary-step p50/p95/mean wall times
+`0.939/1.092/0.944 s`. D/R counts stay 346,118/4,096, every training iteration
+uses 32 candidate-gradient reductions, and no densify/prune count change occurs.
+All TensorBoard scalars, renderer checks, five diagnostic metadata sets, and the
+final recursive checkpoint inspection are finite. Candidate p50/p95/p99 grows
+from `126/227/285` to `146/265/341`; exact intersections grow from `33/72/86`
+to `38/83/109`. Reflection contribution remains essentially fully nonzero and
+increases rather than collapsing. Final valid-surface ks is centered at 0.09726
+with range 0.08796--0.10640 and no values below 0.01 or above 0.9.
+
+Exact PyTorch allocator peaks, reconstructed across the diagnostic timer's
+intentional peak-stat resets, are 18,094,459,392 allocated bytes and
+20,333,985,792 reserved bytes. Current live allocated memory varies with view
+and is not monotonic, so the evidence does not indicate a retained live-tensor
+leak. Reserved memory is nearly monotonic because the caching allocator retains
+larger temporary blocks, reaching 20.33 GB and leaving limited RTX 3090
+headroom. Preserve this as a long-run risk; do not respond by changing chunk
+size, resolution, Reflection count, model math, or training settings in this
+pilot decision.
+
+Alternatives: Resume the aborted pre-repair health directory; extend directly
+into a long run; classify cached reserved growth as a proven live-tensor leak;
+or hide the allocator risk because no OOM occurred.
+
+Why: The pilot meets the stated short-run health conditions: no crash/OOM or
+NaN/Inf, final checkpoint/PLY save succeeds, ks does not collapse, reflection
+contribution does not vanish, candidate density does not grow by an order of
+magnitude, and performance remains in the post-repair regime. The reserved
+headroom is nevertheless too material to ignore when deciding any later long
+run.
+
+Paper fidelity: This is a Stage B operational-health classification and memory
+observation. It changes no representation, rendering equation, loss, data, or
+training schedule.
+
+Impact: Preserve
+`output/stage_b_tihubird_reflection_dr_c03_health100_candidate_reduce_g15003_15103_retry1/`
+as verified short-pilot evidence. Its final checkpoint SHA-256 is
+`6f43ff1335f99e03f8ee08e4575ad4c91b29189cbe23a67942b23557adb87354`.
+Do not continue training from it without separate authorization. Stage B remains
+unaccepted: the next independent gate is a real 111/111 manual soft-mask set and
+verified `L_spec`; Stage C and Stage D remain forbidden.
+
+Required ablation: None for this health classification.

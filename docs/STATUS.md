@@ -20,9 +20,13 @@ then isolated 160 long candidate advanced-index backward kernels as 97.8% of a
 step. Commit `c87bb66` replaces only that R-parameter gather backward with a
 grouped custom CUDA reduction. A matched two-step profile from the original
 15,003/3 checkpoint reduced global 15,004 from 50.461 s to 1.572 s with exact
-15004/15005 scalar losses. Stage B is neither complete nor accepted. The frozen
-StableNormal baseline and C03 initialization artifacts remain unchanged. Stage
-C and Stage D have not started.
+15004/15005 scalar losses. The fresh controlled 100-step retry then completed
+from global 15,003 / R local 3 to global 15,103 / R local 103 without OOM,
+non-finite values, count changes, or performance collapse. It is accepted as a
+health pilot, not as Stage B acceptance or authorization for long training.
+Stage B is neither complete nor accepted. The frozen StableNormal baseline and
+C03 initialization artifacts remain unchanged. Stage C and Stage D have not
+started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -187,20 +191,44 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   process). This is higher than the earlier separately observed 10,627 MiB
   total / 10,320 MiB process peak and remains a short-pilot risk; it does not
   negate removal of the measured backward bottleneck.
+- The only post-repair health pilot completed at
+  `output/stage_b_tihubird_reflection_dr_c03_health100_candidate_reduce_g15003_15103_retry1/`.
+  Its 95 non-debug iteration intervals have p50/p95/mean
+  `0.939/1.092/0.944 s`. Mean training raytrace forward and candidate-backward
+  envelope are about `228.7 ms` and `643.0 ms`; all 100 iterations used 32
+  candidate backward calls. Four evaluation/debug nodes and the accepted final
+  15,103 debug node are complete with all companion maps.
+- D/R counts remained `346,118/4,096`; no densify/prune event changed topology.
+  Candidate p50/p95/p99 moved from `126/227/285` at 15,025 to `146/265/341` at
+  15,103, while exact intersections moved from `33/72/86` to `38/83/109`.
+  This is gradual growth, not an order-of-magnitude acceleration failure.
+  Reflection contribution remained finite and essentially fully nonzero; its
+  mean/p99 increased from `1.08e-4/5.58e-4` to `1.85e-4/1.12e-3`.
+- A read-only fixed-view render of the final checkpoint found 128,582 valid
+  surface pixels with ks min/mean/p1/p5/p50/p95/p99/max
+  `0.08796/0.09726/0.09321/0.09468/0.09730/0.10000/0.10189/0.10640`;
+  both `ks<0.01` and `ks>0.9` fractions are zero. The field did not collapse.
+- Exact allocator evidence is peak allocated `18,094,459,392` bytes
+  (16.85 GiB) and peak reserved `20,333,985,792` bytes (18.94 GiB). Current
+  allocated memory after compute is non-monotonic (only 48.5% of transitions
+  nondecreasing, 1.36--1.82 GB), so no live-tensor leak is evident. Reserved
+  memory is 96.0% nondecreasing and rose from 12.51 GB to 20.33 GB as PyTorch
+  cached larger per-view temporary blocks. This is a material long-run headroom
+  risk even though the pilot did not OOM.
+- Final checkpoint `chkpnt15103.pth` is `rtgs_stage_b` at global 15,103 / R
+  local 103 with SHA-256
+  `6f43ff1335f99e03f8ee08e4575ad4c91b29189cbe23a67942b23557adb87354`.
+  Recursive inspection covered 63 tensors / 19,912,887 elements and found no
+  NaN/Inf. It records `lambda_spec=0` and no specular-mask manifest.
 
 ## Current boundary and next exact task
 
-- The performance repair is code/test/profile complete, but the 100-step health
-  pilot has not completed. A future operator-authorized retry must start again
-  from the original read-only global 15,003 / R local 3 checkpoint, never from
-  the aborted health directory or either disposable profile directory.
-- The accepted existing CLI schedule uses `--debug_interval 25`, so observation
-  nodes may occur at global 15,025/15,050/15,075/15,100. Global 15,103 is the
-  final checkpoint and independent D/R PLY node; exact +25 alignment is not an
-  experiment constraint and requires no new CLI code.
+- Do not extend the health pilot or start long training. Preserve its checkpoint,
+  metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  Enabling the constraint later requires a complete real 111/111 manual soft
-  mask set with matching dimensions and recorded aggregate hash.
+  The next independent validation requires a complete real 111/111 manual soft
+  mask set with matching dimensions and recorded aggregate hash before any
+  `lambda_spec>0` run.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
@@ -208,7 +236,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Pending before acceptance: completion/review of a fresh controlled 100-step
-health pilot, including the new peak-memory risk, then a real 111/111 manual
-soft-mask set before enabling `lambda_spec>0`. Stage B acceptance cannot advance
-before that evidence exists.
+Pending before acceptance: a real 111/111 manual soft-mask set and verified
+`L_spec` behavior. Peak reserved-memory headroom must remain visible in any later
+training decision. Stage B acceptance cannot advance before that evidence
+exists.

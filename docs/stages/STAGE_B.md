@@ -137,13 +137,13 @@ not a full-field brute-force traversal; R count and initial scale remain fixed.
 
 ### Controlled 100-step health pilot
 
-- [ ] Resume exactly from global 15,003 / R local 3 without resetting any state.
-- [ ] Keep `lambda_spec=0` and load/create no mask.
-- [ ] Keep all model, renderer, BVH, densification, and training settings fixed.
-- [ ] Use the existing `--debug_interval 25`; debug at global 15,025 / 15,050 /
+- [x] Resume exactly from global 15,003 / R local 3 without resetting any state.
+- [x] Keep `lambda_spec=0` and load/create no mask.
+- [x] Keep all model, renderer, BVH, densification, and training settings fixed.
+- [x] Use the existing `--debug_interval 25`; debug at global 15,025 / 15,050 /
   15,075 / 15,100 is accepted and exact +25 alignment is not required.
-- [ ] Save checkpoint and independent D/R PLY only at 15,103.
-- [ ] Stop at global 15,103 / R local 103 and classify health without treating
+- [x] Save checkpoint and independent D/R PLY only at 15,103.
+- [x] Stop at global 15,103 / R local 103 and classify health without treating
   a flat 100-step PSNR as automatic failure.
 
 The first attempt reached global 15,019 / R local 19 before receiving SIGINT
@@ -151,6 +151,22 @@ because ordinary steps took roughly 50--60 seconds. It is
 `PILOT_ABORTED_FOR_PROFILE`, not `PILOT_HEALTHY` or `PILOT_BLOCKED`; preserve its
 partial output and never resume from it. The original global 15,003 / R local 3
 checkpoint remains the sole retry source.
+
+The post-repair retry completed all 100 steps in the fresh
+`health100_candidate_reduce_g15003_15103_retry1` directory. The 95 ordinary
+iteration wall intervals have p50/p95/mean `0.939/1.092/0.944 s`; training
+raytrace forward averages 228.7 ms and the candidate-backward envelope averages
+643.0 ms. All losses and debug raw statistics are finite. D/R remain
+346,118/4,096 with no densify/prune count change. Candidate and exact-count
+quantiles grow gradually but remain far below a full-field scan. Reflection
+contribution stays nonzero, and final fixed-view ks remains centered near 0.097
+with no pixel below 0.01 or above 0.9.
+
+Allocator peak allocated/reserved are 18,094,459,392 / 20,333,985,792 bytes.
+Live allocated memory is not monotonic, while reserved memory grows in caching
+steps to 20.33 GB. Therefore classify this run as a healthy short pilot with a
+material long-run memory-headroom risk. It does not authorize a long run or
+constitute Stage B acceptance.
 
 ### Candidate-gradient performance repair
 
@@ -241,6 +257,9 @@ dummy outputs are permitted in Stage B.
   checkpoint, D/R PLY, and debug evidence.
 - [x] B-1d candidate density, exact intersections, timing/memory, and display
   companions are verified by the user-operated resume smoke.
+- [x] The post-repair 100-step health pilot completed with finite state, stable
+  counts/contribution, preserved performance, final checkpoint, and complete
+  diagnostics; its reserved-memory risk is explicitly recorded.
 - [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
   reality before any Stage C transition.
 - [x] Separate B-1a, B-1b, and B-1c rollback commits exist.
