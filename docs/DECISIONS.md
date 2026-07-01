@@ -1370,3 +1370,58 @@ Stage C/D.
 
 Required ablation: Human review/correction of all 111 proposals, beginning with
 the five background-risk frames and then reflection/high-uncertainty frames.
+
+## B-015 — High-risk review packs are read-only views of frozen proposals
+
+Date: 2026-07-01
+
+Question: How should the 30 highest-priority automatic proposals be presented
+for detailed human review without modifying masks or creating supervision?
+
+Chosen implementation: Preserve the exact user-specified order: five
+background-risk stems, fifteen reflection-risk stems, then ten
+highest-uncertainty stems. For each stem, build one 2748x2308 review image with
+the source RGB, proposal soft mask, proposal overlay, boundary-only RGB overlay,
+uncertainty overlay/grayscale, area, bbox, uncertainty fraction, and active risk
+labels.
+
+Boundary-only display thresholds the existing soft proposal at 128 and draws a
+magenta contour on a copy of the decoded source RGB. It is visualization only.
+For top edge, bottom edge/yellow plate, left edge, right edge, lower base/black
+support, and the previously recorded strongest-reflection location, crop a
+fixed 900x506 window directly from the original 3827x2152 pixel domain. Store
+both raw RGB and boundary-overlay crops. Paste the boundary versions into the
+large pack one-to-one; never downsample then enlarge a crop. Overview panels may
+be reduced once with Lanczos to fit, but are not proposal inputs.
+
+Create a single 30-view contact sheet in the same group order. Create JSON, CSV,
+and Markdown checklists with blank/null fields for `outer_boundary_ok`,
+`base_included`, `background_included`, `edge_missing`, `reflection_leak`, and
+`needs_manual_edit`, plus notes. These are human-fillable review records, not a
+mask manifest.
+
+Before and after writing the independent output directory, hash the relative
+path and content SHA-256 of all 1,110 files under the source `proposal_soft`
+tree. Both aggregate hashes are
+`428139079931e8091409be70c1c4442c457e0869b10fea894fd2986d0f6b6d1e`.
+The high-risk package contains 30 large packs, 180 raw crops, and 180 boundary
+crops. Visual inspection sampled one pack from each risk group and confirmed
+the required elements and crop coverage.
+
+Alternatives: Edit flagged proposal pixels while preparing review materials;
+generate masks in `reviewed_soft`; crop from downsampled DR images; enlarge
+small crops; or omit high-risk frames from the queue.
+
+Why: Direct source-pixel crops expose the exact glass/base/background boundary
+needed for human judgment while the tree hash proves the automatic proposals
+remain untouched.
+
+Paper fidelity: This is offline human-review presentation only. It changes no
+mask, renderer, loss, checkpoint, training input, or Stage B model behavior.
+
+Impact: The review pack is
+`output/stage_b_tihubird_dr_glass_high_risk_review_pack_v1/`. Stop for human
+checklist completion. Do not create `reviewed_soft`, enable `lambda_spec`, run
+training, or enter Stage C/D.
+
+Required ablation: None. Human review is the next gate.

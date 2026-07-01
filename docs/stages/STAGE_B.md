@@ -219,6 +219,13 @@ no model or training setting is changed pre-emptively.
   crops per frame, global distributions, and a non-destructive anomaly list.
 - [x] Inspect every chronological contact sheet and find no systematic proposal
   failure requiring a method rollback.
+- [x] Build the 30-view high-risk review package in background-risk,
+  reflection-risk, then uncertainty order, with one large pack per view, six
+  direct source-pixel crop types, one contact sheet, and blank human checklists.
+- [x] Verify the complete 1,110-file proposal tree has identical aggregate
+  SHA-256 before and after review-pack generation.
+- [ ] Human fills the high-risk checklist; no automatic item is promoted to
+  `reviewed_soft` by this packaging step.
 - [ ] Humans revise/confirm all 111 source-resolution masks before any formal
   manifest or separately authorized `L_spec` validation.
 
@@ -281,7 +288,7 @@ dummy outputs are permitted in Stage B.
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
 - [x] Existing Stage A regression suite plus DR proposal/review contracts: full
-  repository result is 84 passed.
+  repository result is 86 passed.
 
 ## Acceptance checklist
 

@@ -123,10 +123,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 84 passed on 2026-07-01. This includes the complete Stage A
+  tests` → 86 passed on 2026-07-01. This includes the complete Stage A
   regression; Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT staging
-  and candidate-gather equivalence tests; and eleven DR proposal/review audit,
-  output, fail-closed, and training-isolation contracts.
+  and candidate-gather equivalence tests; and thirteen DR proposal/review audit,
+  output, fail-closed, read-only, and training-isolation contracts.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -271,14 +271,29 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   automatic anomalies still align visually and remain first-priority human
   review items. No automatic proposal was deleted, rewritten, or promoted to a
   reviewed mask.
+- A separate 30-view high-risk human-review pack is complete at
+  `output/stage_b_tihubird_dr_glass_high_risk_review_pack_v1/`. Ordering is the
+  user-specified five background-risk views, fifteen reflection-risk views, and
+  ten highest-uncertainty views. Every 2748x2308 pack contains RGB, soft mask,
+  proposal overlay, boundary-only RGB overlay, uncertainty views, statistics,
+  and six direct source-pixel crops: top, bottom/yellow plate, left, right,
+  base/black support, and strongest reflection.
+- Each crop is 900x506 source pixels with no resampling and is stored both as
+  raw RGB and boundary overlay. The package has 30 packs, 180 raw crops, 180
+  boundary crops, one ordered contact sheet, and blank JSON/CSV/Markdown human
+  checklists. The source proposal tree contains 1,110 files and has identical
+  before/after SHA-256
+  `428139079931e8091409be70c1c4442c457e0869b10fea894fd2986d0f6b6d1e`.
+  Therefore no proposal file changed and no `reviewed_soft` was created.
 
 ## Current boundary and next exact task
 
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The immediate next action is user review of the 111-entry risk-sorted queue,
-  beginning with 000041, 000012, 000040, 000039, and 000013, not training.
+  The immediate next action is user completion of the 30-view high-risk review
+  checklist, beginning with 000041, 000012, 000040, 000039, and 000013, not
+  training.
   Automatic proposals must be manually corrected/confirmed before any
   `reviewed_soft` directory or formal training manifest exists; even then
   `lambda_spec>0` needs separate approval.

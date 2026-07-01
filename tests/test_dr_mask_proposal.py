@@ -18,6 +18,11 @@ from utils.dr_mask_review import (
     generate_all_real_proposals,
     validate_proposal_frames,
 )
+from utils.dr_mask_high_risk_review import (
+    REVIEW_FIELDS,
+    generate_high_risk_review_pack,
+    proposal_tree_digest,
+)
 
 
 def _save_rgb(path: Path, values: np.ndarray):
@@ -256,3 +261,55 @@ def test_review_validation_fails_closed_on_degenerate_proposal(tmp_path):
     )
     with pytest.raises(ProposalAuditError, match="both zero exterior and 255"):
         validate_proposal_frames(audit, output, expected_count=2)
+
+
+def test_high_risk_review_pack_is_read_only_and_human_fillable(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path)
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
+    proposal_output = tmp_path / "proposal_review"
+    generate_all_real_proposals(audit, proposal_output, expected_count=2)
+    build_review_package(audit, proposal_output, expected_count=2)
+    before = proposal_tree_digest(proposal_output / "proposal_soft")
+    review_output = tmp_path / "high_risk_review"
+    groups = {
+        "background_risk": ("000000",),
+        "reflection_risk": (),
+        "highest_uncertainty": ("000001",),
+    }
+    manifest = generate_high_risk_review_pack(proposal_output, review_output, groups)
+    after = proposal_tree_digest(proposal_output / "proposal_soft")
+    assert before == after
+    assert manifest["status"] == "PASS"
+    assert manifest["view_count"] == 2
+    assert manifest["proposal_files_modified"] is False
+    assert (review_output / "high_risk_contact_sheet.png").is_file()
+    checklist = json.loads((review_output / "review_checklist.json").read_text())
+    assert len(checklist["items"]) == 2
+    assert all(item[field] is None for item in checklist["items"] for field in REVIEW_FIELDS)
+    for stem in ("000000", "000001"):
+        metadata = json.loads(
+            (review_output / "views" / stem / "review_pack_metadata.json").read_text()
+        )
+        assert (review_output / "views" / stem / "review_pack.png").is_file()
+        for crop in metadata["crops"].values():
+            box = crop["box_xyxy_source"]
+            assert crop["resampling"] is None
+            assert crop["source_pixel_size"] == [box[2] - box[0], box[3] - box[1]]
+    assert not (review_output / "reviewed_soft").exists()
+
+
+def test_high_risk_review_pack_rejects_duplicate_stems(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path)
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
+    proposal_output = tmp_path / "proposal_review"
+    generate_all_real_proposals(audit, proposal_output, expected_count=2)
+    build_review_package(audit, proposal_output, expected_count=2)
+    groups = {
+        "background_risk": ("000000",),
+        "reflection_risk": ("000000",),
+        "highest_uncertainty": (),
+    }
+    with pytest.raises(ProposalAuditError, match="duplicate stems"):
+        generate_high_risk_review_pack(
+            proposal_output, tmp_path / "high_risk_review", groups
+        )
