@@ -23,10 +23,18 @@ grouped custom CUDA reduction. A matched two-step profile from the original
 15004/15005 scalar losses. The fresh controlled 100-step retry then completed
 from global 15,003 / R local 3 to global 15,103 / R local 103 without OOM,
 non-finite values, count changes, or performance collapse. It is accepted as a
-health pilot, not as Stage B acceptance or authorization for long training.
-Stage B is neither complete nor accepted. The frozen StableNormal baseline and
-C03 initialization artifacts remain unchanged. Stage C and Stage D have not
-started.
+health pilot, not as Stage B acceptance or authorization for long training. The
+formal reviewed-v1 mask archive, fail-closed loader, and three-step
+`lambda_spec=0.2` smoke are complete, and the user accepted the smoke
+transparent-mask/overlay alignment. The single authorized 100-step
+`lambda_spec=0.2` pilot then ran from the original read-only 15,003/3 checkpoint
+to 15,103/103. It completed without crash/OOM, non-finite debug stats, count
+changes, or candidate/exact-intersection explosion, and fixed-view mask-inside
+ks rose relative to the original 15,003 fixed view. Its non-smoke training path
+did not persist whole-step CUDA allocated/reserved peaks, so exact allocator
+trend remains an evidence gap. Stage B is neither complete nor accepted. The
+frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
+Stage C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -45,6 +53,8 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
 9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
 c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
+0e673522c07b457c538385228acb90c513dac115  reviewed-mask archive and loader
+e50eae723548ad9963b0bf236fa4da0d408e2da9  three-step L_spec smoke evidence
 ```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
@@ -329,13 +339,15 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 
 ## Current boundary and next exact task
 
-- Do not extend the health pilot or start long training. Preserve its checkpoint,
-  metrics, diagnostics, D/R PLYs, and allocator evidence.
+- Do not extend either 100-step pilot or start long training. Preserve their
+  checkpoints, metrics, diagnostics, D/R PLYs, and logs.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The authorized three-iteration `lambda_spec=0.2` smoke has stopped at global
-  15,006 / R-local 6. No 100-step or long training is authorized. The next
-  action is user inspection of its transparent-mask overlay and ks/L_spec
-  evidence, not more training.
+  The authorized three-iteration `lambda_spec=0.2` smoke stopped at global
+  15,006 / R-local 6 and the user accepted its transparent-mask/overlay
+  alignment. The only authorized 100-step `lambda_spec=0.2` pilot stopped at
+  global 15,103 / R-local 103. No further training is authorized; the next
+  action is human evaluation of the fixed-view debug evidence and the memory
+  telemetry caveat.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
@@ -343,11 +355,12 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Pending before acceptance: user inspection of the real-scene L_spec smoke's
-transparent-mask overlay and ks evidence, followed by a separately authorized
-controlled pilot if accepted. Peak reserved-memory headroom must remain visible
-in any later training decision. Stage B acceptance cannot advance before that
-evidence exists.
+Pending before acceptance: user evaluation of the real-scene `lambda_spec`
+pilot's transparent mask, overlay, ks, reflection contribution, and L_spec
+evidence. Exact whole-step allocated/reserved memory was not persisted in the
+non-smoke training path, so reserved-memory headroom must remain a gating item
+for any later pilot or long run. Stage B acceptance cannot advance before that
+evidence is judged sufficient by the user.
 
 ## Three-step formal-mask L_spec smoke
 
@@ -377,3 +390,60 @@ evidence exists.
   D/R PLYs and the complete fixed-view debug set exist at iteration 15,006.
 - Technical classification: `L_SPEC_SMOKE_PASSED_AWAITING_USER_REVIEW`. It is
   neither Stage B acceptance nor authorization for a 100-step pilot.
+
+## Controlled 100-step formal-mask L_spec pilot
+
+- The user accepted the three-step smoke overlay and authorized exactly one
+  controlled 100-step `lambda_spec=0.2` pilot. The run restored only the original
+  read-only checkpoint
+  `output/stage_b_tihubird_reflection_dr_c03_resume_diag_15003_retry1/chkpnt15003.pth`
+  with SHA-256
+  `ad92c7d75312cc5df60b7a1dd5d762d8e7d65b8de0f90264d742f969baf7e144`.
+  It did not use the 15,006 smoke checkpoint, the `lambda_spec=0` health pilot,
+  or any profile output.
+- Output is
+  `output/stage_b_tihubird_reflection_dr_c03_lspec_pilot100_g15003_15103_v1/`.
+  The command used `--iterations 15103`, `--resolution 8`, R=4096,
+  `--ray_chunk_size 4096`, formal manifest
+  `specular_masks_reviewed_v1/manifest.json`, and `--lambda_spec 0.2`.
+  The run completed exactly global 15,004--15,103 / R-local 4--103 and saved
+  only the 15,103 Stage B checkpoint plus independent D/R PLYs.
+- TensorBoard scalar intervals for the 95 non-debug ordinary steps have
+  p50/p95/mean `0.931/1.089/0.939 s`. Intervals following the four debug nodes
+  are 1.714, 1.845, 1.843, and 1.915 s. D/R counts stay 346,118/4,096.
+- Per-view training `L_spec` is finite for all 100 sampled views. It is not
+  monotonic because the sampled camera and mask support change; node values are
+  0.164784, 0.165822, 0.261634, 0.173927, 0.126985, and 0.277022 at
+  15,004 / 15,025 / 15,050 / 15,075 / 15,100 / 15,103. Total loss at the same
+  nodes is 0.120062, 0.110359, 0.106250, 0.081835, 0.064169, and 0.119105.
+- Fixed debug-view mask support is 0.156733. Quantized debug-map ks inside the
+  fixed-view mask rises from the original 15,003 mean 0.095482 to
+  0.096744 / 0.097544 / 0.098727 / 0.100213 / 0.100522 at
+  15,025 / 15,050 / 15,075 / 15,100 / 15,103. The corresponding fixed-view
+  outside-mask mean changes only from 0.087836 to
+  0.089029 / 0.088253 / 0.088522 / 0.088176 / 0.088187. This distinguishes the
+  previously verified L_spec-only zero outside gradient from normal total-loss
+  drift outside the mask.
+- Fixed-view candidate p50/p95/p99 is `126/227/285`, `134/243/310`,
+  `141/256/329`, `147/266/343`, and `147/266/344`; exact intersections are
+  `33/72/86`, `35/77/96`, `36/80/103`, `38/83/109`, and `38/84/109`. This is
+  gradual growth, not an order-of-magnitude traversal failure. Reflection
+  contribution remains finite and almost fully nonzero; mean/p99 rises from
+  `1.087e-4/5.623e-4` to `1.923e-4/1.171e-3`.
+- Fixed-view raytrace wall time rises from 216.5 ms at 15,025 to 252.1 ms at
+  15,103, with traversal 73.3--85.0 ms and intersection/composite
+  140.6--164.8 ms. All raw debug non-finite counts are zero.
+- Final checkpoint
+  `output/stage_b_tihubird_reflection_dr_c03_lspec_pilot100_g15003_15103_v1/chkpnt15103.pth`
+  has SHA-256
+  `c5e40e1a9025a3e191314759e8214e2eb11cba9e04ee2319c6f0c522e4cd6bca`.
+  It is `rtgs_stage_b` at global 15,103 / R-local 103, records
+  `lambda_spec=0.2` and the reviewed-v1 manifest hashes, and recursive
+  inspection covered 63 tensors / 19,912,887 elements with no NaN/Inf.
+- Evidence caveat: this non-smoke training path did not persist
+  `torch.cuda.max_memory_allocated()` or `max_memory_reserved()` for ordinary
+  steps before the process exited. Debug raytrace-local peaks are recorded, but
+  they are not whole-step allocator peaks and must not be reported as such.
+  Therefore classify this as
+  `L_SPEC_PILOT_COMPLETED_AWAITING_USER_EVALUATION_WITH_MEMORY_TELEMETRY_GAP`,
+  not Stage B acceptance or long-training authorization.

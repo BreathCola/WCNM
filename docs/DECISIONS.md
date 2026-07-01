@@ -1571,3 +1571,106 @@ The fixed-view 000101 transparent mask and overlay have matching 478x269 debug
 geometry and the mask hash matches the formal manifest. This is a passed
 technical smoke, but a 100-step lambda-spec pilot remains unauthorized until
 the user inspects the overlay and statistics.
+
+## B-018 — Controlled 100-step `lambda_spec` pilot remains evidence-only
+
+Date: 2026-07-02
+
+Question: After the user accepts the three-step formal-mask smoke overlay, does
+the first bounded 100-step real-scene `lambda_spec=0.2` pilot remain numerically
+and operationally stable enough for human Stage B evaluation, without
+authorizing long training or any Stage C/D work?
+
+Chosen implementation: Run exactly one fresh pilot from the original read-only
+Stage B diagnostic checkpoint
+`output/stage_b_tihubird_reflection_dr_c03_resume_diag_15003_retry1/chkpnt15003.pth`
+after rechecking SHA-256
+`ad92c7d75312cc5df60b7a1dd5d762d8e7d65b8de0f90264d742f969baf7e144`.
+The 15,006 smoke checkpoint, the `lambda_spec=0` health pilot, aborted runs, and
+profile directories are not resume sources. The only training-semantics change
+relative to the earlier health pilot is loading the formal reviewed-v1 manifest
+and setting `--lambda_spec 0.2`; RGB reconstruction remains full-image, no rays
+or losses are cropped by the mask, and R count, chunk size, BVH, BRDF,
+optimizers, schedulers, densification, resolution, and restored RNG state remain
+unchanged.
+
+Output path:
+
+```text
+output/stage_b_tihubird_reflection_dr_c03_lspec_pilot100_g15003_15103_v1/
+```
+
+The run completes exactly global 15004--15103 and R-local 4--103, saves the
+final 15103 Stage B checkpoint and independent D/R PLYs, and writes fixed-view
+debug directories at 15025, 15050, 15075, 15100, and 15103. D/R counts remain
+346,118/4,096; no topology-changing densify/prune event occurs.
+
+Verified scalar evidence: TensorBoard scalar intervals for the 95 non-debug
+ordinary steps have p50/p95/mean `0.931/1.089/0.939 s`. Intervals following the
+four debug nodes are 1.714, 1.845, 1.843, and 1.915 s. Per-sampled-view
+`L_spec` is finite for all 100 steps but not monotonic because the selected
+camera and mask support vary. At 15004 / 15025 / 15050 / 15075 / 15100 / 15103,
+`L_spec` is 0.164784 / 0.165822 / 0.261634 / 0.173927 / 0.126985 / 0.277022
+and total loss is 0.120062 / 0.110359 / 0.106250 / 0.081835 / 0.064169 /
+0.119105.
+
+Verified fixed-view material evidence: using the fixed debug view and the
+formal mask support, quantized debug-map ks inside the mask rises from the
+original 15003 mean 0.095482 to 0.096744 / 0.097544 / 0.098727 / 0.100213 /
+0.100522 at 15025 / 15050 / 15075 / 15100 / 15103. Outside-mask fixed-view mean
+changes from 0.087836 to 0.089029 / 0.088253 / 0.088522 / 0.088176 / 0.088187.
+This is interpreted only as total-loss drift monitoring: the smoke already
+verified that the L_spec-only gradient has zero outside-mask support, while the
+complete training gradient outside the mask may still move ks through RGB,
+normal, perceptual, and other active Stage B losses.
+
+Verified ray/debug evidence: fixed-view candidate p50/p95/p99 is
+`126/227/285`, `134/243/310`, `141/256/329`, `147/266/343`, and `147/266/344`.
+Exact-intersection p50/p95/p99 is `33/72/86`, `35/77/96`, `36/80/103`,
+`38/83/109`, and `38/84/109`. This is gradual growth rather than an
+order-of-magnitude acceleration failure. Reflection contribution remains finite
+and effectively nonzero, with mean/p99 from `1.087e-4/5.623e-4` to
+`1.923e-4/1.171e-3`. Fixed-view raytrace wall time rises from 216.5 ms to
+252.1 ms; traversal is 73.3--85.0 ms, and intersection/composite is
+140.6--164.8 ms. All raw debug non-finite counts are zero.
+
+Final checkpoint evidence: `chkpnt15103.pth` is `rtgs_stage_b` at global 15103
+/ R-local 103, records `lambda_spec=0.2` and the reviewed-v1 formal manifest
+hashes, has SHA-256
+`c5e40e1a9025a3e191314759e8214e2eb11cba9e04ee2319c6f0c522e4cd6bca`, and
+recursive inspection covers 63 tensors / 19,912,887 elements with no NaN/Inf.
+
+Evidence gap: the non-smoke Stage B training loop does not persist
+`torch.cuda.max_memory_allocated()` or `torch.cuda.max_memory_reserved()` for
+ordinary steps. After process exit, exact whole-step allocator peaks and trend
+cannot be reconstructed. Debug raytrace-local peak allocation is recorded in
+the fixed-view metadata, but it is not a full training-step allocator peak and
+must not be reported as if it were. This gap does not indicate a model failure,
+but it prevents claiming the requested whole-step CUDA allocator evidence for
+this run.
+
+Alternatives: Resume from the 15006 smoke checkpoint; continue from the
+`lambda_spec=0` health output; extend to a long run; lower resolution; change R
+count/chunk size; crop RGB loss by the mask; gate reflection rays by the mask;
+or enter Stage C/D.
+
+Why: The pilot isolates the formal specular constraint under the same Stage B
+rendering semantics while keeping the original C03-initialized D/R state and
+all optimizer/RNG continuity. It verifies short-run numeric stability and
+mask-directed ks movement before any acceptance discussion.
+
+Paper fidelity: This remains Stage B reflection plus the formal specular-mask
+constraint only. It does not add Transmittance, transparent mesh, inside/outside
+classification, two-hit geometry, depth violation losses, or any Stage C/D
+artifact.
+
+Impact: Classification is
+`L_SPEC_PILOT_COMPLETED_AWAITING_USER_EVALUATION_WITH_MEMORY_TELEMETRY_GAP`.
+Stage B is still unaccepted. No long training, new pilot, `lambda_spec`
+extension, matched StableNormal-vs-C03 run, Stage C, or Stage D is authorized by
+this evidence.
+
+Required ablation: Human inspection of the 15025/15050/15075/15100/15103 fixed
+debug masks, overlays, ks maps, reflection contribution, scalar L_spec behavior,
+and the memory telemetry caveat before deciding whether Stage B is ready for
+acceptance review or needs an additional instrumented pilot.

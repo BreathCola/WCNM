@@ -148,7 +148,7 @@ not a full-field brute-force traversal; R count and initial scale remain fixed.
   checkpoint namespaces, and complete reflection debug outputs.
 - [x] Save and recursively inspect the 15,006/6 checkpoint and independent D/R
   PLYs with no NaN/Inf.
-- [ ] User inspects `transparent_mask.png`, `overlay.png`, and the inside/outside
+- [x] User inspects `transparent_mask.png`, `overlay.png`, and the inside/outside
   ks statistics before any controlled 100-step lambda-spec pilot is authorized.
 
 The clean smoke output is
@@ -161,6 +161,51 @@ about 218/208 ms, and peak allocated/reserved is 13.54/15.10 GB. D/R remain
 346,118/4,096. The final finite checkpoint hash is
 `f46c00375699d3b4b7c018a4277b4ba3e93abc66f60ddc7f282a0caf979b93fb`.
 This is technical smoke evidence only; Stage B remains unaccepted.
+
+### Controlled 100-step formal-mask L_spec pilot
+
+- [x] Resume only the original read-only 15,003/3 checkpoint; do not resume from
+  the 15,006 smoke checkpoint, health pilot, aborted runs, or profile outputs.
+- [x] Keep all Stage B model, renderer, BVH, BRDF, optimizer, scheduler,
+  densification, R count, chunk size, resolution, and RNG semantics unchanged;
+  only add the formal `specular_masks_reviewed_v1/manifest.json` and
+  `--lambda_spec 0.2`.
+- [x] Run exactly global 15,004--15,103 / R-local 4--103 and stop.
+- [x] Preserve debug nodes at 15,025 / 15,050 / 15,075 / 15,100 plus final
+  15,103 debug; save only the 15,103 checkpoint and independent D/R PLYs.
+- [x] Verify no crash/OOM, no non-finite checkpoint/debug tensors, no D/R count
+  change, no candidate/exact-intersection explosion, and nonzero reflection
+  contribution.
+- [x] Distinguish the already verified L_spec-only zero outside-mask gradient
+  from ordinary total-loss ks drift outside the mask.
+- [x] Record that exact whole-step CUDA allocated/reserved peaks were not
+  persisted by the non-smoke training path and therefore remain an evidence gap.
+- [ ] User evaluates the fixed-view transparent masks, overlays, ks maps,
+  reflection contribution, L_spec behavior, and memory telemetry caveat before
+  any Stage B acceptance decision.
+
+The pilot output is
+`output/stage_b_tihubird_reflection_dr_c03_lspec_pilot100_g15003_15103_v1/`.
+It completed all 100 added iterations with D/R counts fixed at 346,118/4,096.
+The 95 ordinary TensorBoard scalar intervals have p50/p95/mean
+`0.931/1.089/0.939 s`. Per-view L_spec is finite but not monotonic across
+random sampled cameras: 0.164784 / 0.165822 / 0.261634 / 0.173927 / 0.126985 /
+0.277022 at 15,004 / 15,025 / 15,050 / 15,075 / 15,100 / 15,103.
+
+Fixed-view mask-inside debug-map ks mean rises from the original 15,003 mean
+0.095482 to 0.100522 at 15,103, while fixed-view outside-mask mean changes only
+from 0.087836 to 0.088187. Candidate p50/p95/p99 reaches 147/266/344 and exact
+intersections reach 38/84/109 at 15,103, still far below full-field traversal.
+Reflection contribution remains nearly fully nonzero with final mean/p99
+`1.923e-4/1.171e-3`; all raw debug non-finite counts are zero.
+
+Final checkpoint
+`output/stage_b_tihubird_reflection_dr_c03_lspec_pilot100_g15003_15103_v1/chkpnt15103.pth`
+has SHA-256
+`c5e40e1a9025a3e191314759e8214e2eb11cba9e04ee2319c6f0c522e4cd6bca` and
+recursive inspection found no NaN/Inf in 63 tensors / 19,912,887 elements. This
+is evidence for human Stage B evaluation, not Stage B acceptance or long-run
+authorization.
 
 ### Controlled 100-step health pilot
 
@@ -379,11 +424,15 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
 9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
 c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
+0e673522c07b457c538385228acb90c513dac115  reviewed-mask archive and loader
+e50eae723548ad9963b0bf236fa4da0d408e2da9  three-step L_spec smoke evidence
 ```
 
 Implemented and tested does not mean accepted. The successful user smoke proved
 the structural Stage B path, and B-1d diagnostics, the candidate-gradient
 performance repair, and the 100-step health pilot have real evidence. The user
 has since accepted the 111-view reviewed-v1 masks, and their formal manifest/
-loader tests pass. Real-scene L_spec smoke evidence and user overlay inspection
-are still missing. Stage C and Stage D remain forbidden.
+loader tests pass. Real-scene L_spec smoke and the single authorized 100-step
+L_spec pilot have now run, but the pilot is evidence for human evaluation only
+and carries an explicit whole-step memory telemetry gap. Stage B remains
+unaccepted, and Stage C and Stage D remain forbidden.
