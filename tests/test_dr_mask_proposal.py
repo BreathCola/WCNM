@@ -222,7 +222,7 @@ def test_proposal_directory_is_not_a_valid_training_mask_set(tmp_path):
     audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
     output = tmp_path / "proposal_output"
     generate_proposals(audit, output, ["000000", "000001"])
-    with pytest.raises(ValueError, match="must match images exactly"):
+    with pytest.raises(FileNotFoundError, match="formal specular mask manifest"):
         validate_specular_mask_set(scene, "images", str(output / "proposal_soft"))
 
 

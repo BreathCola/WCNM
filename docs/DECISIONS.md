@@ -1483,3 +1483,65 @@ masks and do not authorize `lambda_spec`, training, or Stage C/D.
 
 Required ablation: None. Human confirmation/manual top-edge correction is the
 next gate.
+
+## B-017 — Versioned formal soft masks require a self-hashed manifest
+
+Date: 2026-07-01
+
+Question: How are the user-accepted TiHuBird masks archived and admitted to
+`L_spec` without allowing proposal or repair working directories to become
+training inputs?
+
+Chosen implementation: Create the new read-only directory
+`data/TiHuBird/specular_masks_reviewed_v1/` exactly once. Files 000000--000110
+are source-resolution mode-L uint8 PNGs. The 108 unchanged frames are byte
+copies of frozen proposal v1; 000039--000041 are byte copies of the accepted
+repair candidates. The directory and files are chmod 0555/0444 after complete
+validation; no source proposal, repair, checkpoint, or prior run is modified.
+
+`manifest.json` is the only accepted `--specular_masks` input. It fixes the
+role, ordered 111 stems, RGB and mask hashes, known source class and source
+hash, size/mode/dtype, soft area, nonzero bbox, human `accepted` status,
+aggregate mask hash, canonical manifest-payload hash, and explicit exclusion of
+DR padding slots 111--119. The loader rehashes every RGB and mask, rejects any
+missing/extra file or field mismatch, and admits only `proposal_v1` or
+`repair_candidate_v1`. A raw proposal/repair directory cannot satisfy this
+contract.
+
+Soft masks are decoded as `[0,1]` float32 and resized from 3827x2152 to the
+camera training resolution with continuous `cv2.INTER_LINEAR`; no thresholding
+or silent geometry repair occurs. `L_spec = mean(M * relu(k0 - ks))` is added
+beside the unchanged whole-image RGB reconstruction loss. Tests prove its ks
+gradient is nonzero only where mask support is positive, exactly zero where
+the mask is zero, and points toward increasing under-threshold ks under gradient
+descent. A diagnostics switch is fail-closed to at most three resumed
+iterations and records this support check without adding its probe gradient to
+model parameters.
+
+Verified archive hashes before the smoke are aggregate mask SHA-256
+`54dbb7661efbb2a334d86cef1cfec1d15ff812e71856c0d88930754013abc2e6`,
+canonical manifest-payload SHA-256
+`026ad1fa28fb7c2a30656fd37976a4315585e056a317e59f7c44502d69831e4f`,
+and manifest-file SHA-256
+`056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551`.
+
+Alternatives: Accept a flat mask directory; promote proposal metadata; resize
+with nearest-neighbor; threshold soft edges; crop RGB reconstruction to mask
+support; or infer missing frames.
+
+Why: The strict formal role and complete hash closure separate immutable human
+acceptance from automatic annotation evidence and make accidental proposal
+loading fail closed. Continuous interpolation preserves the intended soft edge,
+while independent loss terms preserve full-scene reconstruction.
+
+Paper fidelity: This implements the Stage B specular-mask constraint only. It
+does not add Transmittance, mesh, inside/outside, two-hit, or any Stage C/D
+representation.
+
+Impact: The formal archive and unit tests authorize only the separately bounded
+three-step `lambda_spec=0.2` smoke from the original 15,003/3 checkpoint. They
+do not authorize 100 steps, long training, or Stage B acceptance.
+
+Required ablation: Inspect the three-step transparent-mask overlay, inside/
+outside ks statistics, and L_spec-only gradient evidence before considering a
+100-step lambda-spec pilot.

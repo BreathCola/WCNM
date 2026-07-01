@@ -144,7 +144,8 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   modify its partial output.
 - A fresh forced-C-locale CUDA compile reported preferred encoding
   `ANSI_X3.4-1968` and loaded the extension successfully from the new ASCII-only
-  staging path. No real manual soft-mask set exists yet.
+  staging path. At that smoke point no real manual soft-mask set existed; the
+  later reviewed-v1 archive is recorded below.
 - The user-operated `smoke_2_retry1` completed at global iteration 15,002 and R
   local step 2. Its `rtgs_stage_b` checkpoint contains 346,118 Diffuse and 4,096
   Reflection surfels, separate optimizer namespaces, and no non-finite tensor in
@@ -304,16 +305,36 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   Visible top-edge spans cover about 55.9%, 63.1%, and 41.1% of the repair bbox;
   hidden spans behind dinosaur/reflection remain explicit manual-review risks.
 
+## Formal reviewed-v1 soft-mask archive
+
+- The user accepted the three repair candidates and authorized a complete
+  formal mask archive. `data/TiHuBird/specular_masks_reviewed_v1/` now contains
+  exactly 111 mode-L uint8 3827x2152 masks plus one manifest. Files 000039--
+  000041 are byte-identical to accepted repair candidates; the other 108 are
+  byte-identical to frozen proposal v1. The directory/files are read-only.
+- The aggregate mask, canonical manifest-payload, and manifest-file SHA-256 are
+  `54dbb7661efbb2a334d86cef1cfec1d15ff812e71856c0d88930754013abc2e6`,
+  `026ad1fa28fb7c2a30656fd37976a4315585e056a317e59f7c44502d69831e4f`,
+  and `056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551`.
+  Manifest validation rehashes 111 RGB/mask pairs and proves padding 111--119
+  contributes zero masks.
+- Training now accepts only this formal manifest contract. It rejects raw
+  proposal/repair paths, missing/extra/corrupt masks, non-L images, dimension
+  mismatch, unknown sources, and manifest/hash mismatch. Soft resize is
+  recorded as `opencv.INTER_LINEAR`; full-image RGB reconstruction is unchanged.
+- The full Stage A/B suite is 95 passed. This includes formal archive exact-copy
+  tests, fail-closed loading, continuous soft resize, L_spec mask-only gradient,
+  whole-image RGB, debug transparent-mask/overlay, and all prior regressions.
+  This is pre-smoke implementation evidence, not Stage B acceptance.
+
 ## Current boundary and next exact task
 
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The immediate next action is user review of the three localized repair
-  candidates and their hidden top-edge spans, not training.
-  Automatic proposals must be manually corrected/confirmed before any
-  `reviewed_soft` directory or formal training manifest exists; even then
-  `lambda_spec>0` needs separate approval.
+  The only authorized next action is a three-iteration `lambda_spec=0.2` smoke
+  from the original read-only 15,003/3 checkpoint using the formal manifest.
+  Stop after global 15,006; no 100-step or long training is authorized.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
@@ -321,7 +342,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Pending before acceptance: a real 111/111 manual soft-mask set and verified
-`L_spec` behavior. Peak reserved-memory headroom must remain visible in any later
-training decision. Stage B acceptance cannot advance before that evidence
-exists.
+Pending before acceptance: verified real-scene `L_spec` behavior and user
+inspection of its transparent-mask overlay and ks evidence. Peak reserved-memory
+headroom must remain visible in any later training decision. Stage B acceptance
+cannot advance before that evidence exists.

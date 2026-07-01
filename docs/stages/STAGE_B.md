@@ -234,10 +234,19 @@ no model or training setting is changed pre-emptively.
 - [x] Verify zero added hard pixels and identical source proposal-tree hashes;
   export source-resolution pages, direct boundary crops, continuity evidence,
   and the three-frame RGB/v1/repair/difference comparison.
-- [ ] Human confirms or redraws the partially occluded top boundary in all
+- [x] Human confirms or redraws the partially occluded top boundary in all
   three repair candidates.
-- [ ] Humans revise/confirm all 111 source-resolution masks before any formal
+- [x] Humans revise/confirm all 111 source-resolution masks before any formal
   manifest or separately authorized `L_spec` validation.
+- [x] Archive exactly 111 accepted mode-L uint8 masks with byte-copy source
+  proof, complete RGB/mask hashes, aggregate/payload hashes, and zero padding
+  contamination in `specular_masks_reviewed_v1/`.
+- [x] Admit only the formal manifest at the training entry; reject proposal,
+  repair, missing, extra, corrupt, wrong-mode, wrong-size, or unknown-source
+  inputs fail closed.
+- [x] Preserve soft edges with recorded `opencv.INTER_LINEAR` resizing and prove
+  in tests that RGB reconstruction remains whole-image while L_spec ks gradient
+  has support only inside the mask.
 
 The strict audit passed with 111 real records at source 3827x2152 and native DR
 704x384, plus padding slots 111--119 excluded. Normal maps are RGB uint8 decoded
@@ -292,13 +301,13 @@ dummy outputs are permitted in Stage B.
   and acceleration-state synchronization tests.
 - [x] GGX finite-value, limiting-angle, Fresnel monotonicity, and full
   composition tests.
-- [ ] Real-mask loading/validation and `L_spec` masking tests before enabling
+- [x] Real-mask loading/validation and `L_spec` masking tests before enabling
   the specular constraint.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite plus DR proposal/review/repair
-  contracts: full repository result is 88 passed.
+- [x] Existing Stage A regression suite plus DR proposal/review/repair and
+  formal-mask/L_spec contracts: full repository result is 95 passed.
 
 ## Acceptance checklist
 
@@ -347,7 +356,7 @@ c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 
 Implemented and tested does not mean accepted. The successful user smoke proved
 the structural Stage B path, and B-1d diagnostics, the candidate-gradient
-performance repair, and the 100-step health pilot have real evidence. The
-111-view automatic DR proposals still require human review/correction and real
-111/111 manual soft-mask evidence is missing. Stage C and Stage D remain
-forbidden.
+performance repair, and the 100-step health pilot have real evidence. The user
+has since accepted the 111-view reviewed-v1 masks, and their formal manifest/
+loader tests pass. Real-scene L_spec smoke evidence and user overlay inspection
+are still missing. Stage C and Stage D remain forbidden.

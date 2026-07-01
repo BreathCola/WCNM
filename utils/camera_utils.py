@@ -16,8 +16,9 @@ from PIL import Image
 import cv2
 import os
 from pathlib import Path
-import hashlib
 import torch
+
+from utils.specular_mask import load_resized_formal_mask
 
 WARNED = False
 
@@ -86,25 +87,15 @@ def loadCam(args, id, cam_info, resolution_scale, is_nerf_synthetic, is_test_dat
 
     specular_mask = None
     specular_mask_sha256 = None
-    specular_directory = getattr(args, "specular_masks", "")
-    if specular_directory:
-        mask_path = os.path.join(args.source_path, specular_directory, Path(cam_info.image_name).stem + ".png")
-        with open(mask_path, "rb") as handle:
-            mask_bytes = handle.read()
-        specular_mask_sha256 = hashlib.sha256(mask_bytes).hexdigest()
-        mask_image = Image.open(mask_path)
-        if mask_image.mode not in ("1", "L", "I", "F"):
-            raise ValueError(f"specular soft mask must be single-channel: {mask_path}")
-        if mask_image.size != (orig_w, orig_h):
-            raise ValueError(
-                f"specular soft mask size {mask_image.size} does not match image {(orig_w, orig_h)}: {mask_path}"
-            )
-        mask_values = np.asarray(mask_image.convert("F"), dtype=np.float32)
-        if mask_values.max(initial=0.0) > 1.0:
-            mask_values = mask_values / 255.0
-        if not np.isfinite(mask_values).all() or mask_values.min(initial=0.0) < 0.0 or mask_values.max(initial=0.0) > 1.0:
-            raise ValueError(f"specular soft mask must be finite in [0,1]: {mask_path}")
-        mask_values = cv2.resize(mask_values, resolution, interpolation=cv2.INTER_LINEAR)
+    specular_manifest_path = getattr(args, "specular_masks", "")
+    if specular_manifest_path:
+        validated = getattr(args, "_validated_specular_mask_manifest", None)
+        mask_values, specular_mask_sha256, _ = load_resized_formal_mask(
+            validated,
+            Path(cam_info.image_name).stem,
+            (orig_w, orig_h),
+            resolution,
+        )
         specular_mask = torch.from_numpy(mask_values[None].copy())
 
     return Camera(resolution, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 

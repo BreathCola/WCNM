@@ -1,5 +1,6 @@
 """Stage B-only training loop. It contains no Stage C/D paths or outputs."""
 
+import json
 import os
 from random import randint
 
@@ -31,6 +32,69 @@ try:
     FUSED_SSIM_AVAILABLE = True
 except ImportError:
     FUSED_SSIM_AVAILABLE = False
+
+
+def _finite_stats(values):
+    values = values.detach().float().reshape(-1)
+    finite = values[torch.isfinite(values)]
+    if finite.numel() != values.numel() or not finite.numel():
+        raise FloatingPointError("requested Stage B diagnostic values contain NaN/Inf or are empty")
+    q = torch.quantile(finite, torch.tensor([0.5, 0.95, 0.99], device=finite.device))
+    return {
+        "count": int(finite.numel()),
+        "min": float(finite.min().item()),
+        "mean": float(finite.mean().item()),
+        "p50": float(q[0].item()),
+        "p95": float(q[1].item()),
+        "p99": float(q[2].item()),
+        "max": float(finite.max().item()),
+    }
+
+
+def specular_gradient_diagnostics(surface_ks, soft_mask, valid_surface, specular_gradient):
+    """Audit L_spec support without changing accumulated model gradients."""
+    mask = soft_mask.permute(1, 2, 0) if soft_mask.shape[0] == 1 else soft_mask
+    valid = valid_surface > 0.5
+    inside = valid & (mask > 0.0)
+    outside = valid & (mask == 0.0)
+    if not inside.any() or not outside.any():
+        raise RuntimeError("formal mask must expose both inside and outside valid D surface pixels")
+    inside_gradient = specular_gradient[inside]
+    outside_gradient = specular_gradient[outside]
+    inside_nonzero = inside_gradient.abs() > 0
+    return {
+        "mask_mean": float(mask.mean().item()),
+        "mask_support_fraction": float((mask > 0).float().mean().item()),
+        "inside_ks": _finite_stats(surface_ks[inside]),
+        "outside_ks": _finite_stats(surface_ks[outside]),
+        "l_spec_gradient": {
+            "inside_nonzero_count": int(inside_nonzero.sum().item()),
+            "inside_nonzero_fraction": float(inside_nonzero.float().mean().item()),
+            "inside_min": float(inside_gradient.min().item()),
+            "inside_mean": float(inside_gradient.mean().item()),
+            "inside_max": float(inside_gradient.max().item()),
+            "outside_max_abs": float(outside_gradient.abs().max().item()),
+            "gradient_descent_ks_direction": "increase" if inside_gradient.mean() < 0 else "not_increase",
+        },
+    }
+
+
+def _model_finite_summary(model):
+    checked = 0
+    for name, value in model.__dict__.items():
+        if torch.is_tensor(value):
+            checked += value.numel()
+            if not torch.isfinite(value).all():
+                raise FloatingPointError(f"model tensor {name} contains NaN/Inf")
+            if value.grad is not None and not torch.isfinite(value.grad).all():
+                raise FloatingPointError(f"model gradient {name} contains NaN/Inf")
+    return {"checked_elements": int(checked), "finite": True}
+
+
+def _append_specular_smoke_record(model_path, record):
+    path = os.path.join(model_path, "specular_smoke_metrics.jsonl")
+    with open(path, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
 
 
 def _config(dataset, opt, diffuse, mask_manifest):
@@ -82,6 +146,9 @@ def _config(dataset, opt, diffuse, mask_manifest):
             "role": mask_manifest["role"],
             "count": mask_manifest["count"],
             "aggregate_sha256": mask_manifest["aggregate_sha256"],
+            "manifest_payload_sha256": mask_manifest["manifest_payload_sha256"],
+            "manifest_file_sha256": mask_manifest["manifest_file_sha256"],
+            "mask_interpolation": mask_manifest["mask_interpolation"],
         },
     }
 
@@ -98,7 +165,9 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
     if opt.lambda_spec == 0 and dataset.specular_masks:
         raise ValueError("--lambda_spec=0 requires an empty --specular_masks path")
     if opt.lambda_spec > 0 and not dataset.specular_masks:
-        raise ValueError("--lambda_spec>0 requires a complete manual --specular_masks directory")
+        raise ValueError("--lambda_spec>0 requires a complete formal --specular_masks manifest")
+    if opt.specular_smoke_diagnostics and opt.lambda_spec <= 0:
+        raise ValueError("--specular_smoke_diagnostics requires --lambda_spec>0")
     if dataset.reflection_init_mode != "random_bbox":
         raise ValueError("B-1 currently implements reflection_init_mode=random_bbox only")
     if diffuse_init_checkpoint and dataset.reflection_init_count <= 0:
@@ -146,9 +215,11 @@ def training_stage_b(
     mask_manifest = None
     if opt.lambda_spec > 0:
         mask_manifest = validate_specular_mask_set(dataset.source_path, dataset.images, dataset.specular_masks)
+        dataset._validated_specular_mask_manifest = mask_manifest
         print(
-            "Stage B specular masks: count={} aggregate_sha256={}".format(
-                mask_manifest["count"], mask_manifest["aggregate_sha256"]
+            "Stage B formal specular masks: count={} aggregate_sha256={} manifest_payload_sha256={} interpolation={}".format(
+                mask_manifest["count"], mask_manifest["aggregate_sha256"],
+                mask_manifest["manifest_payload_sha256"], mask_manifest["mask_interpolation"],
             )
         )
 
@@ -187,6 +258,8 @@ def training_stage_b(
         )
     if global_iteration >= opt.iterations:
         raise ValueError("--iterations must be greater than the restored global iteration")
+    if opt.specular_smoke_diagnostics and opt.iterations - global_iteration > 3:
+        raise ValueError("--specular_smoke_diagnostics is fail-closed to at most three added iterations")
 
     print(
         "Stage B initialization: D_iteration={} R_local_step={} R_count={} mode={} bbox_min={} bbox_max={}".format(
@@ -226,6 +299,8 @@ def training_stage_b(
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage B training progress")
     ema_loss = 0.0
     for iteration in range(global_iteration + 1, opt.iterations + 1):
+        if opt.specular_smoke_diagnostics:
+            torch.cuda.reset_peak_memory_stats()
         reflection_iteration += 1
         diffuse.update_learning_rate(iteration)
         reflection.update_learning_rate(reflection_iteration)
@@ -238,7 +313,14 @@ def training_stage_b(
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
-        package = render(camera, state, pipe, background, return_ray_aux=True)
+        package = render(
+            camera,
+            state,
+            pipe,
+            background,
+            return_ray_aux=True,
+            return_ray_diagnostics=opt.specular_smoke_diagnostics,
+        )
         image = package["render"]
         gt = camera.original_image.cuda()
         l1_value = l1_loss(image, gt)
@@ -262,11 +344,19 @@ def training_stage_b(
             perceptual_loss = perceptual(image, gt)
             loss = loss + opt.lambda_perc * perceptual_loss
         specular_loss = image.new_zeros(())
+        specular_probe = None
         if opt.lambda_spec > 0:
             if camera.specular_mask is None:
                 raise RuntimeError("validated specular mask was not loaded")
             specular_loss = specular_constraint_loss(package["surface_ks"], camera.specular_mask, opt.specular_k0)
             loss = loss + opt.lambda_spec * specular_loss
+            if opt.specular_smoke_diagnostics:
+                specular_probe = torch.autograd.grad(
+                    opt.lambda_spec * specular_loss,
+                    package["surface_ks"],
+                    retain_graph=True,
+                    allow_unused=False,
+                )[0]
         loss.backward()
 
         with torch.no_grad():
@@ -276,6 +366,50 @@ def training_stage_b(
                 None if aux is None else aux.contributing_weights,
             )
             ema_loss = 0.4 * loss.item() + 0.6 * ema_loss
+            if opt.specular_smoke_diagnostics:
+                diagnostics = package.get("ray_diagnostics")
+                if diagnostics is None:
+                    raise RuntimeError("specular smoke requires real ray diagnostics")
+                record = {
+                    "global_iteration": int(iteration),
+                    "reflection_local_iteration": int(reflection_iteration),
+                    "camera_stem": camera.image_name,
+                    "loss": float(loss.item()),
+                    "l1": float(l1_value.item()),
+                    "l_spec": float(specular_loss.item()),
+                    "lambda_spec": float(opt.lambda_spec),
+                    "counts": {
+                        "diffuse": int(diffuse.get_xyz.shape[0]),
+                        "reflection": int(reflection.get_xyz.shape[0]),
+                        "valid_rays": int(package["valid_ray_count"]),
+                    },
+                    "mask": specular_gradient_diagnostics(
+                        package["surface_ks"], camera.specular_mask,
+                        package["valid_surface_mask"], specular_probe,
+                    ),
+                    "ray": {
+                        "candidate_count": _finite_stats(package["ray_candidate_count"][package["valid_surface_mask"] > 0.5]),
+                        "exact_intersection_count": _finite_stats(package["ray_exact_intersection_count"][package["valid_surface_mask"] > 0.5]),
+                        "chunk_count": int(diagnostics.chunk_count),
+                        "timing_ms": {key: float(value) for key, value in diagnostics.timing_ms.items()},
+                    },
+                    "memory": {
+                        "max_allocated_bytes": int(torch.cuda.max_memory_allocated()),
+                        "max_reserved_bytes": int(torch.cuda.max_memory_reserved()),
+                    },
+                    "finite": {
+                        "loss": bool(torch.isfinite(loss).item()),
+                        "diffuse": _model_finite_summary(diffuse),
+                        "reflection": _model_finite_summary(reflection),
+                    },
+                }
+                gradient = record["mask"]["l_spec_gradient"]
+                if record["l_spec"] <= 0 or gradient["inside_nonzero_count"] == 0:
+                    raise RuntimeError("L_spec smoke requires positive loss and nonzero inside-mask ks gradient")
+                if gradient["outside_max_abs"] != 0.0 or gradient["gradient_descent_ks_direction"] != "increase":
+                    raise RuntimeError("L_spec gradient support/direction contract failed")
+                _append_specular_smoke_record(scene.model_path, record)
+                print("\nSPECULAR_SMOKE " + json.dumps(record, sort_keys=True, allow_nan=False))
             if iteration % 10 == 0:
                 progress.set_postfix({"Loss": f"{ema_loss:.7f}", "D": diffuse.get_xyz.shape[0], "R": reflection.get_xyz.shape[0]})
                 progress.update(10)

@@ -187,6 +187,7 @@ def save_reflection_debug_maps(output, ground_truth, directory, specular_mask=No
     }
     if specular_mask is not None:
         mask = specular_mask.detach().clamp(0, 1)
+        save_image(mask, os.path.join(directory, "transparent_mask.png"))
         save_image(mask.repeat(3, 1, 1), os.path.join(directory, "specular_mask.png"))
         overlay = 0.7 * ground_truth.detach().clamp(0, 1) + 0.3 * torch.cat(
             (mask, torch.zeros_like(mask), torch.zeros_like(mask)), dim=0

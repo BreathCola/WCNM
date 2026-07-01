@@ -56,7 +56,7 @@ def test_debug_writer_emits_only_real_stage_b_maps_and_no_mask_when_disabled(tmp
             "reflection_contribution.png", "reflection_contribution_vis.png",
             "microfacet_D_log.png", "ray_candidate_count.png",
             "ray_exact_intersection_count.png", "reflection_metadata.json"} <= names
-    assert "specular_mask.png" not in names and "overlay.png" not in names
+    assert "specular_mask.png" not in names and "transparent_mask.png" not in names and "overlay.png" not in names
     assert not any(
         token in name for name in names
         for token in ("transmittance", "inside", "outside", "two_hit", "near_depth", "far_depth", "depth_violation")
@@ -96,4 +96,5 @@ def test_debug_writer_emits_real_specular_mask_only_when_provided(tmp_path):
         _output(), torch.zeros((3, 4, 5)), str(tmp_path), specular_mask=mask, mask_sha256="abc"
     )
     assert (tmp_path / "specular_mask.png").is_file()
+    assert (tmp_path / "transparent_mask.png").is_file()
     assert (tmp_path / "overlay.png").is_file()
