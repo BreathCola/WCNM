@@ -1301,3 +1301,72 @@ remains unaccepted.
 
 Required ablation: Human review of the nine representative views before any
 batch proposal expansion.
+
+## B-014 — Freeze the approved proposal method for the 111-view review package
+
+Date: 2026-07-01
+
+Question: How should the accepted nine-view automatic proposal method be
+expanded to every real TiHuBird view without per-frame tuning or accidentally
+creating training supervision?
+
+Chosen implementation: Freeze the proposal method and parameters at commit
+`a2ee73212246674b97993ac7affa0e139e44dd5b`. Do not change the native candidate
+score, thresholds, morphology, connected-component/hull selection, feathering,
+or uncertainty definition. Run the same function once for each audited real
+stem 000000--000110 in order. The review-packaging implementation is separate
+from `utils/dr_mask_proposal.py`; it may validate, hash, rank, crop, and compose
+contact sheets but never changes proposal pixels.
+
+The native 704x384 soft signed-distance field is lifted to 3827x2152 with the
+existing `cv2.INTER_LINEAR` scalar mapping after the manifest geometry has
+passed strict audit. The hard preview is thresholded after lifting. Original
+source RGB is used only for the overlay and human-review crops. No online/local
+learned model, training, target-color shortcut, or per-frame RGB edge snapping
+is added in the expansion.
+
+After generation, fail closed unless all 111 exact stems contain every expected
+file; every proposal parses as source-sized single-channel uint8, contains both
+0 exterior and 255 high-confidence interior, and has hard area in the fixed
+engineering safety interval `[0.02, 0.60]`; every metadata stem/size agrees;
+normal/depth provenance and hashes remain valid; and real/padding raw-slot sets
+are disjoint. This interval detects catastrophic empty/full or gross-region
+selection only and does not delete statistical outliers.
+
+Build ten chronological overlay sheets and a second ten-page queue sorted by a
+review-only score: background/edge-missing risks weight 5, low confidence 4,
+reflection 2, bird 1, plus ten times the uncertainty fraction. For each frame,
+make RGB/overlay/uncertainty triptychs around the proposal top, bottom, the more
+uncertain side, and the strongest RGB highlight. Crop selection is navigation
+only. Robust median/MAD outliers and serious risk flags populate an anomaly
+list, but trigger no proposal rewrite or removal.
+
+Verified result: all 111 real frames pass; padding slots 111--119 contribute
+zero proposals. Area min/mean/p50/p95/max is
+`0.13856/0.22100/0.21222/0.31571/0.35572`. Uncertainty fraction above 140/255
+is `0.001783/0.003679/0.003812/0.004875/0.005206` for the same statistics.
+Five automatic anomalies carry `background_may_be_included`: 000012, 000013,
+000039, 000040, and 000041. Fifteen frames carry the reflection-risk flag; the
+bird-behind-glass texture flag remains active on all 111.
+
+Alternatives: Tune thresholds per image; edge-snap each result differently;
+skip flagged frames; copy neighboring proposals; treat a high-risk proposal as
+failed supervision; or directly install the automatic directory as masks.
+
+Why: All ten chronological sheets show a smooth, view-consistent enclosure
+outline. The five automatic background-risk frames still align visually and do
+not reveal a systematic method failure. Risk sorting therefore improves human
+review order without compromising method consistency.
+
+Paper fidelity: This is offline annotation preparation only. It changes no
+renderer, field, BRDF, loss, optimizer, checkpoint, schedule, or RGB training
+semantics.
+
+Impact: Preserve
+`output/stage_b_tihubird_dr_glass_proposal_111_v1/` as automatic review input.
+It contains no `reviewed_soft`, formal training mask manifest, or accepted
+supervision. Stop for human review; do not enable `lambda_spec`, train, or enter
+Stage C/D.
+
+Required ablation: Human review/correction of all 111 proposals, beginning with
+the five background-risk frames and then reflection/high-uncertainty frames.

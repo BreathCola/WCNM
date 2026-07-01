@@ -123,10 +123,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 81 passed on 2026-07-01. This includes the complete Stage A
+  tests` → 84 passed on 2026-07-01. This includes the complete Stage A
   regression; Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT staging
-  and candidate-gather equivalence tests; and eight DR proposal audit/output/
-  training-isolation contracts.
+  and candidate-gather equivalence tests; and eleven DR proposal/review audit,
+  output, fail-closed, and training-isolation contracts.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -248,16 +248,40 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   the enclosure outline in all nine views, while every view conservatively
   flags possible bird inclusion because RGB texture exists behind the glass.
   Human review is required before any 111-view expansion decision.
+- The user accepted the nine-view method and authorized a frozen-method
+  111-view expansion. Commit `a2ee732` remains the proposal algorithm reference;
+  no proposal formula, threshold, morphology, connectivity, or per-frame
+  parameter changed. The completed review package is
+  `output/stage_b_tihubird_dr_glass_proposal_111_v1/`.
+- The package passed strict validation for ordered stems 000000--000110, source
+  size 3827x2152, single-channel uint8 proposals containing both 0 and 255,
+  input/output SHA-256 records, finite DR normals, nondegenerate area, and no
+  padding intersection. It contains 111 review-queue entries, ten chronological
+  overlay pages, ten risk-priority overlay pages, four boundary-review crops per
+  frame, distribution plots/data, and an automatic anomaly list.
+- Proposal area min/mean/p50/p95/max is
+  `0.13856/0.22100/0.21222/0.31571/0.35572`. Uncertainty fraction above
+  140/255 has min/mean/p50/p95/max
+  `0.001783/0.003679/0.003812/0.004875/0.005206`. Five frames carry the
+  background-inclusion review flag: 000012, 000013, 000039, 000040, and 000041.
+  Fifteen frames carry the reflection-misclassification flag; all 111 retain the
+  conservative bird-behind-glass flag.
+- Visual inspection of all ten chronological pages found continuous enclosure
+  outlines without a systematic table/wall capture or enclosure loss. The five
+  automatic anomalies still align visually and remain first-priority human
+  review items. No automatic proposal was deleted, rewritten, or promoted to a
+  reviewed mask.
 
 ## Current boundary and next exact task
 
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The immediate next action is user review of the nine DR-derived proposals,
-  not training. Only after method review may proposals be expanded and manually
-  corrected into a complete 111/111 soft-mask set with matching dimensions and
-  recorded aggregate hash; even then `lambda_spec>0` needs separate approval.
+  The immediate next action is user review of the 111-entry risk-sorted queue,
+  beginning with 000041, 000012, 000040, 000039, and 000013, not training.
+  Automatic proposals must be manually corrected/confirmed before any
+  `reviewed_soft` directory or formal training manifest exists; even then
+  `lambda_spec>0` needs separate approval.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

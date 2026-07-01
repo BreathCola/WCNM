@@ -211,8 +211,14 @@ no model or training setting is changed pre-emptively.
 - [x] Keep proposals outside the accepted specular-mask contract. The training
   loader rejects their nested/non-complete layout, and no `reviewed_soft`,
   formal mask manifest, or `lambda_spec` run exists.
-- [ ] User reviews the nine-view contact sheet and decides whether the method is
-  adequate for a 111-view automatic-draft pass.
+- [x] User reviews the nine-view contact sheet and authorizes the frozen method
+  for a 111-view automatic-draft pass.
+- [x] Generate and strictly validate 111/111 automatic proposals with zero
+  padding proposals, per-frame hashes, dimensions, area/bbox/uncertainty/risk
+  records, ten chronological and ten priority contact sheets, four boundary
+  crops per frame, global distributions, and a non-destructive anomaly list.
+- [x] Inspect every chronological contact sheet and find no systematic proposal
+  failure requiring a method rollback.
 - [ ] Humans revise/confirm all 111 source-resolution masks before any formal
   manifest or separately authorized `L_spec` validation.
 
@@ -223,6 +229,12 @@ are relative per-frame RGB visualizations and carry no COLMAP scale. The nine
 review proposals are at
 `output/stage_b_tihubird_dr_glass_proposal_9views_v2/`. They are annotation
 inputs, not real masks or supervision, and Stage B remains unaccepted.
+
+The accepted frozen method was expanded to all real views at
+`output/stage_b_tihubird_dr_glass_proposal_111_v1/`. All 111 source-sized
+single-channel uint8 proposals and retained review artifacts pass the strict
+review manifest; padding slots 111--119 contribute zero proposals. The next
+gate is human review/correction of every queue item, not `L_spec` or training.
 
 ## Debug outputs required before Stage B acceptance
 
@@ -268,8 +280,8 @@ dummy outputs are permitted in Stage B.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite plus DR proposal contracts: full
-  repository result is 81 passed.
+- [x] Existing Stage A regression suite plus DR proposal/review contracts: full
+  repository result is 84 passed.
 
 ## Acceptance checklist
 
@@ -283,7 +295,8 @@ dummy outputs are permitted in Stage B.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [x] Reviewed smoke checkpoint tensors and tested gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 73-test run.
+- [x] Stage A test suite and original code paths do not regress in the full
+  84-test run.
 - [x] The first successful Stage B smoke was run by the user and produced real
   checkpoint, D/R PLY, and debug evidence.
 - [x] B-1d candidate density, exact intersections, timing/memory, and display
@@ -318,5 +331,6 @@ c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 Implemented and tested does not mean accepted. The successful user smoke proved
 the structural Stage B path, and B-1d diagnostics, the candidate-gradient
 performance repair, and the 100-step health pilot have real evidence. The
-nine-view DR proposals still require human review and real 111/111 manual
-soft-mask evidence is missing. Stage C and Stage D remain forbidden.
+111-view automatic DR proposals still require human review/correction and real
+111/111 manual soft-mask evidence is missing. Stage C and Stage D remain
+forbidden.

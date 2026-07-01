@@ -12,6 +12,12 @@ from utils.dr_mask_proposal import (
     generate_proposals,
 )
 from utils.specular_mask import validate_specular_mask_set
+from utils.dr_mask_review import (
+    BOUNDARY_CROP_NAMES,
+    build_review_package,
+    generate_all_real_proposals,
+    validate_proposal_frames,
+)
 
 
 def _save_rgb(path: Path, values: np.ndarray):
@@ -206,3 +212,47 @@ def test_proposal_directory_is_not_a_valid_training_mask_set(tmp_path):
     generate_proposals(audit, output, ["000000", "000001"])
     with pytest.raises(ValueError, match="must match images exactly"):
         validate_specular_mask_set(scene, "images", str(output / "proposal_soft"))
+
+
+def test_review_package_is_complete_sorted_and_has_boundary_crops(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path)
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
+    output = tmp_path / "review_output"
+    generate_all_real_proposals(audit, output, expected_count=2)
+    manifest = build_review_package(audit, output, expected_count=2)
+    assert manifest["status"] == "PASS"
+    assert manifest["completeness"]["validated_real_frames"] == 2
+    assert manifest["review_queue_count"] == 2
+    assert manifest["padding_exclusion_proof"]["padding_proposal_count"] == 0
+    assert len(manifest["chronological_contact_sheets"]) == 1
+    assert len(manifest["priority_contact_sheets"]) == 1
+    assert (output / "distribution_plot.png").is_file()
+    assert (output / "anomalies.json").is_file()
+    queue = json.loads((output / "review_queue" / "review_queue.json").read_text())
+    assert {item["stem"] for item in queue["items"]} == {"000000", "000001"}
+    for stem in ("000000", "000001"):
+        crop_root = output / "boundary_crops" / stem
+        assert {path.name for path in crop_root.glob("*.png")} == set(BOUNDARY_CROP_NAMES)
+    assert not (output / "reviewed_soft").exists()
+
+
+def test_review_validation_fails_closed_on_missing_proposal(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path)
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
+    output = tmp_path / "review_output"
+    generate_all_real_proposals(audit, output, expected_count=2)
+    (output / "proposal_soft" / "000001" / "proposal_soft.png").unlink()
+    with pytest.raises(ProposalAuditError, match="incomplete proposal files"):
+        validate_proposal_frames(audit, output, expected_count=2)
+
+
+def test_review_validation_fails_closed_on_degenerate_proposal(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path)
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=2)
+    output = tmp_path / "review_output"
+    generate_all_real_proposals(audit, output, expected_count=2)
+    Image.new("L", (64, 40), 0).save(
+        output / "proposal_soft" / "000000" / "proposal_soft.png"
+    )
+    with pytest.raises(ProposalAuditError, match="both zero exterior and 255"):
+        validate_proposal_frames(audit, output, expected_count=2)
