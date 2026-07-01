@@ -226,6 +226,16 @@ no model or training setting is changed pre-emptively.
   SHA-256 before and after review-pack generation.
 - [ ] Human fills the high-risk checklist; no automatic item is promoted to
   `reviewed_soft` by this packaging step.
+- [x] Record initial review: 000039/000040/000041 fail locally; the other 27
+  high-risk-pack views temporarily pass but are not formally accepted masks.
+- [x] Generate three strictly subtractive top-boundary repair candidates using
+  current-frame RGB/DR cues plus 000038/000042 continuity, without copying or
+  interpolating neighbor masks and without regenerating the other 108 views.
+- [x] Verify zero added hard pixels and identical source proposal-tree hashes;
+  export source-resolution pages, direct boundary crops, continuity evidence,
+  and the three-frame RGB/v1/repair/difference comparison.
+- [ ] Human confirms or redraws the partially occluded top boundary in all
+  three repair candidates.
 - [ ] Humans revise/confirm all 111 source-resolution masks before any formal
   manifest or separately authorized `L_spec` validation.
 
@@ -287,8 +297,8 @@ dummy outputs are permitted in Stage B.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite plus DR proposal/review contracts: full
-  repository result is 86 passed.
+- [x] Existing Stage A regression suite plus DR proposal/review/repair
+  contracts: full repository result is 88 passed.
 
 ## Acceptance checklist
 

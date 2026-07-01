@@ -123,10 +123,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 86 passed on 2026-07-01. This includes the complete Stage A
+  tests` → 88 passed on 2026-07-01. This includes the complete Stage A
   regression; Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT staging
-  and candidate-gather equivalence tests; and thirteen DR proposal/review audit,
-  output, fail-closed, read-only, and training-isolation contracts.
+  and candidate-gather equivalence tests; and fifteen DR proposal/review/repair
+  audit, output, fail-closed, read-only, and training-isolation contracts.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -285,15 +285,32 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   before/after SHA-256
   `428139079931e8091409be70c1c4442c457e0869b10fea894fd2986d0f6b6d1e`.
   Therefore no proposal file changed and no `reviewed_soft` was created.
+- Human initial review marks 000039, 000040, and 000041 as failed and needing
+  localized repair. The other 27 high-risk-pack views temporarily pass visual
+  review. This is not `reviewed_soft` acceptance and authorizes no mask loading,
+  `lambda_spec`, or training.
+- Independent repair candidates are at
+  `output/stage_b_tihubird_dr_glass_repair_candidates_v1/repair_candidates/`.
+  The detected failure is the v1 convex top boundary reaching image row zero
+  and absorbing dinosaur/ceiling background. Each repair uses RGB glass-edge,
+  DR normal/depth boundary evidence, and 000038/000042 continuity to remove only
+  the erroneous top region. Added hard pixels are zero for all three; no other
+  proposal was regenerated.
+- V1-to-repair hard changed ratios are 0.026212 / 0.028458 / 0.030071 for
+  000039 / 000040 / 000041. Areas change from
+  0.210159/0.215424/0.229978 to 0.183947/0.186966/0.199907. The complete source
+  proposal tree retains identical before/after SHA-256
+  `428139079931e8091409be70c1c4442c457e0869b10fea894fd2986d0f6b6d1e`.
+  Visible top-edge spans cover about 55.9%, 63.1%, and 41.1% of the repair bbox;
+  hidden spans behind dinosaur/reflection remain explicit manual-review risks.
 
 ## Current boundary and next exact task
 
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The immediate next action is user completion of the 30-view high-risk review
-  checklist, beginning with 000041, 000012, 000040, 000039, and 000013, not
-  training.
+  The immediate next action is user review of the three localized repair
+  candidates and their hidden top-edge spans, not training.
   Automatic proposals must be manually corrected/confirmed before any
   `reviewed_soft` directory or formal training manifest exists; even then
   `lambda_spec>0` needs separate approval.

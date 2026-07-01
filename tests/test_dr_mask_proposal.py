@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+import cv2
 import numpy as np
 import pytest
 from PIL import Image
@@ -22,6 +23,12 @@ from utils.dr_mask_high_risk_review import (
     REVIEW_FIELDS,
     generate_high_risk_review_pack,
     proposal_tree_digest,
+)
+from utils.dr_mask_repair import (
+    Line,
+    apply_subtractive_top_repair,
+    detect_repair_top_line,
+    reference_top_line,
 )
 
 
@@ -313,3 +320,39 @@ def test_high_risk_review_pack_rejects_duplicate_stems(tmp_path):
         generate_high_risk_review_pack(
             proposal_output, tmp_path / "high_risk_review", groups
         )
+
+
+def test_local_top_repair_uses_visible_edge_and_is_strictly_subtractive():
+    height, width = 40, 64
+    rgb = np.full((height, width, 3), 24, dtype=np.uint8)
+    cv2.line(rgb, (10, 8), (54, 10), (20, 235, 40), 3, cv2.LINE_AA)
+    original = np.zeros((height, width), dtype=np.uint8)
+    cv2.fillConvexPoly(
+        original,
+        np.asarray([[10, 0], [54, 0], [52, 35], [12, 35]], dtype=np.int32),
+        255,
+    )
+    normal = np.full((20, 32, 3), (127, 127, 255), dtype=np.uint8)
+    depth = np.full((20, 32, 3), 150, dtype=np.uint8)
+    references = (Line(10, 7, 54, 9), Line(10, 9, 54, 11))
+    top_line, evidence = detect_repair_top_line(
+        rgb, normal, depth, original, references
+    )
+    repaired = apply_subtractive_top_repair(original, top_line, feather_pixels=2)
+    assert evidence["rgb_green_excess"] > 0
+    assert 5 <= top_line.y_at(32) <= 13
+    assert np.all(repaired <= original)
+    assert np.count_nonzero(repaired > original) == 0
+    assert np.count_nonzero(repaired < original) > 0
+    assert repaired[0].max() == 0
+    assert repaired[20].max() == 255
+
+
+def test_reference_top_line_selects_long_upper_polygon_edge():
+    mask = np.zeros((50, 80), dtype=np.uint8)
+    polygon = np.asarray([[12, 9], [67, 12], [63, 44], [16, 46]], dtype=np.int32)
+    cv2.fillConvexPoly(mask, polygon, 255)
+    line = reference_top_line(mask)
+    assert line.length > 50
+    assert abs(line.slope) < 0.1
+    assert line.y_at(40) < 15

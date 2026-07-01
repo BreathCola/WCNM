@@ -1425,3 +1425,61 @@ checklist completion. Do not create `reviewed_soft`, enable `lambda_spec`, run
 training, or enter Stage C/D.
 
 Required ablation: None. Human review is the next gate.
+
+## B-016 — Failed top-boundary proposals receive subtractive local candidates
+
+Date: 2026-07-01
+
+Question: How should human-rejected frames 000039--000041 be repaired without
+changing the frozen proposal method, copying neighboring masks, or creating
+accepted supervision?
+
+Chosen implementation: Record the initial human review exactly: 000039,
+000040, and 000041 fail and require local repair; the other 27 high-risk-pack
+views temporarily pass. Keep the complete v1 proposal tree read-only. Generate
+three independent single-channel uint8 files under `repair_candidates/`, with
+no `reviewed` or `final` naming.
+
+The failure is localized to the top: each v1 convex hull reaches row zero and
+includes dinosaur/ceiling background, while side and bottom boundaries remain
+useful. Detect long near-horizontal candidates from full-resolution RGB Canny/
+Hough evidence. Score each candidate using green glass-edge color, native DR
+normal/depth boundary support, visible span, and continuity with the long upper
+edges of unchanged 000038 and 000042 proposals. Neighbor masks are not copied
+or image-coordinate-interpolated. Extend only the selected visible line across
+the current frame's v1 bbox and multiply v1 by a 16-pixel soft lower-half-plane
+gate. This operation is strictly subtractive: every repair value is at most its
+v1 value and side/bottom pixels are not regenerated.
+
+Verified result: 000039 area changes `0.210159 -> 0.183947`, bbox top `0 -> 215`,
+and hard changed ratio is `0.026212`; 000040 changes
+`0.215424 -> 0.186966`, bbox top `0 -> 191`, and `0.028458`; 000041 changes
+`0.229978 -> 0.199907`, bbox top `0 -> 190`, and `0.030071`. Removed hard-pixel
+counts are 215,873 / 234,372 / 247,654, while added counts are zero. The source
+1,110-file proposal tree has identical before/after aggregate SHA-256
+`428139079931e8091409be70c1c4442c457e0869b10fea894fd2986d0f6b6d1e`.
+
+Each source-resolution review page contains RGB, v1/repair overlays, boundary
+difference, direct top/bottom/left/right crops, statistics, and a 000037--000043
+continuity strip. A three-row comparison provides
+RGB/v1/repair/difference columns. The visible top-line segments span about
+55.9%, 63.1%, and 41.1% of their bboxes. The remaining line is extrapolated
+through dinosaur/reflection occlusion and therefore still requires human
+confirmation or manual drawing.
+
+Alternatives: Change global proposal thresholds; rerun all 111; copy 000038 or
+000042; interpolate neighbor masks; add missing pixels; overwrite v1; or install
+the candidates as `reviewed_soft`.
+
+Why: The subtraction removes the exact visually rejected background region and
+preserves previously acceptable side/base evidence. Explicit occlusion risk
+keeps automatic geometry from masquerading as human truth.
+
+Paper fidelity: Offline annotation assistance only; no rendering, training,
+loss, checkpoint, schedule, or field changes.
+
+Impact: Stop for human review of the three candidates. They are not formal
+masks and do not authorize `lambda_spec`, training, or Stage C/D.
+
+Required ablation: None. Human confirmation/manual top-edge correction is the
+next gate.
