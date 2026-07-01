@@ -35,6 +35,7 @@ def _prepare_ascii_jit_build():
     source_items = [
         ("bvh_bindings.cpp", (source_root / "bvh_bindings.cpp").read_bytes()),
         ("bvh_cuda.cu", (source_root / "bvh_cuda.cu").read_bytes()),
+        ("candidate_gather_cuda.cu", (source_root / "candidate_gather_cuda.cu").read_bytes()),
     ]
     fingerprint = hashlib.sha256()
     for name, contents in source_items:

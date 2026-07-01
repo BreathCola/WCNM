@@ -7,6 +7,7 @@ import torch
 import torch.nn.functional as F
 
 from raytracer.acceleration_structure import CudaLBVH
+from raytracer.candidate_parameters import pack_reflection_parameters
 from raytracer.differentiable_raytrace import RaytraceAux, trace_candidates
 
 
@@ -74,6 +75,7 @@ def raytrace(
     aux_indices, aux_weights = [], []
     candidate_count_chunks, exact_count_chunks = [], []
     traversal_events, intersection_events = [], []
+    candidate_parameter_table = pack_reflection_parameters(model)
     for start in range(0, ray_origins.shape[0], chunk_size):
         origins_chunk = ray_origins[start : start + chunk_size]
         directions_chunk = directions[start : start + chunk_size]
@@ -97,6 +99,7 @@ def raytrace(
             hit_threshold,
             return_aux=return_aux,
             return_diagnostics=return_diagnostics,
+            candidate_parameter_table=candidate_parameter_table,
         )
         if return_aux and return_diagnostics:
             outputs, aux, trace_diagnostics = result

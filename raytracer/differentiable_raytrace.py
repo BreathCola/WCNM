@@ -4,7 +4,11 @@ from dataclasses import dataclass
 
 import torch
 
-from utils.surfel_utils import quaternion_to_rotation_matrix
+from raytracer.candidate_parameters import (
+    decode_candidate_parameters,
+    gather_candidate_parameters,
+    pack_reflection_parameters,
+)
 
 
 @dataclass
@@ -38,6 +42,7 @@ def trace_candidates(
     hit_threshold: float,
     return_aux: bool = False,
     return_diagnostics: bool = False,
+    candidate_parameter_table: torch.Tensor = None,
 ):
     ray_count = origins.shape[0]
     counts = offsets[1:] - offsets[:-1]
@@ -69,12 +74,17 @@ def trace_candidates(
     candidate_valid = padded >= 0
     safe = padded.clamp_min(0)
 
-    xyz = model.get_xyz[safe]
-    rotation = quaternion_to_rotation_matrix(model.get_rotation)[safe]
+    if candidate_parameter_table is None:
+        candidate_parameter_table = pack_reflection_parameters(model)
+    candidate_parameters = decode_candidate_parameters(
+        gather_candidate_parameters(candidate_parameter_table, safe)
+    )
+    xyz = candidate_parameters["xyz"]
+    rotation = candidate_parameters["rotation"]
     tangent_u = rotation[..., :, 0]
     tangent_v = rotation[..., :, 1]
     normal = rotation[..., :, 2]
-    scaling = model.get_scaling[safe].clamp_min(1e-8)
+    scaling = candidate_parameters["scaling"].clamp_min(1e-8)
     denominator = (directions[:, None, :] * normal).sum(dim=-1)
     numerator = ((xyz - origins[:, None, :]) * normal).sum(dim=-1)
     parallel = denominator.abs() <= 1e-8
@@ -87,13 +97,13 @@ def trace_candidates(
     radius2 = local_u.square() + local_v.square()
     exact_valid = candidate_valid & (~parallel) & (distance > 0.0) & (radius2 <= float(cutoff_sigma) ** 2)
     exact_intersection_counts = exact_valid.sum(dim=1) if return_diagnostics else None
-    opacity = model.get_opacity[safe, 0] * torch.exp(-0.5 * radius2)
+    opacity = candidate_parameters["opacity"][..., 0] * torch.exp(-0.5 * radius2)
     opacity = torch.where(exact_valid, opacity.clamp(0.0, 1.0 - 1e-6), torch.zeros_like(opacity))
     sort_distance = torch.where(exact_valid, distance, torch.full_like(distance, torch.inf))
     sorted_distance, order = torch.sort(sort_distance, dim=1)
     sorted_opacity = torch.gather(opacity, 1, order)
     sorted_indices = torch.gather(padded, 1, order)
-    color = model.get_color[safe]
+    color = candidate_parameters["color"]
     sorted_color = torch.gather(color, 1, order[..., None].expand(-1, -1, 3))
     transmittance = torch.cumprod(
         torch.cat((torch.ones_like(sorted_opacity[:, :1]), 1.0 - sorted_opacity[:, :-1]), dim=1),
