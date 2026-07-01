@@ -332,9 +332,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The only authorized next action is a three-iteration `lambda_spec=0.2` smoke
-  from the original read-only 15,003/3 checkpoint using the formal manifest.
-  Stop after global 15,006; no 100-step or long training is authorized.
+  The authorized three-iteration `lambda_spec=0.2` smoke has stopped at global
+  15,006 / R-local 6. No 100-step or long training is authorized. The next
+  action is user inspection of its transparent-mask overlay and ks/L_spec
+  evidence, not more training.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
@@ -342,7 +343,37 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Pending before acceptance: verified real-scene `L_spec` behavior and user
-inspection of its transparent-mask overlay and ks evidence. Peak reserved-memory
-headroom must remain visible in any later training decision. Stage B acceptance
-cannot advance before that evidence exists.
+Pending before acceptance: user inspection of the real-scene L_spec smoke's
+transparent-mask overlay and ks evidence, followed by a separately authorized
+controlled pilot if accepted. Peak reserved-memory headroom must remain visible
+in any later training decision. Stage B acceptance cannot advance before that
+evidence exists.
+
+## Three-step formal-mask L_spec smoke
+
+- Source checkpoint remained the original read-only global 15,003 / R-local 3
+  artifact with SHA-256 `ad92c7d75312cc5df60b7a1dd5d762d8e7d65b8de0f90264d742f969baf7e144`.
+  The first `v1` launch restricted visible GPUs and stopped at 0 steps on CUDA
+  RNG-state cardinality; it is preserved and excluded. The clean `v2` retry
+  restored the original visibility and completed exactly 15004--15006 / 4--6.
+- Per-step `(L_spec, total loss)` is `(0.164784, 0.120062)`,
+  `(0.156079, 0.095425)`, `(0.130580, 0.085687)`. Formal-mask support fractions
+  are 0.2158 / 0.2050 / 0.1719 for sampled views 000042 / 000079 / 000062.
+  Inside-mask L_spec ks gradients are nonzero and point upward under gradient
+  descent; outside-mask maximum absolute gradient is exactly zero every step.
+- Inside-mask ks min/mean/p50/p95/p99 is
+  `0.099775/0.099961/0.099978/0.100177/0.100220`,
+  `0.099577/0.099931/0.099952/0.100222/0.100336`, and
+  `0.099379/0.099950/0.099941/0.100344/0.100474`. Outside values remain finite
+  and centered near 0.1.
+- Candidate p50/p95/p99 is `113/194/253`, `106/215/267`, `121/219/267`;
+  exact p50/p95/p99 is `26/55/73`, `25/64/78`, `28/65/75`. Warm raytrace wall
+  is 218/208 ms. D/R counts remain 346,118/4,096. Allocator peak allocated/
+  reserved is 13,538,393,088 / 15,101,591,552 bytes.
+- Final checkpoint SHA-256 is
+  `f46c00375699d3b4b7c018a4277b4ba3e93abc66f60ddc7f282a0caf979b93fb`.
+  It records the exact formal manifest hashes and contains 63 recursively
+  inspected tensors / 19,912,887 elements with zero non-finite values. Separate
+  D/R PLYs and the complete fixed-view debug set exist at iteration 15,006.
+- Technical classification: `L_SPEC_SMOKE_PASSED_AWAITING_USER_REVIEW`. It is
+  neither Stage B acceptance nor authorization for a 100-step pilot.

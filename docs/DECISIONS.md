@@ -1545,3 +1545,29 @@ do not authorize 100 steps, long training, or Stage B acceptance.
 Required ablation: Inspect the three-step transparent-mask overlay, inside/
 outside ks statistics, and L_spec-only gradient evidence before considering a
 100-step lambda-spec pilot.
+
+Verified smoke result: The first launch attempt exposed only GPU 0 and stopped
+at 0 optimization steps while restoring a checkpoint containing two CUDA RNG
+states; its `v1` directory is preserved and is not a resume source. The fresh
+`v2` retry restored the same original checkpoint with its original two-GPU
+visibility and ran exactly global 15004--15006 / R-local 4--6. No training
+formula or parameter changed.
+
+All three L_spec values are finite and positive (`0.164784`, `0.156079`,
+`0.130580`). Every valid inside-mask surface sample has a nonzero negative
+L_spec-only derivative apart from floating reporting roundoff fractions, every
+outside-mask derivative is exactly zero, and gradient descent therefore pushes
+under-threshold ks upward. This probe uses `autograd.grad(..., retain_graph=True)`
+and is not accumulated into model parameters. Candidate p50/p95/p99 stays
+`113/194/253`, `106/215/267`, `121/219/267`; exact intersections stay
+`26/55/73`, `25/64/78`, `28/65/75`. Warm raytrace wall time is about 218/208 ms.
+Peak allocator evidence is 13,538,393,088 allocated and 15,101,591,552 reserved
+bytes. D/R remain 346,118/4,096.
+
+The final checkpoint is `rtgs_stage_b` at 15006/6, SHA-256
+`f46c00375699d3b4b7c018a4277b4ba3e93abc66f60ddc7f282a0caf979b93fb`;
+recursive inspection covers 63 tensors / 19,912,887 elements with no NaN/Inf.
+The fixed-view 000101 transparent mask and overlay have matching 478x269 debug
+geometry and the mask hash matches the formal manifest. This is a passed
+technical smoke, but a 100-step lambda-spec pilot remains unauthorized until
+the user inspects the overlay and statistics.

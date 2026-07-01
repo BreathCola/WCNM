@@ -101,7 +101,7 @@ may be introduced.
 
 ### Specular constraint contract
 
-- [ ] Load, validate, and visualize only a real mask source accepted for the
+- [x] Load, validate, and visualize only a real mask source accepted for the
   Stage B smoke.
 - [x] Never fabricate a transparent mask or claim a temporary proxy is the
   final Stage C mask.
@@ -134,6 +134,33 @@ raytrace wall time is about 152 ms for 128,582 rays, and incremental peak memory
 is about 319 MiB. D/R checkpoint state is finite. Microfacet D lies in
 `1.270–1.276`, so its nearly white map is a real low-variance result. The LBVH is
 not a full-field brute-force traversal; R count and initial scale remain fixed.
+
+### Formal-mask L_spec smoke
+
+- [x] Archive the accepted 111 masks in an immutable versioned directory and
+  validate exact sources, RGB/mask hashes, ordered stems, and padding exclusion.
+- [x] Resume only the original 15,003/3 checkpoint and run exactly three added
+  iterations with `lambda_spec=0.2` and the formal manifest.
+- [x] Record finite positive L_spec and total loss at each step, nonzero
+  inside-mask L_spec-only ks gradient, exactly zero outside-mask gradient, and
+  the upward ks direction implied by gradient descent.
+- [x] Preserve full-image RGB reconstruction, D/R counts, BVH behavior,
+  checkpoint namespaces, and complete reflection debug outputs.
+- [x] Save and recursively inspect the 15,006/6 checkpoint and independent D/R
+  PLYs with no NaN/Inf.
+- [ ] User inspects `transparent_mask.png`, `overlay.png`, and the inside/outside
+  ks statistics before any controlled 100-step lambda-spec pilot is authorized.
+
+The clean smoke output is
+`output/stage_b_tihubird_reflection_dr_c03_lspec_smoke_g15003_15006_v2/`.
+The three positive L_spec values are 0.164784 / 0.156079 / 0.130580. Outside
+mask L_spec gradient is exactly zero on all sampled valid D surfaces; inside
+gradient is nonzero and points toward increasing under-threshold ks. Candidate/
+exact distributions remain in the prior diagnostic range, warm raytrace wall is
+about 218/208 ms, and peak allocated/reserved is 13.54/15.10 GB. D/R remain
+346,118/4,096. The final finite checkpoint hash is
+`f46c00375699d3b4b7c018a4277b4ba3e93abc66f60ddc7f282a0caf979b93fb`.
+This is technical smoke evidence only; Stage B remains unaccepted.
 
 ### Controlled 100-step health pilot
 
@@ -318,7 +345,7 @@ dummy outputs are permitted in Stage B.
   successful user smoke.
 - [x] D and R optimizers, densification, checkpoints, and exports are separate.
 - [x] Full microfacet BRDF runs without split-sum approximation in tests.
-- [ ] The accepted transparent-region mask raises ks through the documented
+- [x] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [x] Reviewed smoke checkpoint tensors and tested gradients contain no NaN or Inf.
 - [x] Stage A test suite and original code paths do not regress in the full
