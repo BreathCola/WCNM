@@ -140,11 +140,43 @@ not a full-field brute-force traversal; R count and initial scale remain fixed.
 - [ ] Resume exactly from global 15,003 / R local 3 without resetting any state.
 - [ ] Keep `lambda_spec=0` and load/create no mask.
 - [ ] Keep all model, renderer, BVH, densification, and training settings fixed.
-- [ ] Emit debug exactly at 15,028 / 15,053 / 15,078 / 15,103.
+- [ ] Use the existing `--debug_interval 25`; debug at global 15,025 / 15,050 /
+  15,075 / 15,100 is accepted and exact +25 alignment is not required.
 - [ ] Save checkpoint and independent D/R PLY only at 15,103.
 - [ ] Stop at global 15,103 / R local 103 and classify health without treating
   a flat 100-step PSNR as automatic failure.
-- [ ] Do not run if the existing CLI cannot express every node exactly.
+
+The first attempt reached global 15,019 / R local 19 before receiving SIGINT
+because ordinary steps took roughly 50--60 seconds. It is
+`PILOT_ABORTED_FOR_PROFILE`, not `PILOT_HEALTHY` or `PILOT_BLOCKED`; preserve its
+partial output and never resume from it. The original global 15,003 / R local 3
+checkpoint remains the sole retry source.
+
+### Candidate-gradient performance repair
+
+- [x] Preserve candidate IDs/order, exact intersection, depth sort, alpha
+  composite, BRDF, loss, chunk size, model state, and D ray gradients.
+- [x] Gather one compact 13-channel raw R table per candidate instead of five
+  independent activated parameter views.
+- [x] Sort candidate IDs once per chunk and reduce all 13 gradient channels by
+  Reflection surfel ID without per-candidate global atomics.
+- [x] Match legacy forward values, full raytrace outputs, Stage B loss, R
+  gradients, and ray origin/direction gradients in CUDA tests.
+- [x] Pass the complete Stage A/Stage B suite: 73 tests.
+- [x] Re-profile the same two steps from the original read-only 15,003/3
+  checkpoint and verify the long candidate indexing backward kernels disappear.
+
+For global 15,004, the matched Nsight interval fell from 50.461 s to 1.572 s.
+The R backward envelope fell from 49.524 s to 0.547 s. All 160 long candidate
+`indexing_backward_kernel` calls (49.356 s) disappeared; nine unrelated short
+calls remain and total 0.430 ms. The replacement's 32 grouped reduction kernels
+total 253.612 ms. Scalar loss is exactly identical at both profiled iterations.
+
+The new external GPU sampler observed 15,067 MiB device-total peak versus an
+earlier separately observed 10,627 MiB total. Because the observations were not
+collected by one identical sampler, treat this as a material memory-risk signal,
+not a precise allocation delta. It must be watched in the fresh health pilot;
+no model or training setting is changed pre-emptively.
 
 ## Debug outputs required before Stage B acceptance
 
@@ -190,7 +222,7 @@ dummy outputs are permitted in Stage B.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite: full repository result is 70 passed.
+- [x] Existing Stage A regression suite: full repository result is 73 passed.
 
 ## Acceptance checklist
 
@@ -204,7 +236,7 @@ dummy outputs are permitted in Stage B.
 - [ ] The accepted transparent-region mask raises ks through the documented
   specular constraint.
 - [x] Reviewed smoke checkpoint tensors and tested gradients contain no NaN or Inf.
-- [x] Stage A test suite and original code paths do not regress in the 70-test run.
+- [x] Stage A test suite and original code paths do not regress in the 73-test run.
 - [x] The first successful Stage B smoke was run by the user and produced real
   checkpoint, D/R PLY, and debug evidence.
 - [x] B-1d candidate density, exact intersections, timing/memory, and display
@@ -230,8 +262,10 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
 47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
 9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
+c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 ```
 
 Implemented and tested does not mean accepted. The successful user smoke proved
-the structural Stage B path, while the B-1d diagnostic resume and real manual
-soft-mask evidence remain user-only. Stage C and Stage D remain forbidden.
+the structural Stage B path, and B-1d diagnostics plus the candidate-gradient
+performance repair have real evidence. A completed health pilot and real manual
+soft-mask evidence are still missing. Stage C and Stage D remain forbidden.

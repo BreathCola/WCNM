@@ -10,15 +10,19 @@ The first user-operated TiHuBird smoke restored D and initialized R, then
 aborted before its first optimization step on an ASCII-locale CUDA JIT path
 error. The user-operated `smoke_2_retry1` then completed 2/2 steps from the
 fixed code and produced a valid Stage B checkpoint, independent D/R PLYs, and
-real debug maps. Review found nearly complete ray hits plus physical-scale maps
-that quantized black/saturated white, so B-1d debug-only observability is now
-implemented and tested but awaits a user-operated one-step resume smoke. Stage B
-is neither complete nor accepted. After the first diagnostic resume stopped on
-the RNG map-location bug, `resume_diag_15003_retry1` completed and verified B-1d
-at global 15,003 / R local 3. A controlled additional 100-step health pilot is
-authorized only if the existing CLI can express its exact debug/save schedule.
-The frozen StableNormal baseline and C03 initialization artifacts remain
-unchanged. Stage C and Stage D have not started.
+real debug maps. After the first diagnostic resume stopped on the RNG
+map-location bug, `resume_diag_15003_retry1` completed and verified B-1d at
+global 15,003 / R local 3. The first controlled health pilot was interrupted
+with SIGINT after global 15,019 / R local 19 and classified
+`PILOT_ABORTED_FOR_PROFILE`: ordinary steps took roughly 50--60 seconds, so its
+partial output is preserved and must never be used as a resume source. Nsight
+then isolated 160 long candidate advanced-index backward kernels as 97.8% of a
+step. Commit `c87bb66` replaces only that R-parameter gather backward with a
+grouped custom CUDA reduction. A matched two-step profile from the original
+15,003/3 checkpoint reduced global 15,004 from 50.461 s to 1.572 s with exact
+15004/15005 scalar losses. Stage B is neither complete nor accepted. The frozen
+StableNormal baseline and C03 initialization artifacts remain unchanged. Stage
+C and Stage D have not started.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -36,6 +40,7 @@ f1e90e780eb4777ddeeece70bc393e0b21b080db  on-disk checkpoint resume test
 9d69a0d2a8ac402744ee638c64822b8d4e601da9  B-1d observability implementation
 47bc8422a7c024ad7946a053f8a21e74d9af2851  B-009 RNG device contract
 9156b1eed7ecab41b873ef796d27783289723f6d  CUDA checkpoint RNG restore fix
+c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 ```
 
 Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
@@ -114,9 +119,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 70 passed on 2026-06-30. This includes the complete Stage A
-  regression plus 32 Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
-  staging tests.
+  tests` → 73 passed on 2026-07-01. This includes the complete Stage A
+  regression plus the Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
+  staging and candidate-gather equivalence tests.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -163,14 +168,36 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   white visualization is correct. Reflection contribution is nonzero and
   spatially structured in the companion map. No Reflection count or initial
   scale adjustment is justified before the controlled pilot.
+- The aborted `health100` output contains completed TensorBoard scalars through
+  global 15,019, but it is neither healthy nor blocked evidence and is not a
+  resume source. The original read-only
+  `resume_diag_15003_retry1/chkpnt15003.pth` remains the sole pilot resume point
+  (SHA-256
+  `ad92c7d75312cc5df60b7a1dd5d762d8e7d65b8de0f90264d742f969baf7e144`).
+- The matched Nsight comparison uses global 15,004 bounded by consecutive D
+  raster forwards. Wall time fell from `50.461 s` to `1.572 s`; the R backward
+  envelope fell from `49.524 s` to `0.547 s`. The old 160 long
+  `indexing_backward_kernel` calls (`49.356 s`) are absent; the nine remaining
+  unrelated short calls total `0.430 ms`. The new 32 grouped reducers total
+  `253.612 ms`. R forward, D rasterization, VGG, and optimizer timing remained
+  in the same sub-second regime. The 15004/15005 losses are exactly unchanged:
+  `0.08710507303476334` and `0.06420626491308212`.
+- The new profile's 200 ms external sampler observed a 15,067 MiB device-total
+  peak (302 MiB idle baseline, approximately 14,765 MiB attributable to the
+  process). This is higher than the earlier separately observed 10,627 MiB
+  total / 10,320 MiB process peak and remains a short-pilot risk; it does not
+  negate removal of the measured backward bottleneck.
 
 ## Current boundary and next exact task
 
-- The next action is to verify that the current CLI can express an additional
-  100-step pilot from global 15,003 / R local 3 with debug exactly at
-  15,028/15,053/15,078/15,103 and checkpoint/D-R PLY only at 15,103.
-- Run nothing if that exact schedule is not expressible. Do not change code or
-  experiment settings to work around the CLI boundary.
+- The performance repair is code/test/profile complete, but the 100-step health
+  pilot has not completed. A future operator-authorized retry must start again
+  from the original read-only global 15,003 / R local 3 checkpoint, never from
+  the aborted health directory or either disposable profile directory.
+- The accepted existing CLI schedule uses `--debug_interval 25`, so observation
+  nodes may occur at global 15,025/15,050/15,075/15,100. Global 15,103 is the
+  final checkpoint and independent D/R PLY node; exact +25 alignment is not an
+  experiment constraint and requires no new CLI code.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
   Enabling the constraint later requires a complete real 111/111 manual soft
   mask set with matching dimensions and recorded aggregate hash.
@@ -181,6 +208,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - Stage C and Stage D remain forbidden until their own acceptance and explicit
   stage transitions.
 
-Blocked by: exact CLI expressibility and completion/review of the controlled
-100-step health pilot; then a real 111/111 manual soft-mask set before enabling
-`lambda_spec>0`. Stage B acceptance cannot advance before that evidence exists.
+Pending before acceptance: completion/review of a fresh controlled 100-step
+health pilot, including the new peak-memory risk, then a real 111/111 manual
+soft-mask set before enabling `lambda_spec>0`. Stage B acceptance cannot advance
+before that evidence exists.

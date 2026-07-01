@@ -1120,3 +1120,58 @@ Impact: Stage B remains unaccepted. A real 111/111 manual soft-mask set and
 `L_spec` behavior are still unverified. Stage C and Stage D remain forbidden.
 
 Required ablation: None before the controlled health pilot.
+
+## B-011 — Group Reflection candidate-parameter gradients by surfel ID
+
+Date: 2026-07-01
+
+Question: How should Stage B remove the measured Reflection candidate
+advanced-index backward bottleneck without changing raytrace, shading, loss, or
+training semantics?
+
+Chosen implementation: Pack each Reflection surfel's raw `xyz` (3), quaternion
+(4), 2D log-scale (2), opacity logit (1), and color logits (3) into one
+13-channel view. A single custom CUDA gather preserves the LBVH candidate array
+exactly, including order and repeated IDs. The same pointwise activations used by
+the model are applied after gather: quaternion normalization and matrix
+conversion, scale exponential, and opacity/color sigmoid. Exact plane/ellipse
+intersection, depth sort, Gaussian alpha, front-to-back composite, BRDF, loss,
+ray chunking, and all model/training settings are unchanged.
+
+During backward, each chunk creates one candidate-position array, radix-sorts
+candidate ID plus original position once, and launches one block per Reflection
+surfel. That block binary-searches its ID range and reduces all 13 gradient
+channels together in shared memory before one write per surfel/channel. No
+candidate performs a contended global atomic scatter, and all attributes reuse
+the same ID grouping. This custom path covers only Reflection parameter gather;
+ray origin and direction remain in the ordinary differentiable exact-hit graph,
+so gradients to Diffuse position/normal are not detached.
+
+Alternatives: Replace advanced indexing with `index_select`/`gather`; run five
+independent `index_add_` reductions; atomically scatter every candidate; alter
+the candidate set, chunk size, Reflection count/scale, or mask rays.
+
+Why: The original matched Nsight interval contained 160 long
+`indexing_backward_kernel` calls from five parameter families across 32 chunks.
+They totaled 49.356 s and occupied 97.8% of the 50.461 s global-15,004 step. In
+the matched profile after commit `c87bb66`, no long indexing backward kernel
+remains: nine unrelated short calls total 0.430 ms. The 32 grouped reducers total
+253.612 ms, the complete R backward envelope is 0.547 s, and the step is 1.572
+s. Global 15,004 and 15,005 losses are bit-identical to the old profile.
+
+Paper fidelity: This changes only the implementation of mathematically
+identical repeated-index gradient accumulation for Reflection parameters. It
+does not change the continuous renderer or any Stage B experiment semantics.
+
+Impact: Repeated-ID forward/gradient tests, complete raytrace tests, a full
+Stage B training-style loss comparison, and all existing regressions pass (73
+tests). The external 200 ms sampler observed a 15,067 MiB device-total peak in
+the new profile, compared with an earlier separately observed 10,627 MiB total.
+Because those memory observations are not one identical measurement method, the
+difference is recorded as an unresolved short-pilot risk rather than a proven
+allocation regression. Do not change model/training settings before measuring
+it in the next fresh health pilot.
+
+Required ablation: None. Stage B remains unaccepted; complete the controlled
+health pilot from the original 15,003/3 checkpoint and later verify the real
+111/111 manual soft-mask path before any stage transition.
