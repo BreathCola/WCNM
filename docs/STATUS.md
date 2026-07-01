@@ -123,9 +123,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 ## Tests and verified behavior
 
 - `MAX_JOBS=4 conda run --no-capture-output -n RT-GS python -m pytest -q
-  tests` → 73 passed on 2026-07-01. This includes the complete Stage A
-  regression plus the Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT
-  staging and candidate-gather equivalence tests.
+  tests` → 81 passed on 2026-07-01. This includes the complete Stage A
+  regression; Stage B model/ray/BRDF/checkpoint/render/debug/mask/JIT staging
+  and candidate-gather equivalence tests; and eight DR proposal audit/output/
+  training-isolation contracts.
 - The CUDA extension compiled successfully for PyTorch 2.0.1 + CUDA 11.8 on an
   RTX 3090. CUDA/oracle consistency, chunking, refit/rebuild, and nonzero
   finite-difference gradients for xyz/rotation/scaling/opacity/color/ray
@@ -221,14 +222,42 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   Recursive inspection covered 63 tensors / 19,912,887 elements and found no
   NaN/Inf. It records `lambda_spec=0` and no specular-mask manifest.
 
+## DR glass-mask proposal audit (not supervision)
+
+- The strict input audit passed for all 111 real TiHuBird views. Source RGB is
+  JPEG RGB uint8 at 3827x2152; stored DR RGB, normal, depth, basecolor, and
+  diffuse_albedo are PNG RGB uint8 at 704x384. Source hashes, ordered stems,
+  dimensions, manifest records, generation-time alignment validation, and all
+  artifact paths/hashes were checked. Raw slots 111--119 are the nine final
+  chunk padding records and are excluded from every real-view mapping.
+- DR normal is decoded as `rgb / 127.5 - 1`, then normalized only for
+  continuity cues. Its component/axis convention remains unconfirmed; no
+  semantic axis interpretation is used. The 111 real normal maps have no
+  non-finite or decoded-near-zero pixel. DR depth is a per-frame relative RGB
+  visualization with no documented invalid sentinel or COLMAP/metric scale;
+  only within-view boundaries and continuity are used.
+- Nine automatic review proposals were generated for stems 000000, 000014,
+  000028, 000042, 000055, 000069, 000083, 000097, and 000110 at
+  `output/stage_b_tihubird_dr_glass_proposal_9views_v2/`. Each contains the
+  requested RGB/DR/boundary/proposal/uncertainty views and metadata; the root
+  contains the strict audit manifest, contact sheet, proposal index, and human
+  review contract.
+- These files are explicitly automatic drafts with no training role. No
+  `reviewed_soft` directory, formal training mask manifest, mask loader input,
+  `lambda_spec` run, or new scene training was created. Visual inspection finds
+  the enclosure outline in all nine views, while every view conservatively
+  flags possible bird inclusion because RGB texture exists behind the glass.
+  Human review is required before any 111-view expansion decision.
+
 ## Current boundary and next exact task
 
 - Do not extend the health pilot or start long training. Preserve its checkpoint,
   metrics, diagnostics, D/R PLYs, and allocator evidence.
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
-  The next independent validation requires a complete real 111/111 manual soft
-  mask set with matching dimensions and recorded aggregate hash before any
-  `lambda_spec>0` run.
+  The immediate next action is user review of the nine DR-derived proposals,
+  not training. Only after method review may proposals be expanded and manually
+  corrected into a complete 111/111 soft-mask set with matching dimensions and
+  recorded aggregate hash; even then `lambda_spec>0` needs separate approval.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

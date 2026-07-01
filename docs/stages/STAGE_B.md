@@ -194,6 +194,36 @@ collected by one identical sampler, treat this as a material memory-risk signal,
 not a precise allocation delta. It must be watched in the fresh health pilot;
 no model or training setting is changed pre-emptively.
 
+### DR-assisted glass-mask proposal gate
+
+- [x] Strictly audit all 111 source RGB and real DR RGB/normal/depth/basecolor/
+  diffuse_albedo artifacts, including paths, hashes, modes, dimensions, and
+  source/stem ordering.
+- [x] Record and exclude the final nine padded DR slots; never map them to
+  TiHuBird views.
+- [x] Keep DR normal axis semantics unconfirmed and DR depth within-frame
+  relative; do not substitute the Stage B D G-buffer as primary geometry.
+- [x] Generate automatic proposals for only the nine fixed representative
+  stems using combined RGB, DR normal, DR depth, connectivity, and optional
+  basecolor cues.
+- [x] Export source-resolution proposal soft/hard-preview/overlay/uncertainty,
+  cue boundaries, metadata, and a five-column contact sheet.
+- [x] Keep proposals outside the accepted specular-mask contract. The training
+  loader rejects their nested/non-complete layout, and no `reviewed_soft`,
+  formal mask manifest, or `lambda_spec` run exists.
+- [ ] User reviews the nine-view contact sheet and decides whether the method is
+  adequate for a 111-view automatic-draft pass.
+- [ ] Humans revise/confirm all 111 source-resolution masks before any formal
+  manifest or separately authorized `L_spec` validation.
+
+The strict audit passed with 111 real records at source 3827x2152 and native DR
+704x384, plus padding slots 111--119 excluded. Normal maps are RGB uint8 decoded
+and normalized for continuity only; no axis convention is assumed. Depth maps
+are relative per-frame RGB visualizations and carry no COLMAP scale. The nine
+review proposals are at
+`output/stage_b_tihubird_dr_glass_proposal_9views_v2/`. They are annotation
+inputs, not real masks or supervision, and Stage B remains unaccepted.
+
 ## Debug outputs required before Stage B acceptance
 
 ```text
@@ -238,7 +268,8 @@ dummy outputs are permitted in Stage B.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite: full repository result is 73 passed.
+- [x] Existing Stage A regression suite plus DR proposal contracts: full
+  repository result is 81 passed.
 
 ## Acceptance checklist
 
@@ -285,6 +316,7 @@ c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 ```
 
 Implemented and tested does not mean accepted. The successful user smoke proved
-the structural Stage B path, and B-1d diagnostics plus the candidate-gradient
-performance repair have real evidence. A completed health pilot and real manual
-soft-mask evidence are still missing. Stage C and Stage D remain forbidden.
+the structural Stage B path, and B-1d diagnostics, the candidate-gradient
+performance repair, and the 100-step health pilot have real evidence. The
+nine-view DR proposals still require human review and real 111/111 manual
+soft-mask evidence is missing. Stage C and Stage D remain forbidden.

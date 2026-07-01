@@ -1236,3 +1236,68 @@ unaccepted: the next independent gate is a real 111/111 manual soft-mask set and
 verified `L_spec`; Stage C and Stage D remain forbidden.
 
 Required ablation: None for this health classification.
+
+## B-013 — DR geometry may seed review proposals, never mask supervision
+
+Date: 2026-07-01
+
+Question: How may the existing DiffusionRenderer artifacts reduce manual
+glass-enclosure annotation work without silently becoming `L_spec` supervision?
+
+Chosen implementation: Add a fail-closed, offline audit/proposal tool that is
+independent of the training mask loader. It validates the 111 ordered source
+stems and hashes, every real DR RGB/normal/depth/basecolor/diffuse_albedo path,
+format and size, the original generation validation, and all nine padding
+records. Padding slots 111--119 are recorded but excluded. A missing required
+artifact, source/hash/stem mismatch, unexpected image mode or size, invalid
+normal, or failed generation provenance aborts the run; nothing is silently
+resized to repair an audit failure.
+
+DR normal is decoded as `rgb / 127.5 - 1`, unit-normalized, and used only through
+dot-product continuity and boundary magnitude. Its axis convention remains
+unconfirmed, and no component is assigned a world/camera semantic meaning. DR
+depth remains a per-frame relative RGB visualization: it is never treated as
+COLMAP-scale depth or compared numerically across views. The stored DR RGB is
+used in the native 704x384 domain; source-sized review products are produced
+only after the exact 3827x2152 / 704x384 relation has passed audit. The original
+generation validation reports exact RGB alignment. Replaying PIL bilinear under
+the current Pillow build differs by at most two uint8 levels, which is recorded
+rather than mistaken for a stem or geometry mismatch.
+
+For only the nine fixed representative views, generate a connected convex
+enclosure proposal from multiple cues: RGB boundary/highlight evidence, DR
+normal continuity and discontinuity, within-frame DR depth regions/boundaries,
+optional DR basecolor evidence, centrality, connected-component filtering,
+hole/small-fragment suppression, and a feathered signed-distance edge. No one
+normal/depth threshold defines glass. `diffuse_albedo` is audited and exposed as
+auxiliary provenance but is not required by this first proposal score.
+
+Outputs live under `proposal_soft/<stem>/` and are automatic, read-only review
+evidence. The review contract defines future `review_queue/` as human working
+copies and future `reviewed_soft/` as human-confirmed 3827x2152 single-channel
+uint8 masks whose stem matches RGB, exterior is zero, interior glass coverage
+is 255, and only edges may transition softly. Bird/background visible through
+the enclosure are not separate mask targets. This run deliberately creates no
+`reviewed_soft`, no formal training manifest, and no accepted mask directory.
+
+Alternatives: Threshold normal smoothness alone; threshold relative depth alone;
+use Stage B D G-buffer geometry as the primary evidence; generate all 111
+proposals before checking quality; or point `--specular_masks` at automatic
+drafts.
+
+Why: The nine-view contact sheet shows DR depth gives a strong coherent
+enclosure block while DR normal and RGB supply complementary side/edge evidence.
+The proposals visually cover the projected glass enclosure in all nine views,
+but texture behind glass conservatively triggers bird-inclusion risk on every
+view. That is useful triage evidence, not proof of annotation correctness.
+
+Paper fidelity: This is an offline annotation-assistance tool. It does not
+change Stage B rendering, losses, checkpoints, training inputs, field counts,
+or full-image RGB semantics.
+
+Impact: Stop for user review of the nine proposals. Do not expand to 111, enable
+`lambda_spec`, train, or enter Stage C/D until separately authorized. Stage B
+remains unaccepted.
+
+Required ablation: Human review of the nine representative views before any
+batch proposal expansion.
