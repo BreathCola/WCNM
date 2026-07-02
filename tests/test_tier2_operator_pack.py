@@ -22,6 +22,7 @@ from scene.stage_b_state import (
 from stage_b_training import _validate_operator_restored_state
 from tests.test_reflection_surfel_model import reflection_args
 from tools.audit_tier2_gate import build_gate_packet
+from tools.tier2_oneshot import branch_checkpoint_iterations, validate_live_telemetry
 from utils.d_bootstrap_telemetry import (
     DBootstrapTelemetryError,
     DBootstrapTelemetryWriter,
@@ -279,11 +280,49 @@ def test_operator_shell_is_syntax_valid_print_first_and_finite():
     subprocess.run(["bash", "-n", str(script)], check=True)
     source = script.read_text()
     assert 'MODE="${2:-print}"' in source
-    assert "RTGS_TIER2_ACK_RESOLUTION8" not in source
+    assert "RTGS_TIER2_ACK_RESOLUTION8" in source
     assert 'EXPERIMENT="C03-r8 Tier 2 onset study"' in source
     assert 'RESOLUTION=8' in source
-    assert "tier2_c03_r8_shared_d_bootstrap" in source
+    assert "tier2_c03_r8_oneshot_shared_d_bootstrap" in source
     assert "--d_bootstrap_telemetry_max_steps 7000" in source
     assert "--stage_b_telemetry_max_steps" in source
-    assert "a-next" in source and "b-next" in source
+    assert "a-long" in source and "b-long" in source
     assert "nohup" not in source and "train.py &" not in source
+    printed = subprocess.run(
+        [str(script), "run-all"], check=True, text=True, stdout=subprocess.PIPE,
+    ).stdout
+    assert "RTGS_TIER2_ACK_RESOLUTION8=YES" in printed
+    assert "run-all --execute" in printed
+    coordinator = Path(__file__).parents[1] / "tools" / "tier2_oneshot.py"
+    imports = {
+        alias.name.split(".")[0]
+        for node in ast.walk(ast.parse(coordinator.read_text()))
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+        for alias in node.names
+    }
+    assert not ({"train", "gaussian_renderer", "raytracer"} & imports)
+
+
+def test_oneshot_nodes_and_live_telemetry_are_fail_closed(tmp_path):
+    assert branch_checkpoint_iterations(3000) == [
+        3100, 3200, 3500, 4000, 5000, 6000, 7000, 8000, 9000,
+        10000, 11000, 12000, 13000, 14000, 15000,
+    ]
+    assert branch_checkpoint_iterations(7000) == [
+        7100, 7200, 7500, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000,
+    ]
+    path = tmp_path / "telemetry.jsonl"
+    phase = "experiment=C03-r8 Tier 2 onset study;resolution=8;phase=a_warmup"
+    records = [
+        {"global_iteration": 3001, "reflection_local_iteration": 1, "nonfinite_count": 0,
+         "total_loss": 0.5, "phase_tag": phase},
+        {"global_iteration": 3002, "reflection_local_iteration": 2, "nonfinite_count": 0,
+         "total_loss": 0.4, "phase_tag": phase},
+    ]
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    summary = validate_live_telemetry(path, 3001, 1)
+    assert summary["last_global"] == 3002 and summary["last_r_local"] == 2
+    records[1]["global_iteration"] = 3003
+    path.write_text("".join(json.dumps(record) + "\n" for record in records))
+    with pytest.raises(RuntimeError, match="discontinuity"):
+        validate_live_telemetry(path, 3001, 1)

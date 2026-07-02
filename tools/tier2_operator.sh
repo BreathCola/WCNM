@@ -6,10 +6,10 @@ cd "$ROOT"
 
 ACTION="${1:-help}"
 MODE="${2:-print}"
-BOOTSTRAP="output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A="output/tier2_c03_r8_rstart_g03000_to_g15000_v1"
-BRANCH_B="output/tier2_c03_r8_rstart_g07000_to_g15000_v1"
-MASK="specular_masks_reviewed_v1/manifest.json"
+BOOTSTRAP="output/tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1"
+BRANCH_A="output/tier2_c03_r8_oneshot_rstart_g03000_to_g15000_v1"
+BRANCH_B="output/tier2_c03_r8_oneshot_rstart_g07000_to_g15000_v1"
+MASK="$ROOT/data/TiHuBird/specular_masks_reviewed_v1/manifest.json"
 RESOLUTION=8
 EXPERIMENT="C03-r8 Tier 2 onset study"
 PHASE_PREFIX="experiment=${EXPERIMENT};resolution=${RESOLUTION};phase="
@@ -85,14 +85,19 @@ quote_command() {
 run_or_print() {
   local log_path="$1"
   shift
-  echo "# experiment=$EXPERIMENT"
-  echo "# resolution=$RESOLUTION"
-  quote_command "$@"
   if [[ "$MODE" != "--execute" ]]; then
+    echo "# experiment=$EXPERIMENT"
+    echo "# resolution=$RESOLUTION"
+    quote_command "$@"
     echo "# log: $log_path"
     return
   fi
-  "$@" 2>&1 | tee "$log_path"
+  {
+    echo "# experiment=$EXPERIMENT"
+    echo "# resolution=$RESOLUTION"
+    quote_command "$@"
+    "$@"
+  } 2>&1 | tee "$log_path"
 }
 
 require_file() {
@@ -109,7 +114,7 @@ require_new_dir() {
 
 bootstrap() {
   require_new_dir "$BOOTSTRAP"
-  run_or_print output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log \
+  run_or_print output/tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1.log \
     env CUDA_VISIBLE_DEVICES=1 RTGS_BVH_JIT_ROOT=/tmp/rtgs-bvh-tier2-gpu1 \
       PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
     conda run --no-capture-output -n RT-GS python train.py \
@@ -121,6 +126,67 @@ bootstrap() {
       --d_bootstrap_telemetry_jsonl "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" \
       --d_bootstrap_telemetry_max_steps 7000 \
       --d_bootstrap_telemetry_phase_tag "${PHASE_PREFIX}shared_d_bootstrap"
+}
+
+stage_b_long() {
+  local branch_name="$1" branch gpu jit start_global start_local telemetry_name log_path
+  local -a checkpoints
+  if [[ "$branch_name" == "a" ]]; then
+    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-oneshot-gpu0
+    start_global=3100; start_local=100
+    telemetry_name=formal_g03101_15000.jsonl
+    log_path=output/tier2_c03_r8_oneshot_a_formal_g03101_15000.log
+    checkpoints=(3200 3500 4000 5000 6000 7000 8000 9000 10000 11000 12000 13000 14000 15000)
+  elif [[ "$branch_name" == "b" ]]; then
+    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-oneshot-gpu1
+    start_global=7100; start_local=100
+    telemetry_name=formal_g07101_15000.jsonl
+    log_path=output/tier2_c03_r8_oneshot_b_formal_g07101_15000.log
+    checkpoints=(7200 7500 8000 9000 10000 11000 12000 13000 14000 15000)
+  else
+    echo "unknown branch: $branch_name" >&2
+    exit 2
+  fi
+  require_file "$branch/chkpnt${start_global}.pth"
+  run_or_print "$log_path" \
+    env CUDA_VISIBLE_DEVICES="$gpu" RTGS_BVH_JIT_ROOT="$jit" \
+      PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
+    conda run --no-capture-output -n RT-GS python train.py \
+      "${COMMON_STAGE_B[@]}" --model_path "$branch" \
+      --start_checkpoint "$branch/chkpnt${start_global}.pth" \
+      --lambda_spec 0.2 --specular_masks "$MASK" \
+      --iterations 15000 --test_iterations 15000 \
+      --save_iterations "${checkpoints[@]}" --checkpoint_iterations "${checkpoints[@]}" \
+      --operator_gate_expected_global_start "$start_global" \
+      --operator_gate_expected_r_local_start "$start_local" \
+      --stage_b_telemetry_jsonl "$branch/telemetry/$telemetry_name" \
+      --stage_b_telemetry_max_steps "$((15000 - start_global))" \
+      --stage_b_telemetry_phase_tag "${PHASE_PREFIX}${branch_name}_formal"
+}
+
+run_all() {
+  if [[ "$MODE" != "--execute" ]]; then
+    echo "export RTGS_TIER2_ACK_RESOLUTION8=YES"
+    echo "./tools/tier2_operator.sh run-all --execute"
+    return
+  fi
+  if [[ "${RTGS_TIER2_ACK_RESOLUTION8:-}" != "YES" ]]; then
+    echo "run-all requires RTGS_TIER2_ACK_RESOLUTION8=YES" >&2
+    exit 4
+  fi
+  exec env CUDA_VISIBLE_DEVICES= PYTHONDONTWRITEBYTECODE=1 \
+    conda run --no-capture-output -n RT-GS python tools/tier2_oneshot.py run-all
+}
+
+status() {
+  env CUDA_VISIBLE_DEVICES= PYTHONDONTWRITEBYTECODE=1 \
+    conda run --no-capture-output -n RT-GS python tools/tier2_oneshot.py status
+}
+
+final_audit() {
+  local -a command=(env CUDA_VISIBLE_DEVICES= PYTHONDONTWRITEBYTECODE=1
+    conda run --no-capture-output -n RT-GS python tools/tier2_oneshot.py final-audit)
+  if [[ "$MODE" == "--execute" ]]; then "${command[@]}"; else quote_command "${command[@]}"; fi
 }
 
 stage_b_gate() {
@@ -158,98 +224,20 @@ stage_b_gate() {
       --stage_b_telemetry_phase_tag "$phase_tag"
 }
 
-audit_gate() {
-  local checkpoint="$1" telemetry="$2" run_dir="$3" log="$4" g0="$5" g1="$6"
-  shift 6
-  local args=(
-    env CUDA_VISIBLE_DEVICES= PYTHONDONTWRITEBYTECODE=1
-    conda run --no-capture-output -n RT-GS python tools/audit_tier2_gate.py
-    --checkpoint "$checkpoint" --telemetry "$telemetry" --run-dir "$run_dir" --log "$log"
-    --expected-global-start "$g0" --expected-global-end "$g1"
-  )
-  if [[ $# -eq 2 ]]; then
-    args+=(--expected-r-local-start "$1" --expected-r-local-end "$2")
-  elif [[ $# -eq 1 ]]; then
-    if [[ "$1" == "running" ]]; then args+=(--allow-running-log); fi
-    if [[ "$1" == "ply" ]]; then args+=(--require-ply); fi
-  fi
-  if [[ "$MODE" == "--execute" ]]; then
-    "${args[@]}"
-  else
-    quote_command "${args[@]}"
-  fi
-}
-
-next_gate() {
-  local branch_name="$1" end="$2"
-  [[ "$end" =~ ^[0-9]+$ ]] || { echo "END must be an integer" >&2; exit 2; }
-  local branch gpu jit onset minimum
-  if [[ "$branch_name" == "a" ]]; then
-    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-gpu0; onset=3000; minimum=5000
-  else
-    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-gpu1; onset=7000; minimum=9000
-  fi
-  (( end >= minimum && end <= 15000 && end % 1000 == 0 )) || {
-    echo "invalid $branch_name next endpoint: $end" >&2; exit 2;
-  }
-  local start=$((end - 1000))
-  local start_local=$((start - onset))
-  stage_b_gate "$branch" "$gpu" "$jit" start "$branch/chkpnt${start}.pth" \
-    "$start" "$start_local" "$end" 1000 \
-    "${PHASE_PREFIX}${branch_name}_g$((start + 1))_${end}" \
-    "gate_g$((start + 1))_${end}.jsonl" \
-    "output/tier2_c03_r8_${branch_name}_g$((start + 1))_${end}.log" 0.2
-}
-
-audit_next() {
-  local branch_name="$1" end="$2" branch onset
-  if [[ "$branch_name" == "a" ]]; then branch="$BRANCH_A"; onset=3000; else branch="$BRANCH_B"; onset=7000; fi
-  local start=$((end - 1000))
-  audit_gate "$branch/chkpnt${end}.pth" "$branch/telemetry/gate_g$((start + 1))_${end}.jsonl" \
-    "$branch" "output/tier2_c03_r8_${branch_name}_g$((start + 1))_${end}.log" \
-    "$((start + 1))" "$end" "$((start - onset + 1))" "$((end - onset))"
-}
-
 case "$ACTION" in
+  run-all) run_all ;;
+  status) status ;;
+  final-audit) final_audit ;;
   bootstrap) bootstrap ;;
-  protect-3000)
-    require_file "$BOOTSTRAP/chkpnt3000.pth"
-    if [[ "$MODE" == "--execute" ]]; then chmod a-w "$BOOTSTRAP/chkpnt3000.pth"; else quote_command chmod a-w "$BOOTSTRAP/chkpnt3000.pth"; fi ;;
-  protect-bootstrap)
-    if [[ "$MODE" == "--execute" ]]; then chmod a-w "$BOOTSTRAP"/chkpnt{1000,2000,3000,4000,5000,6000,7000}.pth; else echo "chmod a-w $BOOTSTRAP/chkpnt{1000,2000,3000,4000,5000,6000,7000}.pth"; fi ;;
-  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_phase_a" gate1_g03001_03100.jsonl output/tier2_c03_r8_a_gate1_g03001_03100.log 0 ;;
-  a-gate2) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3100.pth" 3100 100 3205 105 "${PHASE_PREFIX}a_gate2" gate2_g03101_03205.jsonl output/tier2_c03_r8_a_gate2_g03101_03205.log 0.2 ;;
-  a-gate3) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3205.pth" 3205 205 3500 295 "${PHASE_PREFIX}a_gate3" gate3_g03206_03500.jsonl output/tier2_c03_r8_a_gate3_g03206_03500.log 0.2 ;;
-  a-gate4) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3500.pth" 3500 500 4000 500 "${PHASE_PREFIX}a_gate4" gate4_g03501_04000.jsonl output/tier2_c03_r8_a_gate4_g03501_04000.log 0.2 ;;
-  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_phase_a" gate1_g07001_07100.jsonl output/tier2_c03_r8_b_gate1_g07001_07100.log 0 ;;
-  b-gate2) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7100.pth" 7100 100 7205 105 "${PHASE_PREFIX}b_gate2" gate2_g07101_07205.jsonl output/tier2_c03_r8_b_gate2_g07101_07205.log 0.2 ;;
-  b-gate3) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7205.pth" 7205 205 7500 295 "${PHASE_PREFIX}b_gate3" gate3_g07206_07500.jsonl output/tier2_c03_r8_b_gate3_g07206_07500.log 0.2 ;;
-  b-gate4) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7500.pth" 7500 500 8000 500 "${PHASE_PREFIX}b_gate4" gate4_g07501_08000.jsonl output/tier2_c03_r8_b_gate4_g07501_08000.log 0.2 ;;
-  a-next) next_gate a "${3:?END required}" ;;
-  b-next) next_gate b "${3:?END required}" ;;
-  audit-bootstrap-3000) audit_gate "$BOOTSTRAP/chkpnt3000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log 1 3000 running ;;
-  audit-bootstrap-7000) audit_gate "$BOOTSTRAP/chkpnt7000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log 1 7000 ply ;;
-  audit-a-phase-a) audit_gate "$BRANCH_A/chkpnt3100.pth" "$BRANCH_A/telemetry/gate1_g03001_03100.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate1_g03001_03100.log 3001 3100 1 100 ;;
-  audit-a-gate2) audit_gate "$BRANCH_A/chkpnt3205.pth" "$BRANCH_A/telemetry/gate2_g03101_03205.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate2_g03101_03205.log 3101 3205 101 205 ;;
-  audit-a-gate3) audit_gate "$BRANCH_A/chkpnt3500.pth" "$BRANCH_A/telemetry/gate3_g03206_03500.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate3_g03206_03500.log 3206 3500 206 500 ;;
-  audit-a-gate4) audit_gate "$BRANCH_A/chkpnt4000.pth" "$BRANCH_A/telemetry/gate4_g03501_04000.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate4_g03501_04000.log 3501 4000 501 1000 ;;
-  audit-b-phase-a) audit_gate "$BRANCH_B/chkpnt7100.pth" "$BRANCH_B/telemetry/gate1_g07001_07100.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate1_g07001_07100.log 7001 7100 1 100 ;;
-  audit-b-gate2) audit_gate "$BRANCH_B/chkpnt7205.pth" "$BRANCH_B/telemetry/gate2_g07101_07205.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate2_g07101_07205.log 7101 7205 101 205 ;;
-  audit-b-gate3) audit_gate "$BRANCH_B/chkpnt7500.pth" "$BRANCH_B/telemetry/gate3_g07206_07500.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate3_g07206_07500.log 7206 7500 206 500 ;;
-  audit-b-gate4) audit_gate "$BRANCH_B/chkpnt8000.pth" "$BRANCH_B/telemetry/gate4_g07501_08000.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate4_g07501_08000.log 7501 8000 501 1000 ;;
-  audit-a-next) audit_next a "${3:?END required}" ;;
-  audit-b-next) audit_next b "${3:?END required}" ;;
+  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-oneshot-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_warmup" warmup_g03001_03100.jsonl output/tier2_c03_r8_oneshot_a_warmup_g03001_03100.log 0 ;;
+  a-long) stage_b_long a ;;
+  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-oneshot-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_warmup" warmup_g07001_07100.jsonl output/tier2_c03_r8_oneshot_b_warmup_g07001_07100.log 0 ;;
+  b-long) stage_b_long b ;;
   help|*)
     cat <<'EOF'
-Print a command (default) or execute one bounded gate with --execute:
-  bootstrap | protect-3000 | protect-bootstrap
-  a-phase-a | a-gate2 | a-gate3 | a-gate4 | a-next --execute END
-  b-phase-a | b-gate2 | b-gate3 | b-gate4 | b-next --execute END
-  audit-bootstrap-3000 --execute | audit-bootstrap-7000 --execute
-  audit-a-phase-a --execute | audit-a-gate2 --execute | audit-a-gate3 --execute
-  audit-a-gate4 --execute | audit-a-next --execute END
-  audit-b-phase-a --execute | audit-b-gate2 --execute | audit-b-gate3 --execute
-  audit-b-gate4 --execute | audit-b-next --execute END
+Run or inspect the C03-r8 Tier-2 one-shot study:
+  run-all --execute | status | final-audit --execute
+Internal coordinator actions: bootstrap, a-phase-a, a-long, b-phase-a, b-long.
 EOF
     ;;
 esac

@@ -189,14 +189,29 @@ No result from an earlier run is retroactively upgraded by this code.
 - [x] Add a print-by-default shell wrapper for bootstrap, checkpoint protection,
   Branch A/B gates, global-1000 segments, and one-command audits. It never
   advances a later gate automatically.
-- [x] Pass the GPU-enabled full 111-test repository suite and CPU-only 96-pass /
+- [x] Pass the GPU-enabled full 112-test repository suite and CPU-only 97-pass /
   15-skip suite without running training.
 - [x] Resolve the Tier-2 image-resolution contract: the user approved the
   internally matched `C03-r8 Tier 2 onset study` at resolution 8 across the
   shared bootstrap and both branches. It is not a strict legacy C03-r2 replay,
   and operator mode rejects a mismatched experiment name or resolution.
-- [ ] Run Gate 0 shared D bootstrap. Only the user's manual Gate-0 bootstrap
-  command is authorized; it has not run, and no branch command is authorized.
+- [x] Preserve the user-operated manual v1 bootstrap/partial branches as
+  historical assets; do not resume, overwrite, or use them as one-shot inputs.
+
+### Tier-2 one-shot onset study
+
+- [x] User explicitly authorizes a fresh `oneshot_v1` C03-r8 run with one shared
+  D-only 0--7000 bootstrap, Branch A onset at 3000, and Branch B onset at 7000.
+- [x] Add `run-all`, `status`, and CPU-only `final-audit` orchestration without
+  changing training mathematics, schedules, mask policy, or RNG semantics.
+- [x] Fail closed on a dirty worktree, wrong experiment/resolution, unavailable
+  RTX 3090 pair, conflicting training process, preexisting one-shot output,
+  telemetry discontinuity/nonfinite state, abnormal exit, or source mutation.
+- [x] Preserve complete checkpoints at bootstrap 1k--7k and branch local
+  100/200/500/1000, every later global 1000, and global 15000; retain debug every
+  100 global steps so all required nodes are covered.
+- [ ] Execute the committed one-shot coordinator through both branches or a hard
+  failure, then generate the CPU-only final report. No Stage C/D work is allowed.
 
 Gate decisions after the user returns one generated packet:
 

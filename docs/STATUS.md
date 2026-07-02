@@ -48,13 +48,17 @@ tested so far, not as an optimum or Stage B acceptance.
 An opt-in Tier-2 operator pack now implements version-2 full-state D-only and
 Stage B continuation checkpoints, endpoint optimizer continuity, Python/NumPy/
 CPU/CUDA RNG plus remaining-camera-deck restoration, bounded D telemetry, and a
-CPU-only read-only gate packet generator. GPU-enabled repository tests pass
-111/111. No Tier-2 bootstrap or branch training has run. The user has now
-approved one internally matched `resolution=8` experiment named
+CPU-only read-only gate packet generator. The one-shot extension passes the
+GPU-enabled 112-test suite and CPU-only 97-pass / 15-skip suite. The user has
+now approved one internally matched `resolution=8` experiment named
 `C03-r8 Tier 2 onset study`; it is not a literal reproduction of the historical
 C03 resolution-2 baseline and its absolute metrics must not be compared as if it
 were one. The shared D bootstrap and both R-onset branches are fail-closed to
-this exact experiment identity and resolution.
+this exact experiment identity and resolution. A prior user-operated manually
+gated v1 bootstrap reached 7k, Branch A reached 3,205/205, and Branch B reached
+7,100/100 before a later attempted command collided with an existing telemetry
+file. Those assets are preserved and excluded from the newly authorized
+`oneshot_v1` run; the one-shot uses a fresh shared bootstrap and fresh branches.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -405,12 +409,14 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   interval, scans every nested tensor, reads endpoint debug metadata and log
   anomalies, and prints a compact read-only packet. It imports no training,
   renderer, or raytracer path.
-- `tools/tier2_operator.sh` prints or explicitly executes one finite bootstrap,
-  gate, protection, or audit action. It assigns bootstrap/Branch B to physical
-  GPU 1, Branch A to physical GPU 0, uses separate JIT roots/model paths/logs,
-  and never advances a later gate automatically.
-- No real Tier-2 output directory, checkpoint, telemetry, debug image, or log
-  has been created by this implementation.
+- `tools/tier2_operator.sh` uses finite internal phase actions and now adds an explicitly
+  acknowledged `run-all --execute` coordinator, read-only `status`, and
+  CPU-only `final-audit`. The coordinator assigns bootstrap/Branch B to physical
+  GPU 1 and Branch A to physical GPU 0, records process groups and terminal
+  state, audits/protects the shared 3k/7k sources, and advances automatically
+  without the former human GO pauses.
+- Existing manually gated v1 assets are preserved but are not one-shot inputs.
+  Fresh `oneshot_v1` output/model/log paths fail closed if any already exist.
 - The approved experiment identity is exactly `C03-r8 Tier 2 onset study` at
   `resolution=8`. The operator wrapper, cfg_args, telemetry phase tags, output/
   log names, and version-2 checkpoint configs record that identity. Operator
@@ -427,9 +433,13 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   The authorized three-iteration `lambda_spec=0.2` smoke stopped at global
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
   alignment. The controlled 7k/10k/15k Tier-1 pilots are complete and remain
-  evidence-only. The user has authorized only manual execution of the first
-  bounded C03-r8 shared bootstrap command. Codex has not run it. After that run,
-  the user must return the Gate-0 packet before any branch command is issued.
+  evidence-only. The user has explicitly authorized Codex to commit and directly
+  execute the complete C03-r8 `oneshot_v1` bootstrap plus both long branches.
+  R-local 1--100 remains mask-free; local 101+ uses the formal mask and
+  `lambda_spec=0.2`. The former human pauses at local 200/500/1000 and every
+  global 1000 are disabled only for this run; their checkpoints/debug evidence
+  remain mandatory. The output state and final-audit JSON are authoritative for
+  run progress and outcome.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

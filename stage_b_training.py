@@ -121,6 +121,7 @@ def _config(dataset, opt, diffuse, mask_manifest):
         "stage": "stage_b",
         "model_type": "surfel",
         "experiment": getattr(dataset, "experiment", ""),
+        "resolution": int(dataset.resolution),
         "roughness_min": float(diffuse.roughness_min),
         "roughness_remap": bool(dataset.roughness_remap),
         "material_alpha_threshold": float(dataset.material_alpha_threshold),

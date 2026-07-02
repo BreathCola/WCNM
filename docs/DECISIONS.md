@@ -1893,3 +1893,67 @@ while making this decision.
 
 Required ablation: The approved Tier-2 onset study itself; no comparison to the
 legacy resolution-2 C03 absolute metrics is claimed.
+
+## B-022 — One-shot Tier-2 orchestration authorization
+
+Date: 2026-07-02
+
+Question: How should the explicitly authorized C03-r8 3k-versus-7k long onset
+study run without returning to the user at the former manual gates?
+
+Chosen implementation: Add `run-all --execute` to the existing operator wrapper
+and implement its coordinator in a CPU-only control module. Require the explicit
+`RTGS_TIER2_ACK_RESOLUTION8=YES` environment acknowledgment, a clean committed
+worktree, exactly two RTX 3090 devices at physical indices 0/1, no conflicting
+GPU training process, and entirely new `oneshot_v1` paths. The previously
+user-operated manually gated v1 bootstrap and partial branches are immutable
+historical assets and are never used as source material for the one-shot.
+
+Run one continuous D-only bootstrap on GPU 1. Once its real 3k full-state
+checkpoint and telemetry pass a CPU-only finite/identity/continuity audit,
+record its SHA-256, protect only that checkpoint, and start Branch A on GPU 0
+while bootstrap continues. After the 7k bootstrap completes and passes audit,
+hash all seven checkpoints, protect the full bootstrap tree, and start Branch B
+on GPU 1. Each branch uses exactly two processes solely because the supervision
+contract changes after R-local 100: the first 100 steps have no mask and
+`lambda_spec=0`; local 101 through global 15000 uses the accepted manifest and
+`lambda_spec=0.2`. No other human gate remains.
+
+Save full-state checkpoints at local 100/200/500/1000, every later global 1000,
+and global 15000. Existing debug interval 100 covers every required node without
+adding renderer passes. The coordinator records process-group PID, GPU, times,
+exit status, logs, last checkpoint, and telemetry progress. It monitors existing
+telemetry for exact global/R-local continuity and nonfinite values and checks
+physical GPU isolation. OOM, NaN/Inf, I/O failure, discontinuity, abnormal exit,
+GPU mismatch, output collision, or shared-source mutation is a hard failure;
+candidate/topology/material/allocator variation is retained for final audit and
+does not stop training. No automatic retry or cleanup occurs.
+
+`status` only reads the atomic coordinator state. `final-audit` runs with CUDA
+hidden, loads checkpoints with `map_location="cpu"`, recursively checks finite
+state and experiment identity, joins both telemetry phases, verifies required
+debug/checkpoint nodes, checks source hashes/logs, and writes one JSON report.
+The R-local-100 debug node intentionally has no mask/overlay because loading the
+formal mask there would violate the immutable warmup contract; this absence is
+recorded as N/A rather than fabricated.
+
+Alternatives: Reuse the earlier manual v1 assets; keep stopping for human GO;
+run both branches only after bootstrap 7k; load the formal mask during warmup;
+or automatically retry failed commands.
+
+Why: Fresh paths and one shared bootstrap preserve the onset comparison, while
+overlapping Branch A with the remaining bootstrap uses both GPUs without
+changing either trajectory. The only process boundary retained is demanded by
+the fixed L_spec/mask phase policy.
+
+Paper fidelity: Operator control and offline observability only. Renderer,
+raytracer, BVH, candidate/exact intersection, BRDF, losses, optimizer,
+scheduler, densification rules, initialization, and RNG consumption are
+unchanged.
+
+Impact: After one purpose-specific implementation commit and clean preflight,
+Codex is authorized to launch the full one-shot and wait until completion or a
+hard failure. Stage B remains unaccepted; Stage C/D remain forbidden.
+
+Required ablation: This one C03-r8 3k-versus-7k long onset study. It does not by
+itself establish that either onset is superior.

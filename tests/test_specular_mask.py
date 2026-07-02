@@ -152,7 +152,7 @@ def test_stage_b_checkpoint_config_records_schedules_and_formal_manifest():
     dataset = SimpleNamespace(
         roughness_remap=False, material_alpha_threshold=1e-4, ray_background="scene",
         ray_chunk_size=16, ray_cutoff_sigma=3.0, ray_hit_threshold=1e-4,
-        ray_epsilon_scale=1e-4,
+        ray_epsilon_scale=1e-4, experiment="C03-r8 Tier 2 onset study", resolution=8,
     )
     opt = SimpleNamespace(
         lambda_norm=0.04, lambda_mono=0.01, lambda_perc=0.01, lambda_spec=0.2, specular_k0=0.9,
@@ -173,6 +173,8 @@ def test_stage_b_checkpoint_config_records_schedules_and_formal_manifest():
         "manifest_file_sha256": "c" * 64, "mask_interpolation": MASK_INTERPOLATION,
     }
     config = _config(dataset, opt, SimpleNamespace(roughness_min=0.03), manifest)
+    assert config["experiment"] == "C03-r8 Tier 2 onset study"
+    assert config["resolution"] == 8
     assert config["diffuse_schedule"]["position_lr_max_steps"] == 100
     assert config["reflection_schedule"]["position_lr_init"] == 2e-4
     assert config["specular_mask"]["count"] == 111
