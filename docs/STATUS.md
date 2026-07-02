@@ -2,7 +2,7 @@
 
 Current stage: Stage C — Transparent Mesh and Two-Hit Geometry
 
-Current branch at Stage B closeout: `feature/stage-b-reflection-dr-c03`
+Current implementation branch: `feature/stage-c-transparent-mesh`
 
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
@@ -28,11 +28,20 @@ is complete, or that mask-exterior Reflection/ks is causally correct. There is
 no Reflection ground truth and the Stage B fixed debug view is not a complete
 cross-view quality evaluation.
 
-Stage C is authorized only for read-only D geometry audit, transparent mesh
-extraction, mask-hard camera-ray two-hit intersection, and versioned per-view
-cache generation. Reflection rays remain enabled on every valid D surface;
-RGB loss remains full-frame. No Transmittance Gaussian, T training, second
-bounce, or Stage D work is authorized.
+Stage C's D-only extractability audit passed and the implementation now produces
+a fixed watertight mesh plus 111 strict version/hash-validated mask-hard two-hit
+caches. The accepted source, audit, mesh, and cache details are recorded in
+`docs/stages/STAGE_C.md`. The retained v3 mesh has zero boundary and non-manifold
+edges. All valid cached rays satisfy `t_far > t_near`.
+
+Stage C is not accepted for Stage D geometry use: mean hard-mask two-hit
+coverage is 0.80313 (minimum view 0.67551), mean eroded coverage is 0.81843,
+and 0.44044 of valid rays cross the extracted surface more than twice. Existing
+debug maps show structured missing regions and folded/internal far-surface
+structure. The caches are valid preprocessing artifacts, but they do not yet
+establish a reliable glass front/back shell. Reflection rays remain enabled on
+every valid D surface and RGB remains full-frame. No Transmittance Gaussian, T
+training, second bounce, or Stage D work has been performed or authorized.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.

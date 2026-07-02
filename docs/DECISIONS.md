@@ -2218,3 +2218,56 @@ Required next validation: Before extracting a fixed glass mesh, audit the
 selected D alpha/depth/normal against all formal masks for cross-view coverage,
 boundary agreement, gaps, floaters, and background adhesion. Continue to mesh
 and two-hit preprocessing only on an explicit `STAGE_C_MESH_AUDIT_PASS`.
+
+## C-001 — Branch-A D audit and measured outer-shell preprocessing
+
+Date: 2026-07-03
+
+Question: Can the selected Branch-A global-15,000 Diffuse state provide a fixed
+glass mesh and reliable front/back camera intersections without introducing a
+hand-authored enclosure?
+
+Observed evidence: The D-only source-resolution audit covers all 111 formal
+masks. Median/minimum eroded-mask finite alpha/depth/unit-normal coverage is
+1.0/0.96384. Multi-view voxel support >=2 covers 0.44312 of occupied voxels and
+the largest supported component covers 0.83541. The audit therefore records
+`STAGE_C_MESH_AUDIT_PASS`, while its pages also show residual non-glass adhesion.
+
+Chosen implementation: Fuse the `ks >= 0.9` audited D candidate's eroded-mask
+depth into a deterministic CPU TSDF at maximum grid resolution 160, minimum
+weight 2, four-voxel truncation, and 0.15 bounds margin. Close two voxel-scale
+cracks, retain the largest connected negative-TSDF occupancy, fill only enclosed
+cavities, and mesh that measured outer boundary. Do not fit a cuboid or other
+primitive. Intersect only `mask_hard` camera rays with a CPU BVH; cache the first
+and last distinct positive hit, hit count, validity, and back position. Bind
+every NPZ to schema, mesh hash, and source-checkpoint hash and validate finite
+arrays plus `t_far > t_near` on load.
+
+Why: High-ks D selection is an indirect glass candidate supported by the actual
+Stage-B state, whereas full-scene D depth plainly contains the museum background
+and bird. Occupancy cleanup removes disconnected TSDF debris without inventing
+an ideal box. First/last hits define the outer interval even when a concave mesh
+has intermediate crossings.
+
+Measured result: The v3 mesh is one watertight component with 118,003 vertices,
+236,470 faces, and no boundary/non-manifold edges. All 111 caches reload and all
+valid rays satisfy depth order. Hard-mask validity is 0.80313 mean/0.67551
+minimum and eroded validity is 0.81843 mean. However, 0.44044 of valid rays have
+more than two crossings and debug maps show large structured holes plus internal
+far-surface structure.
+
+Evidence boundary and decision: The source checkpoint passes the requested
+mesh-extractability audit, and Stage C preprocessing is implemented, but the
+result does not yet satisfy the geometric prerequisite for Stage D. Do not hide
+the holes with stronger unvalidated smoothing, a visual-hull heuristic, or a
+hand-fitted cuboid. Stage C remains current; no Transmittance field, T training,
+second bounce, or Stage D work is authorized.
+
+Paper fidelity: This is offline geometry preprocessing only. It does not change
+the Reflection ray domain, renderer, ray tracer, BRDF, losses, D/R parameters,
+or any Tier-2 artifact. `mask_hard` gates mesh rays, `mask_eroded` gates depth
+validation/fusion, `mask_soft` remains L_spec-only, and RGB remains full-frame.
+
+Required ablation: Before Stage D, establish and approve a geometry repair that
+raises cross-view two-hit coverage and removes folded/multi-crossing structure
+without replacing measured glass geometry by an assumed primitive.
