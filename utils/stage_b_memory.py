@@ -11,7 +11,7 @@ import torch
 
 DEFAULT_POLICY = "default"
 V2_POLICY = "release_ephemeral_cache_each_step_v1"
-V2_RETRY_IDENTITY = "oneshot_v2_allocator_lifecycle_retry"
+V3_RETRY_IDENTITY = "oneshot_v3_allocator_lifecycle_retry"
 
 
 def validate_stage_b_memory_policy(
@@ -29,8 +29,8 @@ def validate_stage_b_memory_policy(
         return
     if not operator_gate:
         raise ValueError("allocator lifecycle retry policy is operator-only")
-    if retry_identity != V2_RETRY_IDENTITY:
-        raise ValueError(f"allocator lifecycle retry requires identity={V2_RETRY_IDENTITY}")
+    if retry_identity != V3_RETRY_IDENTITY:
+        raise ValueError(f"allocator lifecycle retry requires identity={V3_RETRY_IDENTITY}")
     if reference_peak_allocated_bytes <= 0 or minimum_projected_headroom_bytes <= 0:
         raise ValueError("allocator lifecycle retry requires positive reference peak and headroom")
 

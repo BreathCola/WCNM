@@ -7,12 +7,12 @@ cd "$ROOT"
 ACTION="${1:-help}"
 MODE="${2:-print}"
 BOOTSTRAP="output/tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A="output/tier2_c03_r8_oneshot_v2_rstart_g03000_to_g15000"
-BRANCH_B="output/tier2_c03_r8_oneshot_v2_rstart_g07000_to_g15000"
+BRANCH_A="output/tier2_c03_r8_oneshot_v3_rstart_g03000_to_g15000"
+BRANCH_B="output/tier2_c03_r8_oneshot_v3_rstart_g07000_to_g15000"
 MASK="$ROOT/data/TiHuBird/specular_masks_reviewed_v1/manifest.json"
 RESOLUTION=8
 EXPERIMENT="C03-r8 Tier 2 onset study"
-RETRY_IDENTITY="oneshot_v2_allocator_lifecycle_retry"
+RETRY_IDENTITY="oneshot_v3_allocator_lifecycle_retry"
 ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"
 REFERENCE_PEAK_ALLOCATED_BYTES=23274475520
 MINIMUM_PROJECTED_HEADROOM_BYTES=1073741824
@@ -131,16 +131,16 @@ stage_b_long() {
   local branch_name="$1" branch gpu jit start_global start_local telemetry_name log_path
   local -a checkpoints
   if [[ "$branch_name" == "a" ]]; then
-    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-oneshot-v2-gpu0
+    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-oneshot-v3-gpu0
     start_global=3100; start_local=100
     telemetry_name=formal_g03101_15000.jsonl
-    log_path=output/tier2_c03_r8_oneshot_v2_a_formal_g03101_15000.log
+    log_path=output/tier2_c03_r8_oneshot_v3_a_formal_g03101_15000.log
     checkpoints=(3200 3500 4000 5000 6000 7000 8000 9000 10000 11000 12000 13000 14000 15000)
   elif [[ "$branch_name" == "b" ]]; then
-    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-oneshot-v2-gpu1
+    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-oneshot-v3-gpu1
     start_global=7100; start_local=100
     telemetry_name=formal_g07101_15000.jsonl
-    log_path=output/tier2_c03_r8_oneshot_v2_b_formal_g07101_15000.log
+    log_path=output/tier2_c03_r8_oneshot_v3_b_formal_g07101_15000.log
     checkpoints=(7200 7500 8000 9000 10000 11000 12000 13000 14000 15000)
   else
     echo "unknown branch: $branch_name" >&2
@@ -229,9 +229,9 @@ case "$ACTION" in
   run-all) run_all ;;
   status) status ;;
   final-audit) final_audit ;;
-  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-oneshot-v2-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_warmup" warmup_g03001_03100.jsonl output/tier2_c03_r8_oneshot_v2_a_warmup_g03001_03100.log 0 ;;
+  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-oneshot-v3-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_warmup" warmup_g03001_03100.jsonl output/tier2_c03_r8_oneshot_v3_a_warmup_g03001_03100.log 0 ;;
   a-long) stage_b_long a ;;
-  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-oneshot-v2-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_warmup" warmup_g07001_07100.jsonl output/tier2_c03_r8_oneshot_v2_b_warmup_g07001_07100.log 0 ;;
+  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-oneshot-v3-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_warmup" warmup_g07001_07100.jsonl output/tier2_c03_r8_oneshot_v3_b_warmup_g07001_07100.log 0 ;;
   b-long) stage_b_long b ;;
   help|*)
     cat <<'EOF'

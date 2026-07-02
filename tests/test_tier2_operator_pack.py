@@ -292,8 +292,8 @@ def test_operator_shell_is_syntax_valid_print_first_and_finite():
     assert 'EXPERIMENT="C03-r8 Tier 2 onset study"' in source
     assert 'RESOLUTION=8' in source
     assert "tier2_c03_r8_oneshot_shared_d_bootstrap" in source
-    assert "tier2_c03_r8_oneshot_v2_rstart" in source
-    assert 'RETRY_IDENTITY="oneshot_v2_allocator_lifecycle_retry"' in source
+    assert "tier2_c03_r8_oneshot_v3_rstart" in source
+    assert 'RETRY_IDENTITY="oneshot_v3_allocator_lifecycle_retry"' in source
     assert 'ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"' in source
     assert 'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"' in source
     assert "--stage_b_telemetry_max_steps" in source
@@ -326,7 +326,7 @@ def test_oneshot_nodes_and_live_telemetry_are_fail_closed(tmp_path):
     path = tmp_path / "telemetry.jsonl"
     phase = (
         "experiment=C03-r8 Tier 2 onset study;"
-        "retry=oneshot_v2_allocator_lifecycle_retry;resolution=8;phase=a_warmup"
+        "retry=oneshot_v3_allocator_lifecycle_retry;resolution=8;phase=a_warmup"
     )
     records = [
         {"global_iteration": 3001, "reflection_local_iteration": 1, "nonfinite_count": 0,

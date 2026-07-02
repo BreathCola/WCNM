@@ -226,9 +226,14 @@ No result from an earlier run is retroactively upgraded by this code.
 - [x] Require a local-101 per-branch allocator headroom record and fail closed if
   projected capacity does not exceed the greater of the observed step peak and
   the 23,274,475,520-byte v1 reference by at least 1 GiB.
-- [ ] User executes the committed v2 one-shot through both branches or a hard
-  failure. The coordinator must automatically generate the CPU-only v2 final
-  audit in either case. No Stage C/D work is allowed.
+- [x] User executed v2; both branches failed after their first warmup step on an
+  observability-only `record`/`telemetry_record` variable mismatch. Preserve
+  its outputs and final audit; it is not a training or memory result.
+- [x] Correct both the ordinary telemetry assignment and the pre-existing smoke
+  record assignment, and add a regression assertion that distinguishes them.
+- [ ] User executes the committed, path-isolated v3 one-shot through both
+  branches or a hard failure. The coordinator must automatically generate the
+  CPU-only v3 final audit in either case. No Stage C/D work is allowed.
 
 Gate decisions after the user returns one generated packet:
 

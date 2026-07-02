@@ -546,7 +546,7 @@ def training_stage_b(
                 diagnostics = package.get("ray_diagnostics")
                 if diagnostics is None:
                     raise RuntimeError("specular smoke requires real ray diagnostics")
-                telemetry_record = {
+                record = {
                     "global_iteration": int(iteration),
                     "reflection_local_iteration": int(reflection_iteration),
                     "camera_stem": camera.image_name,
@@ -731,7 +731,7 @@ def training_stage_b(
                     )
                 l_spec_value = telemetry_l_spec_value
                 observed_nonfinite = int(not math.isfinite(loss_value)) + int(mask_stats["nonfinite_count"])
-                record = {
+                telemetry_record = {
                     "schema_version": TELEMETRY_SCHEMA_VERSION,
                     "telemetry_step": telemetry.count + 1,
                     "global_iteration": int(iteration),

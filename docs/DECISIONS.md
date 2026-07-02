@@ -2052,3 +2052,37 @@ Required ablation: The user may run only the single committed `oneshot_v2`
 workflow. If either headroom gate fails or either branch OOMs, retain the CPU-only
 final audit and return for a new decision; do not auto-retry or silently change
 chunk size.
+
+## B-024 — Telemetry assignment correction and isolated `oneshot_v3`
+
+Date: 2026-07-02
+
+Question: How should the first-step `oneshot_v2` implementation failure be
+corrected without reusing its partial outputs or changing the training study?
+
+Observed evidence: Both v2 branches restored their approved D-only source,
+created fresh R=4096, loaded all cameras, and completed the first training step.
+Both then raised `TypeError: 'NoneType' object is not subscriptable` while
+normalizing telemetry ks fields. No telemetry row or branch checkpoint was
+written. This was a Python observability bug, not CUDA OOM, numerical failure,
+or training instability. The CPU-only v2 final audit is preserved with SHA-256
+`492464757a0776d6b463a80d0b89fe2e668549586ab5a94bb01394142c0bcb7a`.
+
+Chosen implementation: Restore the smoke-only dictionary assignment to
+`record`, assign the ordinary strict-schema dictionary to `telemetry_record`,
+and add a regression assertion that exactly one ordinary telemetry assignment
+exists after the smoke record assignment. Use the new identity
+`oneshot_v3_allocator_lifecycle_retry` and new v3 branch, telemetry, log, state,
+audit, packet, and JIT paths. Never resume or overwrite v2.
+
+Why: The correction is two variable-name substitutions. A new run identity is
+still required because v2 output directories and terminal audit are immutable
+evidence and the operator correctly refuses nonempty telemetry/output paths.
+
+Paper fidelity: No training mathematics, allocator policy, renderer, tracer,
+loss, schedule, RNG, source checkpoint, mask, resolution, R initialization, or
+R count changes.
+
+Impact: The protected v1 D-only 3k/7k sources remain the only branch sources.
+V2 remains a preserved implementation failure. Stage B remains unaccepted and
+Stage C/D remain forbidden.

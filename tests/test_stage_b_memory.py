@@ -6,7 +6,7 @@ import pytest
 from utils.stage_b_memory import (
     DEFAULT_POLICY,
     V2_POLICY,
-    V2_RETRY_IDENTITY,
+    V3_RETRY_IDENTITY,
     evaluate_headroom,
     release_allocator_cache,
     validate_stage_b_memory_policy,
@@ -17,12 +17,12 @@ from utils.stage_b_memory import (
 def test_allocator_policy_is_default_off_and_v2_fail_closed():
     validate_stage_b_memory_policy(DEFAULT_POLICY, "", 0, 0, False)
     with pytest.raises(ValueError, match="forbids"):
-        validate_stage_b_memory_policy(DEFAULT_POLICY, V2_RETRY_IDENTITY, 1, 1, True)
+        validate_stage_b_memory_policy(DEFAULT_POLICY, V3_RETRY_IDENTITY, 1, 1, True)
     with pytest.raises(ValueError, match="operator-only"):
-        validate_stage_b_memory_policy(V2_POLICY, V2_RETRY_IDENTITY, 1, 1, False)
+        validate_stage_b_memory_policy(V2_POLICY, V3_RETRY_IDENTITY, 1, 1, False)
     with pytest.raises(ValueError, match="identity"):
         validate_stage_b_memory_policy(V2_POLICY, "wrong", 1, 1, True)
-    validate_stage_b_memory_policy(V2_POLICY, V2_RETRY_IDENTITY, 100, 20, True)
+    validate_stage_b_memory_policy(V2_POLICY, V3_RETRY_IDENTITY, 100, 20, True)
 
 
 def test_release_policy_only_calls_empty_cache_when_enabled(monkeypatch):
@@ -37,7 +37,7 @@ def test_release_policy_only_calls_empty_cache_when_enabled(monkeypatch):
 def test_headroom_gate_uses_capacity_reference_peak_and_margin(tmp_path):
     common = dict(
         experiment="C03-r8 Tier 2 onset study",
-        retry_identity=V2_RETRY_IDENTITY,
+        retry_identity=V3_RETRY_IDENTITY,
         policy=V2_POLICY,
         global_iteration=3101,
         reflection_local_iteration=101,
@@ -66,6 +66,8 @@ def test_headroom_gate_uses_capacity_reference_peak_and_margin(tmp_path):
 
 def test_training_cleanup_precedes_cache_release_and_gate_is_local_101():
     source = (Path(__file__).parents[1] / "stage_b_training.py").read_text()
+    assert source.count("telemetry_record = {") == 1
+    assert source.index("record = {") < source.index("telemetry_record = {")
     assert source.index("del package, image") < source.index("release_allocator_cache(allocator_policy)")
     assert "reflection_iteration == 101" in source
     assert "and opt.lambda_spec > 0" in source

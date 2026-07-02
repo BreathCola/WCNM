@@ -73,7 +73,7 @@ The v1 evidence shows real camera/topology-dependent transient allocated peaks
 up to 23,274,475,520 bytes plus allocator cache fragmentation: successful steps
 periodically drop reserved memory only after allocator retry, while ordinary
 end-of-step allocated memory remains roughly 1--2 GiB and no monotonic graph
-retention is present. A new, not-yet-run `oneshot_v2_allocator_lifecycle_retry`
+retention is present. The `oneshot_v2_allocator_lifecycle_retry`
 therefore changes only allocator lifetime: explicitly release completed-step
 ephemeral references, call `torch.cuda.empty_cache()` at that safe boundary,
 and set `PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128` identically on A/B. A
@@ -81,8 +81,18 @@ formal local-101 headroom record fails closed unless projected capacity exceeds
 the larger of the current step peak and the v1 23,274,475,520-byte reference by
 at least 1 GiB. The protected v1 shared D-only 3k/7k checkpoints are reusable
 because this policy is Stage-B-only and changes neither D bootstrap mathematics
-nor RNG. Failed v1 A/B checkpoints are never v2 resume sources. No v2 training
-has run; Stage B remains unaccepted and Stage C/D remain forbidden.
+nor RNG. Failed v1 A/B checkpoints are never retry resume sources.
+
+The user-launched `oneshot_v2` then HARD_FAILED after the first warmup training
+step in both branches because the observability refactor assigned the ordinary
+telemetry dictionary to `record` but read `telemetry_record`. The exact failure
+was `TypeError: 'NoneType' object is not subscriptable`; it was not OOM and
+produced no usable branch checkpoint or telemetry row. The v2 final audit is
+preserved at `output/tier2_c03_r8_oneshot_v2_final_audit.json`, SHA-256
+`492464757a0776d6b463a80d0b89fe2e668549586ab5a94bb01394142c0bcb7a`.
+The corrected run identity is `oneshot_v3_allocator_lifecycle_retry`, with
+entirely new v3 output/log/state/audit/JIT paths. V1 and v2 branch outputs are
+never reused. Stage B remains unaccepted and Stage C/D remain forbidden.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -441,8 +451,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   terminal state, verifies the protected v1 shared 3k/7k sources without
   modifying them, and advances automatically without the former human GO
   pauses.
-- Existing manual-v1 and `oneshot_v1` assets are preserved. Fresh `oneshot_v2`
-  output/model/log/state/audit paths fail closed if any already exist. Failed
+- Existing manual-v1, `oneshot_v1`, and failed `oneshot_v2` assets are
+  preserved. Fresh `oneshot_v3` output/model/log/state/audit paths fail closed
+  if any already exist. Failed
   v1 A/B checkpoints are explicitly excluded as resume sources.
 - The approved experiment identity is exactly `C03-r8 Tier 2 onset study` at
   `resolution=8`. The operator wrapper, cfg_args, telemetry phase tags, output/
@@ -461,7 +472,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
   alignment. The controlled 7k/10k/15k Tier-1 pilots are complete and remain
   evidence-only. The `oneshot_v1` long attempt is a preserved HARD_FAILED run.
-  The user, not Codex, may execute the committed `oneshot_v2` retry. R-local
+  The user, not Codex, may execute the committed `oneshot_v3` retry. R-local
   1--100 remains mask-free; local 101+ uses the formal mask and
   `lambda_spec=0.2`. Both branches use the same allocator policy, and the first
   formal step must pass its recorded headroom gate before continuing. The output
