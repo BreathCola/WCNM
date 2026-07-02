@@ -36,6 +36,13 @@ from utils.stage_b_telemetry import (
     mask_ks_stats_from_existing_tensors,
     validate_telemetry_options,
 )
+from utils.training_state import (
+    capture_rng_state,
+    make_camera_runtime_state,
+    restore_camera_deck,
+    restore_rng_state,
+    should_step_optimizer,
+)
 
 try:
     from fused_ssim import fused_ssim
@@ -108,6 +115,7 @@ def _append_specular_smoke_record(model_path, record):
 
 
 def _config(dataset, opt, diffuse, mask_manifest):
+    operator_gate = bool(getattr(opt, "operator_gate_continuation", False))
     return {
         "stage": "stage_b",
         "model_type": "surfel",
@@ -125,6 +133,28 @@ def _config(dataset, opt, diffuse, mask_manifest):
         "lambda_perc": float(opt.lambda_perc),
         "lambda_spec": float(opt.lambda_spec),
         "specular_k0": float(opt.specular_k0),
+        "operator_gate_continuation": operator_gate,
+        "operator_contract": None if not operator_gate else {
+            "source_path": dataset.source_path,
+            "images": dataset.images,
+            "resolution": int(dataset.resolution),
+            "normal_priors": dataset.normal_priors,
+            "normal_prior_space": dataset.normal_prior_space,
+            "optimizer_type": opt.optimizer_type,
+            "random_background": bool(opt.random_background),
+            "lambda_dssim": float(opt.lambda_dssim),
+            "feature_lr": float(opt.feature_lr),
+            "material_lr": float(opt.material_lr),
+            "opacity_lr": float(opt.opacity_lr),
+            "scaling_lr": float(opt.scaling_lr),
+            "rotation_lr": float(opt.rotation_lr),
+            "exposure_lr_init": float(opt.exposure_lr_init),
+            "exposure_lr_final": float(opt.exposure_lr_final),
+            "exposure_lr_delay_steps": int(opt.exposure_lr_delay_steps),
+            "exposure_lr_delay_mult": float(opt.exposure_lr_delay_mult),
+            "percent_dense": float(opt.percent_dense),
+            "opacity_reset_interval": int(opt.opacity_reset_interval),
+        },
         "diffuse_schedule": {
             "position_lr_init": float(opt.position_lr_init),
             "position_lr_final": float(opt.position_lr_final),
@@ -164,6 +194,7 @@ def _config(dataset, opt, diffuse, mask_manifest):
 
 
 def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoint):
+    operator_gate = bool(getattr(opt, "operator_gate_continuation", False))
     if dataset.model_type != "surfel" or dataset.stage != "stage_b":
         raise ValueError("Stage B requires --model_type surfel --stage stage_b")
     if bool(start_checkpoint) == bool(diffuse_init_checkpoint):
@@ -187,6 +218,35 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
         getattr(opt, "stage_b_telemetry_max_steps", 0),
         getattr(opt, "stage_b_telemetry_phase_tag", ""),
     )
+    if getattr(opt, "d_bootstrap_telemetry_jsonl", ""):
+        raise ValueError("D bootstrap telemetry is valid only on the D-only training path")
+    if operator_gate:
+        if not getattr(opt, "stage_b_telemetry_jsonl", ""):
+            raise ValueError("operator-gated Stage B continuation requires bounded telemetry")
+        if (
+            getattr(opt, "operator_gate_expected_global_start", -1) < 0
+            or getattr(opt, "operator_gate_expected_r_local_start", -1) < 0
+        ):
+            raise ValueError("operator gate requires explicit expected global and R-local starts")
+
+
+def _validate_operator_restored_state(opt, global_iteration, reflection_iteration):
+    if not getattr(opt, "operator_gate_continuation", False):
+        return
+    if global_iteration != int(opt.operator_gate_expected_global_start):
+        raise ValueError(
+            f"operator gate expected global start {opt.operator_gate_expected_global_start}, "
+            f"restored {global_iteration}"
+        )
+    if reflection_iteration != int(opt.operator_gate_expected_r_local_start):
+        raise ValueError(
+            f"operator gate expected R-local start {opt.operator_gate_expected_r_local_start}, "
+            f"restored {reflection_iteration}"
+        )
+    if reflection_iteration < 100 and opt.lambda_spec != 0:
+        raise ValueError("Tier 2 R-local 1--100 requires lambda_spec=0 and no mask")
+    if reflection_iteration >= 100 and abs(float(opt.lambda_spec) - 0.2) > 1e-12:
+        raise ValueError("Tier 2 R-local 101+ requires lambda_spec=0.2 and the formal mask")
 
 
 def _report(iteration, testing_iterations, scene, state, pipe, background):
@@ -243,14 +303,18 @@ def training_stage_b(
     reflection = ReflectionSurfelModel()
     scene = StageBScene(dataset, diffuse, reflection, shuffle=True, write_metadata=True)
 
+    runtime_state = None
+    operator_rng_state = None
     if start_checkpoint:
-        global_iteration, reflection_iteration, provenance, saved_config = load_stage_b_checkpoint(
+        global_iteration, reflection_iteration, provenance, saved_config, runtime_state = load_stage_b_checkpoint(
             start_checkpoint,
             diffuse,
             reflection,
             opt,
             opt,
             map_location="cuda",
+            require_full_state=opt.operator_gate_continuation,
+            return_runtime_state=True,
         )
         current_config = _config(dataset, opt, diffuse, mask_manifest)
         for key in (
@@ -260,8 +324,16 @@ def training_stage_b(
         ):
             if saved_config.get(key) != current_config.get(key):
                 raise ValueError(f"Stage B resume config mismatch for {key}")
+        if "operator_gate_continuation" in saved_config and (
+            saved_config["operator_gate_continuation"] != current_config["operator_gate_continuation"]
+        ):
+            raise ValueError("Stage B resume config mismatch for operator_gate_continuation")
+        if opt.operator_gate_continuation and (
+            saved_config.get("operator_contract") != current_config.get("operator_contract")
+        ):
+            raise ValueError("Stage B resume config mismatch for operator_contract")
     else:
-        global_iteration, reflection_iteration, provenance = initialize_stage_b_from_diffuse(
+        global_iteration, reflection_iteration, provenance, runtime_state = initialize_stage_b_from_diffuse(
             diffuse_init_checkpoint,
             diffuse,
             reflection,
@@ -270,7 +342,13 @@ def training_stage_b(
             reflection_count=dataset.reflection_init_count,
             reflection_seed=dataset.reflection_init_seed,
             map_location="cuda",
+            require_full_state=opt.operator_gate_continuation,
+            return_runtime_state=True,
+            verify_rng_unchanged=opt.operator_gate_continuation,
         )
+    if opt.operator_gate_continuation:
+        _validate_operator_restored_state(opt, global_iteration, reflection_iteration)
+        operator_rng_state = capture_rng_state()
     if global_iteration >= opt.iterations:
         raise ValueError("--iterations must be greater than the restored global iteration")
     if opt.specular_smoke_diagnostics and opt.iterations - global_iteration > 3:
@@ -317,9 +395,11 @@ def training_stage_b(
     if opt.lambda_perc > 0:
         from utils.perceptual_loss import VGG16PerceptualLoss
         perceptual = VGG16PerceptualLoss(pretrained=True).cuda().eval()
+    if operator_rng_state is not None:
+        restore_rng_state(operator_rng_state)
 
-    viewpoints = scene.getTrainCameras().copy()
-    indices = list(range(len(viewpoints)))
+    all_train_cameras = scene.getTrainCameras().copy()
+    viewpoints, indices = restore_camera_deck(all_train_cameras, runtime_state)
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage B training progress")
     ema_loss = 0.0
     allocator_peak_scope = "process_start_or_preexisting_reset_before_telemetry"
@@ -343,8 +423,8 @@ def training_stage_b(
         diffuse.update_learning_rate(iteration)
         reflection.update_learning_rate(reflection_iteration)
         if not viewpoints:
-            viewpoints = scene.getTrainCameras().copy()
-            indices = list(range(len(viewpoints)))
+            viewpoints = all_train_cameras.copy()
+            indices = list(range(len(all_train_cameras)))
         selected = randint(0, len(indices) - 1)
         camera = viewpoints.pop(selected)
         indices.pop(selected)
@@ -515,7 +595,10 @@ def training_stage_b(
                 if iteration % opt.opacity_reset_interval == 0:
                     diffuse.reset_opacity()
 
-            if iteration < opt.iterations:
+            optimizer_step_completed = should_step_optimizer(
+                iteration, opt.iterations, opt.operator_gate_continuation
+            )
+            if optimizer_step_completed:
                 diffuse.exposure_optimizer.step()
                 diffuse.exposure_optimizer.zero_grad(set_to_none=True)
                 diffuse.optimizer.step()
@@ -544,6 +627,13 @@ def training_stage_b(
                     reflection_iteration,
                     provenance,
                     _config(dataset, opt, diffuse, mask_manifest),
+                    runtime_state=(
+                        make_camera_runtime_state(indices, len(all_train_cameras))
+                        if opt.operator_gate_continuation else None
+                    ),
+                    optimizer_step_completed=(
+                        optimizer_step_completed if opt.operator_gate_continuation else None
+                    ),
                 )
                 torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
 

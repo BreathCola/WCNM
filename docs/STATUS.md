@@ -36,16 +36,25 @@ trend remains an evidence gap. Stage B is neither complete nor accepted. The
 frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
 Stage C and Stage D have not started.
 
-An observability-only patch for a future matched 10k-versus-15k Tier-1 handoff
-viability pilot is now implemented and tested, but no such pilot or bootstrap
-has been run. The new JSONL mode is explicit, bounded, and independent of both
-`lambda_spec` and the smoke-only diagnostics switch. It does not request ray
-diagnostics, add a traversal, rerender, backward pass, or CUDA synchronization.
-An offline CPU-only comparison tool uses existing physical debug PNGs under one
-scale shared by both runs and reports unrecoverable sub-8-bit spatial data as
-unavailable. Full repository tests pass 102/102. This work closes the earlier
-instrumentation gap only for future explicitly instrumented runs; it does not
-retroactively add evidence to completed pilots or advance Stage B acceptance.
+The bounded Tier-1 observability path was subsequently used by the user for
+matched 7k, 10k, and 15k fresh-R handoff pilots through R-local 175. Read-only
+audits classify 7k and 10k as `CONDITIONAL PASS` because D still performs one
+expected endpoint densification and long-horizon evidence is absent; 15k is a
+`HEALTHY` control. Candidate/exact counts, raytrace time, allocator evidence,
+L_spec behavior, and fixed-view structure remain in the same engineering range.
+These results establish 7k only as the earliest conditionally viable checkpoint
+tested so far, not as an optimum or Stage B acceptance.
+
+An opt-in Tier-2 operator pack now implements version-2 full-state D-only and
+Stage B continuation checkpoints, endpoint optimizer continuity, Python/NumPy/
+CPU/CUDA RNG plus remaining-camera-deck restoration, bounded D telemetry, and a
+CPU-only read-only gate packet generator. GPU-enabled repository tests pass
+111/111. No Tier-2 bootstrap or branch training has run. The pack is currently
+blocked for operator execution because the historical C03 D baseline used
+`resolution=2`, while the measured dual-3090 Stage B path requires the
+resource-safe `resolution=8`; silently changing this would violate the stated
+same-D-configuration contract. The operator script prints resolution-8 commands
+but refuses execution without explicit `RTGS_TIER2_ACK_RESOLUTION8=YES`.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -344,7 +353,7 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   mismatch, unknown sources, and manifest/hash mismatch. Soft resize is
   recorded as `opencv.INTER_LINEAR`; full-image RGB reconstruction is unchanged.
 - The pre-telemetry Stage A/B suite was 95 passed. The current full suite is
-  102 passed after adding seven observability regressions. This includes formal archive exact-copy
+  111 passed after observability and Tier-2 lifecycle regressions. This includes formal archive exact-copy
   tests, fail-closed loading, continuous soft resize, L_spec mask-only gradient,
   whole-image RGB, debug transparent-mask/overlay, and all prior regressions.
   This remains implementation evidence, not Stage B acceptance.
@@ -377,8 +386,36 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   common scales to metadata. If an existing physical 8-bit reflection map has
   quantized all spatial signal to zero, reflection and delta-reflection output
   are reported unavailable rather than reconstructed from scalar metadata.
-- This is readiness only. No 10k/15k Phase A or Phase B run, no dual-GPU launch,
-  no new checkpoint, and no Stage C/D work has occurred.
+- The user completed matched 7k/10k/15k Phase A/B Tier-1 pilots. Read-only
+  results are 7k/10k `CONDITIONAL PASS`, 15k `HEALTHY`; none is a long-horizon
+  onset comparison or Stage B acceptance.
+
+## Tier-2 operator-pack state
+
+- `--operator_gate_continuation` is default-off. When enabled it requires
+  bounded telemetry, explicit restored global/R-local starts, full-state
+  version-2 checkpoints, and an optimizer update at every bounded endpoint so
+  segmented gates match one continuous optimization trajectory.
+- Full-state checkpoints include D/R model and optimizer/densification state,
+  global/R-local progress, Python/NumPy/CPU/CUDA RNG, remaining camera-deck
+  indices, complete schedule/data contract, and an explicit completed-endpoint-
+  update marker. Fresh R uses its independent seeded generator and is tested not
+  to change restored global RNG or the shared source checkpoint.
+- `tools/audit_tier2_gate.py` loads checkpoints on CPU, slices a bounded JSONL
+  interval, scans every nested tensor, reads endpoint debug metadata and log
+  anomalies, and prints a compact read-only packet. It imports no training,
+  renderer, or raytracer path.
+- `tools/tier2_operator.sh` prints or explicitly executes one finite bootstrap,
+  gate, protection, or audit action. It assigns bootstrap/Branch B to physical
+  GPU 1, Branch A to physical GPU 0, uses separate JIT roots/model paths/logs,
+  and never advances a later gate automatically.
+- No real Tier-2 output directory, checkpoint, telemetry, debug image, or log
+  has been created by this implementation.
+- Execution remains blocked pending the user's explicit resolution decision:
+  exact legacy C03 parity is resolution 2, but existing resolution-8 Stage B
+  already reaches roughly 18--21 GiB allocator peaks on a 3090. The script's
+  resolution-8 protocol is internally matched across bootstrap/A/B but is an
+  explicit deviation from the legacy C03 image resolution.
 
 ## Current boundary and next exact task
 
@@ -387,11 +424,10 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
 - `lambda_spec=0` must keep `--specular_masks` empty and emits no mask/overlay.
   The authorized three-iteration `lambda_spec=0.2` smoke stopped at global
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
-  alignment. The only authorized 100-step `lambda_spec=0.2` pilot stopped at
-  global 15,103 / R-local 103. No further training is authorized; the next
-  action is user authorization (or rejection) of the bounded dual-GPU Tier-1
-  10k-versus-15k handoff viability protocol. The existing pilots retain their
-  memory telemetry caveat; the new mode does not change historical artifacts.
+  alignment. The controlled 7k/10k/15k Tier-1 pilots are complete and remain
+  evidence-only. No Tier-2 training is authorized; the next action is the
+  user's explicit resolution decision. Only after approval may the user run the
+  first bounded bootstrap command and return a Gate-0 packet.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

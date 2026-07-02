@@ -155,9 +155,10 @@ not a full-field brute-force traversal; R count and initial scale remain fixed.
   information.
 - [x] Verify default-off behavior, loss/parameter/RNG invariance, Phase A/B mask
   policy, strict schema/bounds, allocator labels, and postprocess imports and
-  input immutability in the full 102-test repository suite.
-- [ ] Run the dual-RTX-3090 10k-versus-15k Tier-1 pilot. This remains separately
-  gated by user authorization and is not implied by the observability patch.
+  input immutability.
+- [x] User ran and Codex read-only audited matched 7k/10k/15k Phase A/B Tier-1
+  pilots. Results are 7k/10k `CONDITIONAL PASS`, 15k `HEALTHY`; they do not
+  answer long-horizon causal quality.
 
 This instrumentation does not alter renderer, tracer, BVH, candidate/exact
 logic, BRDF, losses, optimizer/scheduler, densification thresholds/timing,
@@ -167,6 +168,53 @@ the scoped maximum spans the complete loop boundary; on debug steps, maxima
 from before debug begins and after the debug path's existing reset are combined,
 while the transient interval before that internal reset is labeled unavailable.
 No result from an earlier run is retroactively upgraded by this code.
+
+### Tier-2 manually gated operator pack
+
+- [x] Add opt-in version-2 D-only and Stage B continuation checkpoints with
+  model/optimizer/densification, global/R-local, Python/NumPy/CPU/CUDA RNG,
+  remaining camera deck, configuration, and completed-endpoint-update state.
+- [x] Preserve the endpoint optimizer update only in explicit operator mode so
+  a bounded resume follows the uninterrupted trajectory; retain legacy defaults.
+- [x] Require full-state sources and exact expected global/R-local starts at
+  every gate.
+- [x] Verify fresh R uses its private seed/generator without changing restored
+  global RNG or the shared checkpoint bytes.
+- [x] Enforce no mask/L_spec before local 101 and the formal manifest with
+  `lambda_spec=0.2` from local 101 onward.
+- [x] Add bounded D-only telemetry without any R model/optimizer/renderer field.
+- [x] Add a CPU-only, read-only gate packet tool covering checkpoint hash/finite
+  scan, telemetry continuity, topology, losses/material, allocator, endpoint
+  debug metadata, log anomalies, and missing artifacts.
+- [x] Add a print-by-default shell wrapper for bootstrap, checkpoint protection,
+  Branch A/B gates, global-1000 segments, and one-command audits. It never
+  advances a later gate automatically.
+- [x] Pass the GPU-enabled full 111-test repository suite and CPU-only 96-pass /
+  15-skip suite without running training.
+- [ ] Resolve the Tier-2 image-resolution contract. Legacy C03 is resolution 2;
+  measured 3090 Stage B is resource-safe only at resolution 8. The wrapper uses
+  resolution 8 across bootstrap/A/B but refuses execution without explicit user
+  acknowledgment.
+- [ ] Run Gate 0 shared D bootstrap. No Tier-2 command is currently authorized.
+
+Gate decisions after the user returns one generated packet:
+
+- `GO`: packet complete and continuous; checkpoint/runtime/RNG finite; no OOM or
+  anomaly; counts/topology match the scheduled gate; candidate/exact, allocator,
+  timing, material drift, and fixed debug remain controlled. This authorizes
+  only the next named finite segment.
+- `HOLD`: core state is finite but review evidence is incomplete, allocator or
+  traversal trends need comparison, topology is elevated but explainable, or
+  fixed-view human inspection is pending. No next command is authorized.
+- `BLOCKED`: missing/corrupt checkpoint or telemetry, nonfinite/OOM, global or
+  R-local discontinuity, source/config/GPU isolation failure, unexplained
+  topology, approximately 2x candidate/exact escalation, or visible collapse.
+
+Gate 0 additionally requires a D-only version-2 checkpoint with no R namespace.
+Gate 1 requires R=4096/version 0 and null mask/L_spec fields. Gate 2 is the first
+local-200 topology crossing and must explain the R count/version change before
+either branch advances. Gates 3/4 stop at local 500/1000. Every later command is
+exactly one global-1000 segment and requires a new returned packet.
 
 ### Formal-mask L_spec smoke
 
@@ -412,8 +460,8 @@ dummy outputs are permitted in Stage B.
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
 - [x] Existing Stage A regression suite plus DR proposal/review/repair,
-  formal-mask/L_spec, and bounded telemetry contracts: full repository result
-  is 102 passed.
+  formal-mask/L_spec, bounded telemetry, and Tier-2 lifecycle contracts: full
+  repository result is 111 passed.
 
 ## Acceptance checklist
 

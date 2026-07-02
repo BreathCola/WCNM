@@ -115,6 +115,12 @@ class OptimizationParams(ParamGroup):
         self.stage_b_telemetry_jsonl = ""
         self.stage_b_telemetry_max_steps = 0
         self.stage_b_telemetry_phase_tag = ""
+        self.d_bootstrap_telemetry_jsonl = ""
+        self.d_bootstrap_telemetry_max_steps = 0
+        self.d_bootstrap_telemetry_phase_tag = ""
+        self.operator_gate_continuation = False
+        self.operator_gate_expected_global_start = -1
+        self.operator_gate_expected_r_local_start = -1
         self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000

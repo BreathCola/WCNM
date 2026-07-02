@@ -1761,3 +1761,88 @@ bounded 10k/15k Phase A and Phase B Tier-1 protocol with identical R seed/count,
 mask policy, resolution, chunks, ray settings, and phase lengths. Treat it as
 handoff viability evidence only; it cannot establish the long-horizon causal
 optimality of early versus late R intervention.
+
+## B-020 — Full-state, manually gated Tier-2 continuation contract
+
+Date: 2026-07-02
+
+Question: How can a user execute a 3k-versus-7k Reflection-onset experiment in
+finite supervised segments without segment boundaries, fresh-R creation, or
+Codex's inability to monitor a live terminal changing the causal treatment?
+
+Chosen implementation: Add the default-off `--operator_gate_continuation`
+contract. D-only and Stage B checkpoints written under this mode are version 2
+and contain model, optimizer/densification state, global/R-local iteration,
+Python/NumPy/CPU/CUDA RNG, remaining shuffled-camera indices, full relevant
+data/schedule configuration, and an `optimizer_step_completed=true` marker.
+Unlike legacy bounded commands, the operator mode performs the optimizer update
+at the command endpoint before saving. This makes a resumed segment equivalent
+to the same iteration inside an uninterrupted run; default legacy semantics are
+unchanged.
+
+Restore the same deterministically shuffled base camera list, then rebuild the
+remaining deck from saved indices. Restore checkpoint RNG after process-local
+model/helper construction so VGG/module construction cannot consume trajectory
+RNG. Stage A full-state checkpoints are fail-closed requirements for fresh-R
+Tier-2 starts, and Stage B version-2 checkpoints are required for every later
+gate. Source hashes are checked before and after fresh-R loading. Reflection
+initialization retains its explicit private `torch.Generator(seed)` and the
+operator path verifies that global Python/NumPy/CPU/CUDA RNG is byte-identical
+before and after R creation.
+
+Require exact expected global and R-local source values on every command.
+R-local 0 starts must use `lambda_spec=0` with no manifest; R-local 100 and later
+must use the formal manifest and exactly `lambda_spec=0.2`. D bootstrap and
+Stage B telemetry are bounded, refuse nonempty files and oversized planned
+segments, and remain opt-in. The D schema records global/camera/loss, D count
+and topology, CPU loop wall time, and current/scoped allocator values without R
+fields because R does not exist before onset.
+
+Provide `tools/tier2_operator.sh` as a print-by-default wrapper for exactly one
+bootstrap, branch gate, checkpoint-protection, or read-only audit action. It
+never chains later gates. Provide `tools/audit_tier2_gate.py` as a CPU-only
+packet generator that reads checkpoint/telemetry/log/debug metadata, recursively
+scans checkpoint tensors, checks bounded continuity, and reports topology,
+loss/L_spec/mask/ks, allocator, candidate/exact/raytrace, anomalies, and missing
+artifacts. Codex can issue GO/HOLD/BLOCKED only after the user returns that
+packet; no live background monitoring is claimed.
+
+Resolution preflight: the historical C03 D-only run records `resolution=2`.
+Existing Stage B Tier-1 runs at `resolution=8` already reach roughly 18--21 GiB
+PyTorch allocator peaks on RTX 3090. Running the long Reflection path at
+resolution 2 is therefore not a responsible operator command, while switching
+only at R onset would confound the sole treatment variable. The wrapper fixes
+resolution 8 across the new shared bootstrap and both branches, preserving
+internal A/B causality, but this is an explicit deviation from literal legacy
+C03 configuration parity. It refuses all training actions unless the user sets
+`RTGS_TIER2_ACK_RESOLUTION8=YES`; until that decision, classify the operator
+pack as blocked rather than silently choosing a resolution.
+
+Alternatives: Resume legacy Stage A checkpoints without RNG/camera state; skip
+the endpoint update at every gate; restart the camera deck at each process;
+initialize R from global RNG; run one 12,000-step command; claim Codex is
+watching a background process; run Stage B at resolution 2 despite measured
+headroom; or change resolution only on the early branch.
+
+Why: Each alternative either breaks deterministic continuation, adds a second
+treatment variable, weakens operator safety, or overstates supervision. A
+private R generator plus complete trajectory state makes onset timing the only
+intended branch difference. Explicit resolution acknowledgment keeps the
+remaining specification conflict visible.
+
+Paper fidelity: This changes no representation, renderer, ray, BVH, candidate
+selection, exact intersection, BRDF, loss formula, optimizer, scheduler, or
+densification rule. It changes only opt-in checkpoint/runtime observability and
+whether a bounded endpoint update is preserved for later continuation.
+
+Impact: GPU-enabled full repository tests pass 111/111; CPU-only tests pass 96
+with 15 CUDA-only skips. No bootstrap, branch, render, real checkpoint, output
+directory, Stage C, or Stage D action was run. Stage B remains unaccepted, and
+Tier-2 operator execution is blocked pending explicit resolution approval.
+
+Required ablation: After resolution approval and explicit Gate-0 authorization,
+the user may run only the shared 0--7000 D bootstrap. Protect and audit the real
+3k checkpoint before Branch A starts, audit the final 7k bootstrap before Branch
+B starts, and require returned GO decisions at R-local 100/205/500/1000 and
+every later global-1000 endpoint. Do not infer long-horizon onset causality from
+any earlier gate.
