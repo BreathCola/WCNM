@@ -6,15 +6,18 @@ cd "$ROOT"
 
 ACTION="${1:-help}"
 MODE="${2:-print}"
-BOOTSTRAP="output/tier2_c03_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A="output/tier2_c03_rstart_g03000_to_g15000_v1"
-BRANCH_B="output/tier2_c03_rstart_g07000_to_g15000_v1"
+BOOTSTRAP="output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1"
+BRANCH_A="output/tier2_c03_r8_rstart_g03000_to_g15000_v1"
+BRANCH_B="output/tier2_c03_r8_rstart_g07000_to_g15000_v1"
 MASK="specular_masks_reviewed_v1/manifest.json"
 RESOLUTION=8
+EXPERIMENT="C03-r8 Tier 2 onset study"
+PHASE_PREFIX="experiment=${EXPERIMENT};resolution=${RESOLUTION};phase="
 
 COMMON_MODEL=(
   --source_path data/TiHuBird
   --model_type surfel
+  --experiment "$EXPERIMENT"
   --roughness_min 0.03
   --normal_priors diffrender_priors_candidates/axis_smoke/C03/normal
   --normal_prior_space camera
@@ -82,16 +85,12 @@ quote_command() {
 run_or_print() {
   local log_path="$1"
   shift
+  echo "# experiment=$EXPERIMENT"
+  echo "# resolution=$RESOLUTION"
+  quote_command "$@"
   if [[ "$MODE" != "--execute" ]]; then
-    echo "# Set RTGS_TIER2_ACK_RESOLUTION8=YES only after approving the documented resolution-8 deviation."
-    printf 'RTGS_TIER2_ACK_RESOLUTION8=YES '
-    quote_command "$@"
     echo "# log: $log_path"
     return
-  fi
-  if [[ "${RTGS_TIER2_ACK_RESOLUTION8:-}" != "YES" ]]; then
-    echo "BLOCKED: resolution 8 requires explicit RTGS_TIER2_ACK_RESOLUTION8=YES" >&2
-    exit 4
   fi
   "$@" 2>&1 | tee "$log_path"
 }
@@ -110,7 +109,7 @@ require_new_dir() {
 
 bootstrap() {
   require_new_dir "$BOOTSTRAP"
-  run_or_print output/tier2_c03_shared_d_bootstrap_g00000_07000_v1.log \
+  run_or_print output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log \
     env CUDA_VISIBLE_DEVICES=1 RTGS_BVH_JIT_ROOT=/tmp/rtgs-bvh-tier2-gpu1 \
       PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
     conda run --no-capture-output -n RT-GS python train.py \
@@ -121,7 +120,7 @@ bootstrap() {
       --operator_gate_continuation --operator_gate_expected_global_start 0 \
       --d_bootstrap_telemetry_jsonl "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" \
       --d_bootstrap_telemetry_max_steps 7000 \
-      --d_bootstrap_telemetry_phase_tag tier2_shared_d_bootstrap
+      --d_bootstrap_telemetry_phase_tag "${PHASE_PREFIX}shared_d_bootstrap"
 }
 
 stage_b_gate() {
@@ -197,9 +196,9 @@ next_gate() {
   local start_local=$((start - onset))
   stage_b_gate "$branch" "$gpu" "$jit" start "$branch/chkpnt${start}.pth" \
     "$start" "$start_local" "$end" 1000 \
-    "tier2_${branch_name}_g$((start + 1))_${end}" \
+    "${PHASE_PREFIX}${branch_name}_g$((start + 1))_${end}" \
     "gate_g$((start + 1))_${end}.jsonl" \
-    "output/tier2_${branch_name}_g$((start + 1))_${end}.log" 0.2
+    "output/tier2_c03_r8_${branch_name}_g$((start + 1))_${end}.log" 0.2
 }
 
 audit_next() {
@@ -207,7 +206,7 @@ audit_next() {
   if [[ "$branch_name" == "a" ]]; then branch="$BRANCH_A"; onset=3000; else branch="$BRANCH_B"; onset=7000; fi
   local start=$((end - 1000))
   audit_gate "$branch/chkpnt${end}.pth" "$branch/telemetry/gate_g$((start + 1))_${end}.jsonl" \
-    "$branch" "output/tier2_${branch_name}_g$((start + 1))_${end}.log" \
+    "$branch" "output/tier2_c03_r8_${branch_name}_g$((start + 1))_${end}.log" \
     "$((start + 1))" "$end" "$((start - onset + 1))" "$((end - onset))"
 }
 
@@ -218,26 +217,26 @@ case "$ACTION" in
     if [[ "$MODE" == "--execute" ]]; then chmod a-w "$BOOTSTRAP/chkpnt3000.pth"; else quote_command chmod a-w "$BOOTSTRAP/chkpnt3000.pth"; fi ;;
   protect-bootstrap)
     if [[ "$MODE" == "--execute" ]]; then chmod a-w "$BOOTSTRAP"/chkpnt{1000,2000,3000,4000,5000,6000,7000}.pth; else echo "chmod a-w $BOOTSTRAP/chkpnt{1000,2000,3000,4000,5000,6000,7000}.pth"; fi ;;
-  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 tier2_a_phase_a gate1_g03001_03100.jsonl output/tier2_a_gate1_g03001_03100.log 0 ;;
-  a-gate2) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3100.pth" 3100 100 3205 105 tier2_a_gate2 gate2_g03101_03205.jsonl output/tier2_a_gate2_g03101_03205.log 0.2 ;;
-  a-gate3) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3205.pth" 3205 205 3500 295 tier2_a_gate3 gate3_g03206_03500.jsonl output/tier2_a_gate3_g03206_03500.log 0.2 ;;
-  a-gate4) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3500.pth" 3500 500 4000 500 tier2_a_gate4 gate4_g03501_04000.jsonl output/tier2_a_gate4_g03501_04000.log 0.2 ;;
-  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 tier2_b_phase_a gate1_g07001_07100.jsonl output/tier2_b_gate1_g07001_07100.log 0 ;;
-  b-gate2) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7100.pth" 7100 100 7205 105 tier2_b_gate2 gate2_g07101_07205.jsonl output/tier2_b_gate2_g07101_07205.log 0.2 ;;
-  b-gate3) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7205.pth" 7205 205 7500 295 tier2_b_gate3 gate3_g07206_07500.jsonl output/tier2_b_gate3_g07206_07500.log 0.2 ;;
-  b-gate4) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7500.pth" 7500 500 8000 500 tier2_b_gate4 gate4_g07501_08000.jsonl output/tier2_b_gate4_g07501_08000.log 0.2 ;;
+  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_phase_a" gate1_g03001_03100.jsonl output/tier2_c03_r8_a_gate1_g03001_03100.log 0 ;;
+  a-gate2) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3100.pth" 3100 100 3205 105 "${PHASE_PREFIX}a_gate2" gate2_g03101_03205.jsonl output/tier2_c03_r8_a_gate2_g03101_03205.log 0.2 ;;
+  a-gate3) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3205.pth" 3205 205 3500 295 "${PHASE_PREFIX}a_gate3" gate3_g03206_03500.jsonl output/tier2_c03_r8_a_gate3_g03206_03500.log 0.2 ;;
+  a-gate4) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-gpu0 start "$BRANCH_A/chkpnt3500.pth" 3500 500 4000 500 "${PHASE_PREFIX}a_gate4" gate4_g03501_04000.jsonl output/tier2_c03_r8_a_gate4_g03501_04000.log 0.2 ;;
+  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_phase_a" gate1_g07001_07100.jsonl output/tier2_c03_r8_b_gate1_g07001_07100.log 0 ;;
+  b-gate2) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7100.pth" 7100 100 7205 105 "${PHASE_PREFIX}b_gate2" gate2_g07101_07205.jsonl output/tier2_c03_r8_b_gate2_g07101_07205.log 0.2 ;;
+  b-gate3) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7205.pth" 7205 205 7500 295 "${PHASE_PREFIX}b_gate3" gate3_g07206_07500.jsonl output/tier2_c03_r8_b_gate3_g07206_07500.log 0.2 ;;
+  b-gate4) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-gpu1 start "$BRANCH_B/chkpnt7500.pth" 7500 500 8000 500 "${PHASE_PREFIX}b_gate4" gate4_g07501_08000.jsonl output/tier2_c03_r8_b_gate4_g07501_08000.log 0.2 ;;
   a-next) next_gate a "${3:?END required}" ;;
   b-next) next_gate b "${3:?END required}" ;;
-  audit-bootstrap-3000) audit_gate "$BOOTSTRAP/chkpnt3000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_shared_d_bootstrap_g00000_07000_v1.log 1 3000 running ;;
-  audit-bootstrap-7000) audit_gate "$BOOTSTRAP/chkpnt7000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_shared_d_bootstrap_g00000_07000_v1.log 1 7000 ply ;;
-  audit-a-phase-a) audit_gate "$BRANCH_A/chkpnt3100.pth" "$BRANCH_A/telemetry/gate1_g03001_03100.jsonl" "$BRANCH_A" output/tier2_a_gate1_g03001_03100.log 3001 3100 1 100 ;;
-  audit-a-gate2) audit_gate "$BRANCH_A/chkpnt3205.pth" "$BRANCH_A/telemetry/gate2_g03101_03205.jsonl" "$BRANCH_A" output/tier2_a_gate2_g03101_03205.log 3101 3205 101 205 ;;
-  audit-a-gate3) audit_gate "$BRANCH_A/chkpnt3500.pth" "$BRANCH_A/telemetry/gate3_g03206_03500.jsonl" "$BRANCH_A" output/tier2_a_gate3_g03206_03500.log 3206 3500 206 500 ;;
-  audit-a-gate4) audit_gate "$BRANCH_A/chkpnt4000.pth" "$BRANCH_A/telemetry/gate4_g03501_04000.jsonl" "$BRANCH_A" output/tier2_a_gate4_g03501_04000.log 3501 4000 501 1000 ;;
-  audit-b-phase-a) audit_gate "$BRANCH_B/chkpnt7100.pth" "$BRANCH_B/telemetry/gate1_g07001_07100.jsonl" "$BRANCH_B" output/tier2_b_gate1_g07001_07100.log 7001 7100 1 100 ;;
-  audit-b-gate2) audit_gate "$BRANCH_B/chkpnt7205.pth" "$BRANCH_B/telemetry/gate2_g07101_07205.jsonl" "$BRANCH_B" output/tier2_b_gate2_g07101_07205.log 7101 7205 101 205 ;;
-  audit-b-gate3) audit_gate "$BRANCH_B/chkpnt7500.pth" "$BRANCH_B/telemetry/gate3_g07206_07500.jsonl" "$BRANCH_B" output/tier2_b_gate3_g07206_07500.log 7206 7500 206 500 ;;
-  audit-b-gate4) audit_gate "$BRANCH_B/chkpnt8000.pth" "$BRANCH_B/telemetry/gate4_g07501_08000.jsonl" "$BRANCH_B" output/tier2_b_gate4_g07501_08000.log 7501 8000 501 1000 ;;
+  audit-bootstrap-3000) audit_gate "$BOOTSTRAP/chkpnt3000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log 1 3000 running ;;
+  audit-bootstrap-7000) audit_gate "$BOOTSTRAP/chkpnt7000.pth" "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" "$BOOTSTRAP" output/tier2_c03_r8_shared_d_bootstrap_g00000_07000_v1.log 1 7000 ply ;;
+  audit-a-phase-a) audit_gate "$BRANCH_A/chkpnt3100.pth" "$BRANCH_A/telemetry/gate1_g03001_03100.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate1_g03001_03100.log 3001 3100 1 100 ;;
+  audit-a-gate2) audit_gate "$BRANCH_A/chkpnt3205.pth" "$BRANCH_A/telemetry/gate2_g03101_03205.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate2_g03101_03205.log 3101 3205 101 205 ;;
+  audit-a-gate3) audit_gate "$BRANCH_A/chkpnt3500.pth" "$BRANCH_A/telemetry/gate3_g03206_03500.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate3_g03206_03500.log 3206 3500 206 500 ;;
+  audit-a-gate4) audit_gate "$BRANCH_A/chkpnt4000.pth" "$BRANCH_A/telemetry/gate4_g03501_04000.jsonl" "$BRANCH_A" output/tier2_c03_r8_a_gate4_g03501_04000.log 3501 4000 501 1000 ;;
+  audit-b-phase-a) audit_gate "$BRANCH_B/chkpnt7100.pth" "$BRANCH_B/telemetry/gate1_g07001_07100.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate1_g07001_07100.log 7001 7100 1 100 ;;
+  audit-b-gate2) audit_gate "$BRANCH_B/chkpnt7205.pth" "$BRANCH_B/telemetry/gate2_g07101_07205.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate2_g07101_07205.log 7101 7205 101 205 ;;
+  audit-b-gate3) audit_gate "$BRANCH_B/chkpnt7500.pth" "$BRANCH_B/telemetry/gate3_g07206_07500.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate3_g07206_07500.log 7206 7500 206 500 ;;
+  audit-b-gate4) audit_gate "$BRANCH_B/chkpnt8000.pth" "$BRANCH_B/telemetry/gate4_g07501_08000.jsonl" "$BRANCH_B" output/tier2_c03_r8_b_gate4_g07501_08000.log 7501 8000 501 1000 ;;
   audit-a-next) audit_next a "${3:?END required}" ;;
   audit-b-next) audit_next b "${3:?END required}" ;;
   help|*)

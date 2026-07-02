@@ -191,11 +191,12 @@ No result from an earlier run is retroactively upgraded by this code.
   advances a later gate automatically.
 - [x] Pass the GPU-enabled full 111-test repository suite and CPU-only 96-pass /
   15-skip suite without running training.
-- [ ] Resolve the Tier-2 image-resolution contract. Legacy C03 is resolution 2;
-  measured 3090 Stage B is resource-safe only at resolution 8. The wrapper uses
-  resolution 8 across bootstrap/A/B but refuses execution without explicit user
-  acknowledgment.
-- [ ] Run Gate 0 shared D bootstrap. No Tier-2 command is currently authorized.
+- [x] Resolve the Tier-2 image-resolution contract: the user approved the
+  internally matched `C03-r8 Tier 2 onset study` at resolution 8 across the
+  shared bootstrap and both branches. It is not a strict legacy C03-r2 replay,
+  and operator mode rejects a mismatched experiment name or resolution.
+- [ ] Run Gate 0 shared D bootstrap. Only the user's manual Gate-0 bootstrap
+  command is authorized; it has not run, and no branch command is authorized.
 
 Gate decisions after the user returns one generated packet:
 

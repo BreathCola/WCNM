@@ -42,6 +42,7 @@ from utils.training_state import (
     restore_camera_deck,
     restore_rng_state,
     should_step_optimizer,
+    validate_tier2_experiment_identity,
 )
 
 try:
@@ -119,6 +120,7 @@ def _config(dataset, opt, diffuse, mask_manifest):
     return {
         "stage": "stage_b",
         "model_type": "surfel",
+        "experiment": getattr(dataset, "experiment", ""),
         "roughness_min": float(diffuse.roughness_min),
         "roughness_remap": bool(dataset.roughness_remap),
         "material_alpha_threshold": float(dataset.material_alpha_threshold),
@@ -137,6 +139,7 @@ def _config(dataset, opt, diffuse, mask_manifest):
         "operator_contract": None if not operator_gate else {
             "source_path": dataset.source_path,
             "images": dataset.images,
+            "experiment": getattr(dataset, "experiment", ""),
             "resolution": int(dataset.resolution),
             "normal_priors": dataset.normal_priors,
             "normal_prior_space": dataset.normal_prior_space,
@@ -221,6 +224,7 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
     if getattr(opt, "d_bootstrap_telemetry_jsonl", ""):
         raise ValueError("D bootstrap telemetry is valid only on the D-only training path")
     if operator_gate:
+        validate_tier2_experiment_identity(dataset.experiment, dataset.resolution)
         if not getattr(opt, "stage_b_telemetry_jsonl", ""):
             raise ValueError("operator-gated Stage B continuation requires bounded telemetry")
         if (

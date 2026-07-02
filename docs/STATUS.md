@@ -49,12 +49,12 @@ An opt-in Tier-2 operator pack now implements version-2 full-state D-only and
 Stage B continuation checkpoints, endpoint optimizer continuity, Python/NumPy/
 CPU/CUDA RNG plus remaining-camera-deck restoration, bounded D telemetry, and a
 CPU-only read-only gate packet generator. GPU-enabled repository tests pass
-111/111. No Tier-2 bootstrap or branch training has run. The pack is currently
-blocked for operator execution because the historical C03 D baseline used
-`resolution=2`, while the measured dual-3090 Stage B path requires the
-resource-safe `resolution=8`; silently changing this would violate the stated
-same-D-configuration contract. The operator script prints resolution-8 commands
-but refuses execution without explicit `RTGS_TIER2_ACK_RESOLUTION8=YES`.
+111/111. No Tier-2 bootstrap or branch training has run. The user has now
+approved one internally matched `resolution=8` experiment named
+`C03-r8 Tier 2 onset study`; it is not a literal reproduction of the historical
+C03 resolution-2 baseline and its absolute metrics must not be compared as if it
+were one. The shared D bootstrap and both R-onset branches are fail-closed to
+this exact experiment identity and resolution.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -411,11 +411,13 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   and never advances a later gate automatically.
 - No real Tier-2 output directory, checkpoint, telemetry, debug image, or log
   has been created by this implementation.
-- Execution remains blocked pending the user's explicit resolution decision:
-  exact legacy C03 parity is resolution 2, but existing resolution-8 Stage B
-  already reaches roughly 18--21 GiB allocator peaks on a 3090. The script's
-  resolution-8 protocol is internally matched across bootstrap/A/B but is an
-  explicit deviation from the legacy C03 image resolution.
+- The approved experiment identity is exactly `C03-r8 Tier 2 onset study` at
+  `resolution=8`. The operator wrapper, cfg_args, telemetry phase tags, output/
+  log names, and version-2 checkpoint configs record that identity. Operator
+  mode rejects any other name or resolution before entering the training loop.
+- This experiment is internally matched across the shared bootstrap and Branch
+  A/B, but is explicitly not a strict reproduction of legacy C03 resolution 2
+  and must not be mixed with r2 artifacts or absolute-metric comparisons.
 
 ## Current boundary and next exact task
 
@@ -425,9 +427,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   The authorized three-iteration `lambda_spec=0.2` smoke stopped at global
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
   alignment. The controlled 7k/10k/15k Tier-1 pilots are complete and remain
-  evidence-only. No Tier-2 training is authorized; the next action is the
-  user's explicit resolution decision. Only after approval may the user run the
-  first bounded bootstrap command and return a Gate-0 packet.
+  evidence-only. The user has authorized only manual execution of the first
+  bounded C03-r8 shared bootstrap command. Codex has not run it. After that run,
+  the user must return the Gate-0 packet before any branch command is issued.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

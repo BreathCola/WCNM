@@ -1846,3 +1846,50 @@ the user may run only the shared 0--7000 D bootstrap. Protect and audit the real
 B starts, and require returned GO decisions at R-local 100/205/500/1000 and
 every later global-1000 endpoint. Do not infer long-horizon onset causality from
 any earlier gate.
+
+## B-021 — C03-r8 Tier-2 experiment identity
+
+Date: 2026-07-02
+
+Question: Which single image resolution and experiment identity govern the new
+shared D bootstrap and the 3k-versus-7k Reflection-onset branches?
+
+Chosen implementation: Name the experiment exactly `C03-r8 Tier 2 onset study`
+and fix `resolution=8` for the shared D-only bootstrap, Branch A, and Branch B.
+This is an internally matched onset study, not a strict reproduction of the
+historical C03 resolution-2 baseline; do not mix r2/r8 artifacts or compare
+their absolute metrics as if only R onset differed.
+
+The operator wrapper now uses `c03_r8` output/log names and includes the exact
+experiment name plus resolution in every printed and executed command. Its
+telemetry phase tags explicitly include `experiment=...;resolution=8`; cfg_args
+records both CLI fields; and version-2 Stage A/Stage B checkpoint configs record
+both fields. Operator-gated training fails before entering the loop if either
+identity value differs. The earlier temporary `RTGS_TIER2_ACK_RESOLUTION8`
+execution block is removed because the user has supplied the required approval.
+
+All previously defined trajectory controls remain unchanged: one common D-only
+bootstrap, private seeded fresh-R initialization, R-local 1--100 with no mask and
+`lambda_spec=0`, R-local 101+ with the formal manifest and
+`lambda_spec=0.2`, bounded manual gates, and returned-packet GO/HOLD/BLOCKED
+review. This clarification changes no renderer, tracer, BVH, candidate/exact
+logic, BRDF, loss, optimizer, scheduler, densification, checkpoint state
+meaning, initialization, or RNG consumption order.
+
+Alternatives: Keep the operator pack blocked; run the long path at resolution 2;
+or switch resolution only when R starts.
+
+Why: Resolution 8 is the approved dual-RTX-3090-feasible configuration, and
+using it from bootstrap through both branches keeps R onset as the intended
+between-branch treatment variable. Explicit identity in every audit surface
+prevents accidental legacy-r2 mixing.
+
+Paper fidelity: Observability and experiment naming only; training mathematics
+and schedules are unchanged.
+
+Impact: The operator pack is ready for the user to run only Gate 0 manually. No
+bootstrap, branch, render, checkpoint, output, Stage C, or Stage D action was run
+while making this decision.
+
+Required ablation: The approved Tier-2 onset study itself; no comparison to the
+legacy resolution-2 C03 absolute metrics is claimed.

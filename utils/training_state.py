@@ -10,6 +10,20 @@ import torch
 
 
 RUNTIME_STATE_VERSION = 1
+TIER2_EXPERIMENT = "C03-r8 Tier 2 onset study"
+TIER2_RESOLUTION = 8
+
+
+def validate_tier2_experiment_identity(experiment: str, resolution: int) -> None:
+    """Fail closed before an operator run can mix Tier-2 experiment identity."""
+    if experiment != TIER2_EXPERIMENT:
+        raise ValueError(
+            f"Tier 2 operator mode requires experiment={TIER2_EXPERIMENT!r}"
+        )
+    if int(resolution) != TIER2_RESOLUTION:
+        raise ValueError(
+            f"Tier 2 operator mode requires resolution={TIER2_RESOLUTION}"
+        )
 
 
 def should_step_optimizer(iteration: int, endpoint: int, continuation: bool) -> bool:

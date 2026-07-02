@@ -36,6 +36,7 @@ from utils.training_state import (
     restore_camera_deck,
     rng_states_equal,
     should_step_optimizer,
+    validate_tier2_experiment_identity,
 )
 
 
@@ -115,6 +116,11 @@ def test_operator_gate_only_changes_endpoint_optimizer_continuation():
     assert should_step_optimizer(99, 100, False) is True
     assert should_step_optimizer(100, 100, False) is False
     assert should_step_optimizer(100, 100, True) is True
+    validate_tier2_experiment_identity("C03-r8 Tier 2 onset study", 8)
+    with pytest.raises(ValueError, match="experiment"):
+        validate_tier2_experiment_identity("C03", 8)
+    with pytest.raises(ValueError, match="resolution=8"):
+        validate_tier2_experiment_identity("C03-r8 Tier 2 onset study", 2)
 
 
 def test_full_stage_b_checkpoint_round_trip_carries_runtime_and_completed_update():
@@ -273,7 +279,10 @@ def test_operator_shell_is_syntax_valid_print_first_and_finite():
     subprocess.run(["bash", "-n", str(script)], check=True)
     source = script.read_text()
     assert 'MODE="${2:-print}"' in source
-    assert "RTGS_TIER2_ACK_RESOLUTION8" in source
+    assert "RTGS_TIER2_ACK_RESOLUTION8" not in source
+    assert 'EXPERIMENT="C03-r8 Tier 2 onset study"' in source
+    assert 'RESOLUTION=8' in source
+    assert "tier2_c03_r8_shared_d_bootstrap" in source
     assert "--d_bootstrap_telemetry_max_steps 7000" in source
     assert "--stage_b_telemetry_max_steps" in source
     assert "a-next" in source and "b-next" in source

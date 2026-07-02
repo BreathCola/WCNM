@@ -49,6 +49,7 @@ class ModelParams(ParamGroup):
         self.sh_degree = 3
         self.model_type = "3dgs"
         self.stage = "stage_a"
+        self.experiment = ""
         self.roughness_min = 0.03
         self.normal_priors = "normal_priors"
         self.normal_prior_space = "camera"

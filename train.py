@@ -38,6 +38,7 @@ from utils.training_state import (
     restore_camera_deck,
     restore_rng_state,
     should_step_optimizer,
+    validate_tier2_experiment_identity,
 )
 try:
     from torch.utils.tensorboard import SummaryWriter
@@ -64,6 +65,7 @@ def _stage_a_checkpoint_config(dataset, opt):
         "model_type": dataset.model_type,
         "source_path": dataset.source_path,
         "images": dataset.images,
+        "experiment": getattr(dataset, "experiment", ""),
         "resolution": int(dataset.resolution),
         "white_background": bool(dataset.white_background),
         "roughness_min": float(dataset.roughness_min),
@@ -121,6 +123,8 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
         getattr(opt, "d_bootstrap_telemetry_max_steps", 0),
         getattr(opt, "d_bootstrap_telemetry_phase_tag", ""),
     )
+    if getattr(opt, "operator_gate_continuation", False):
+        validate_tier2_experiment_identity(dataset.experiment, dataset.resolution)
     if is_surfel:
         if dataset.normal_prior_space not in ("camera", "world"):
             raise ValueError("--normal_prior_space must be either 'camera' or 'world'")
