@@ -9,7 +9,11 @@ import pytest
 import torch
 from PIL import Image
 
-from stage_b_training import _validate_stage_b_args, training_stage_b
+from stage_b_training import (
+    _forward_backward_stage_b,
+    _validate_stage_b_args,
+    training_stage_b,
+)
 from tools.compare_stage_b_pilots import compare_stage_b_pilots
 from utils.stage_b_telemetry import (
     REQUIRED_FIELDS,
@@ -73,7 +77,7 @@ def _record(step=1, phase="phase_a"):
 
 def test_telemetry_defaults_off_and_never_enable_ray_diagnostics():
     assert validate_telemetry_options("", 0, "") is False
-    source = inspect.getsource(training_stage_b)
+    source = inspect.getsource(training_stage_b) + inspect.getsource(_forward_backward_stage_b)
     assert "return_ray_diagnostics=opt.specular_smoke_diagnostics" in source
     assert "return_ray_diagnostics=telemetry" not in source
 

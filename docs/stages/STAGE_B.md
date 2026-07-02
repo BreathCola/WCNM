@@ -189,8 +189,8 @@ No result from an earlier run is retroactively upgraded by this code.
 - [x] Add a print-by-default shell wrapper for bootstrap, checkpoint protection,
   Branch A/B gates, global-1000 segments, and one-command audits. It never
   advances a later gate automatically.
-- [x] Pass the GPU-enabled full 117-test repository suite and CPU-only 102-pass /
-  15-skip suite without running training.
+- [x] Pass the GPU-enabled full 120-test repository suite and CPU-only 104-pass /
+  16-skip suite without running training.
 - [x] Resolve the Tier-2 image-resolution contract: the user approved the
   internally matched `C03-r8 Tier 2 onset study` at resolution 8 across the
   shared bootstrap and both branches. It is not a strict legacy C03-r2 replay,
@@ -231,9 +231,19 @@ No result from an earlier run is retroactively upgraded by this code.
   its outputs and final audit; it is not a training or memory result.
 - [x] Correct both the ordinary telemetry assignment and the pre-existing smoke
   record assignment, and add a regression assertion that distinguishes them.
-- [ ] User executes the committed, path-isolated v3 one-shot through both
+- [x] User executed v3. Branch B was stopped by the old headroom gate at local
+  101; Branch A OOMed at global 3765 after finite telemetry through 3764. This
+  proves per-step cache release alone is insufficient and too slow.
+- [x] Detach ray auxiliaries used only by no-grad R densification statistics.
+- [x] Add a common v4 base chunk 2048 with automatic same-camera retries at
+  1024/512 and a checkpointed-512 final fallback before any optimizer/topology
+  update. Test checkpointed outputs and D-ray/R-parameter gradients against the
+  ordinary path.
+- [x] Replace every-step `empty_cache` with a 2 GiB device-free pressure trigger
+  plus forced release on retry; retain allocator split/garbage-collection policy.
+- [ ] User executes the committed, path-isolated v4 one-shot through both
   branches or a hard failure. The coordinator must automatically generate the
-  CPU-only v3 final audit in either case. No Stage C/D work is allowed.
+  CPU-only v4 final audit in either case. No Stage C/D work is allowed.
 
 Gate decisions after the user returns one generated packet:
 
@@ -499,7 +509,7 @@ dummy outputs are permitted in Stage B.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
 - [x] Existing Stage A regression suite plus DR proposal/review/repair,
   formal-mask/L_spec, bounded telemetry, and Tier-2 lifecycle contracts: full
-  repository result is 117 passed; CPU-only is 102 passed / 15 skipped.
+  repository result is 120 passed; CPU-only is 104 passed / 16 skipped.
 
 ## Acceptance checklist
 

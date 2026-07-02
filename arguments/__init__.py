@@ -126,6 +126,8 @@ class OptimizationParams(ParamGroup):
         self.stage_b_allocator_policy = "default"
         self.stage_b_reference_peak_allocated_bytes = 0
         self.stage_b_minimum_projected_headroom_bytes = 0
+        self.stage_b_pressure_release_free_bytes = 0
+        self.stage_b_memory_retry_min_chunk_size = 0
         self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000

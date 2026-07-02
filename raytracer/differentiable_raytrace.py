@@ -119,7 +119,13 @@ def trace_candidates(
     outputs = output_color, output_alpha, output_depth, output_hit
     if return_aux:
         contributing = (weights > 0.0) & (sorted_indices >= 0)
-        aux = RaytraceAux(sorted_indices[contributing], weights[contributing])
+        # These values feed only no-grad densification bookkeeping after the
+        # training backward.  Keeping this branch attached retains otherwise
+        # unnecessary ray graphs across every chunk.
+        aux = RaytraceAux(
+            sorted_indices[contributing].detach(),
+            weights[contributing].detach(),
+        )
     else:
         aux = None
     diagnostics = (

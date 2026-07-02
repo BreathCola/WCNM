@@ -28,24 +28,26 @@ from tools.audit_tier2_gate import ANOMALY_RE, _checkpoint_counts, _finite_scan,
 OUTPUT = ROOT / "output"
 EXPERIMENT = "C03-r8 Tier 2 onset study"
 RESOLUTION = 8
-RETRY_IDENTITY = "oneshot_v3_allocator_lifecycle_retry"
-ALLOCATOR_POLICY = "release_ephemeral_cache_each_step_v1"
-REFERENCE_PEAK_ALLOCATED_BYTES = 23274475520
-MINIMUM_PROJECTED_HEADROOM_BYTES = 1073741824
+RETRY_IDENTITY = "oneshot_v4_memory_bounded_retry"
+ALLOCATOR_POLICY = "adaptive_pressure_cache_and_ray_retry_v1"
+REFERENCE_PEAK_ALLOCATED_BYTES = 0
+MINIMUM_PROJECTED_HEADROOM_BYTES = 268435456
 BOOTSTRAP = OUTPUT / "tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A = OUTPUT / "tier2_c03_r8_oneshot_v3_rstart_g03000_to_g15000"
-BRANCH_B = OUTPUT / "tier2_c03_r8_oneshot_v3_rstart_g07000_to_g15000"
-STATE_PATH = OUTPUT / "tier2_c03_r8_oneshot_v3_state.json"
-REPORT_PATH = OUTPUT / "tier2_c03_r8_oneshot_v3_final_audit.json"
-COORDINATOR_LOG = OUTPUT / "tier2_c03_r8_oneshot_v3_coordinator.log"
-PACKET_3000 = OUTPUT / "tier2_c03_r8_oneshot_v3_source_g03000_audit.json"
-PACKET_7000 = OUTPUT / "tier2_c03_r8_oneshot_v3_source_g07000_audit.json"
-PACKET_A100 = OUTPUT / "tier2_c03_r8_oneshot_v3_a_r0100_audit.json"
-PACKET_B100 = OUTPUT / "tier2_c03_r8_oneshot_v3_b_r0100_audit.json"
+BRANCH_A = OUTPUT / "tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000"
+BRANCH_B = OUTPUT / "tier2_c03_r8_oneshot_v4_rstart_g07000_to_g15000"
+STATE_PATH = OUTPUT / "tier2_c03_r8_oneshot_v4_state.json"
+REPORT_PATH = OUTPUT / "tier2_c03_r8_oneshot_v4_final_audit.json"
+COORDINATOR_LOG = OUTPUT / "tier2_c03_r8_oneshot_v4_coordinator.log"
+PACKET_3000 = OUTPUT / "tier2_c03_r8_oneshot_v4_source_g03000_audit.json"
+PACKET_7000 = OUTPUT / "tier2_c03_r8_oneshot_v4_source_g07000_audit.json"
+PACKET_A100 = OUTPUT / "tier2_c03_r8_oneshot_v4_a_r0100_audit.json"
+PACKET_B100 = OUTPUT / "tier2_c03_r8_oneshot_v4_b_r0100_audit.json"
 V1_FINAL_AUDIT = OUTPUT / "tier2_c03_r8_oneshot_final_audit_v1.json"
 EXPECTED_V1_FINAL_AUDIT_SHA256 = "72887af7b8d93ee64f59747c745030970e96aa379e7dc09f980bd749af8df88a"
 V2_FINAL_AUDIT = OUTPUT / "tier2_c03_r8_oneshot_v2_final_audit.json"
 EXPECTED_V2_FINAL_AUDIT_SHA256 = "492464757a0776d6b463a80d0b89fe2e668549586ab5a94bb01394142c0bcb7a"
+V3_FINAL_AUDIT = OUTPUT / "tier2_c03_r8_oneshot_v3_final_audit.json"
+EXPECTED_V3_FINAL_AUDIT_SHA256 = "776ab1102ad74e90ea35985e45ef29b9e73fecb99c20d86b71d53845858c9a4f"
 EXPECTED_SOURCE_HASHES = {
     3000: "c8f83b17d53f49a3f283d25078e69cb4c8073b2b09354cc901ecc23eae772e6c",
     7000: "59461b60ac721f4e724b48ced9ee319f98ede49490f38bce91651590bb760d89",
@@ -65,25 +67,25 @@ TASK_SPECS = {
     },
     "branch_a_warmup": {
         "action": "a-phase-a", "gpu": 0,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_v3_a_warmup_g03001_03100.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v4_a_warmup_g03001_03100.log",
         "telemetry": BRANCH_A / "telemetry" / "warmup_g03001_03100.jsonl",
         "global_start": 3001, "local_start": 1,
     },
     "branch_a_formal": {
         "action": "a-long", "gpu": 0,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_v3_a_formal_g03101_15000.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v4_a_formal_g03101_15000.log",
         "telemetry": BRANCH_A / "telemetry" / "formal_g03101_15000.jsonl",
         "global_start": 3101, "local_start": 101,
     },
     "branch_b_warmup": {
         "action": "b-phase-a", "gpu": 1,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_v3_b_warmup_g07001_07100.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v4_b_warmup_g07001_07100.log",
         "telemetry": BRANCH_B / "telemetry" / "warmup_g07001_07100.jsonl",
         "global_start": 7001, "local_start": 1,
     },
     "branch_b_formal": {
         "action": "b-long", "gpu": 1,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_v3_b_formal_g07101_15000.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v4_b_formal_g07101_15000.log",
         "telemetry": BRANCH_B / "telemetry" / "formal_g07101_15000.jsonl",
         "global_start": 7101, "local_start": 101,
     },
@@ -215,6 +217,8 @@ def preflight() -> dict:
         raise RuntimeError("oneshot_v1 final audit is missing or changed")
     if not V2_FINAL_AUDIT.is_file() or sha256_file(V2_FINAL_AUDIT) != EXPECTED_V2_FINAL_AUDIT_SHA256:
         raise RuntimeError("oneshot_v2 final audit is missing or changed")
+    if not V3_FINAL_AUDIT.is_file() or sha256_file(V3_FINAL_AUDIT) != EXPECTED_V3_FINAL_AUDIT_SHA256:
+        raise RuntimeError("oneshot_v3 final audit is missing or changed")
     if not BOOTSTRAP.is_dir() or bool(BOOTSTRAP.stat().st_mode & 0o222):
         raise RuntimeError("protected oneshot_v1 shared bootstrap is missing or writable")
     for iteration, expected_hash in EXPECTED_SOURCE_HASHES.items():
@@ -235,12 +239,14 @@ def preflight() -> dict:
     source = SCRIPT.read_text(encoding="utf-8")
     required_literals = (
         'RESOLUTION=8', 'EXPERIMENT="C03-r8 Tier 2 onset study"',
-        'RETRY_IDENTITY="oneshot_v3_allocator_lifecycle_retry"',
-        'ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"',
-        'REFERENCE_PEAK_ALLOCATED_BYTES=23274475520',
-        'MINIMUM_PROJECTED_HEADROOM_BYTES=1073741824',
-        "tier2_c03_r8_oneshot_v3_rstart", "--resolution \"$RESOLUTION\"",
-        'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"',
+        'RETRY_IDENTITY="oneshot_v4_memory_bounded_retry"',
+        'ALLOCATOR_POLICY="adaptive_pressure_cache_and_ray_retry_v1"',
+        'REFERENCE_PEAK_ALLOCATED_BYTES=0',
+        'MINIMUM_PROJECTED_HEADROOM_BYTES=268435456',
+        'PRESSURE_RELEASE_FREE_BYTES=2147483648',
+        'MEMORY_RETRY_MIN_CHUNK_SIZE=512',
+        "tier2_c03_r8_oneshot_v4_rstart", "--resolution \"$RESOLUTION\"",
+        'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128,garbage_collection_threshold:0.8"',
     )
     if any(value not in source for value in required_literals):
         raise RuntimeError("operator script failed the C03-r8 static identity preflight")
@@ -256,6 +262,7 @@ def preflight() -> dict:
         "shared_bootstrap_reused_read_only": True,
         "v1_final_audit_sha256": EXPECTED_V1_FINAL_AUDIT_SHA256,
         "v2_final_audit_sha256": EXPECTED_V2_FINAL_AUDIT_SHA256,
+        "v3_final_audit_sha256": EXPECTED_V3_FINAL_AUDIT_SHA256,
     }
 
 
@@ -342,7 +349,7 @@ def _log_anomaly(path: Path) -> str | None:
 class Coordinator:
     def __init__(self, preflight_data: dict):
         self.state = {
-            "schema": "rtgs_tier2_oneshot_v3_state",
+            "schema": "rtgs_tier2_oneshot_v4_state",
             "experiment": EXPERIMENT,
             "retry_identity": RETRY_IDENTITY,
             "resolution": RESOLUTION,
@@ -752,24 +759,33 @@ def audit_debug(run_dir: Path, nodes: list[int], onset: int) -> dict:
 def audit_logs(paths: list[Path]) -> dict:
     entries = []
     errors = []
+    memory_retries = []
     for path in paths:
         if not path.is_file():
             entries.append({"path": str(path), "exists": False})
             errors.append(f"missing log: {path}")
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
+        for line in text.replace("\r", "\n").splitlines():
+            marker = "STAGE_B_MEMORY_RETRY "
+            if marker in line:
+                try:
+                    memory_retries.append(json.loads(line.split(marker, 1)[1]))
+                except json.JSONDecodeError:
+                    errors.append(f"malformed memory retry record: {path}")
         anomalies = [line.strip() for line in text.replace("\r", "\n").splitlines() if ANOMALY_RE.search(line)]
         complete = "Training complete." in text
         entries.append({"path": str(path), "exists": True, "training_complete": complete,
                         "anomaly_hits": anomalies[:20]})
         if not complete or anomalies:
             errors.append(f"unhealthy log: {path}")
-    return {"entries": entries, "errors": errors}
+    return {"entries": entries, "memory_retries": memory_retries, "errors": errors}
 
 
 def audit_headroom(run_dir: Path) -> dict:
     path = run_dir / "allocator_headroom_gate.json"
     errors = []
+    warnings = []
     record = None
     if not path.is_file():
         errors.append(f"missing allocator headroom gate: {path}")
@@ -782,10 +798,12 @@ def audit_headroom(run_dir: Path) -> dict:
             or record.get("reflection_local_iteration") != 101
             or record.get("reference_peak_allocated_bytes") != REFERENCE_PEAK_ALLOCATED_BYTES
             or record.get("minimum_projected_headroom_bytes") != MINIMUM_PROJECTED_HEADROOM_BYTES
-            or record.get("passed") is not True
+            or not isinstance(record.get("passed"), bool)
         ):
-            errors.append(f"invalid or failed allocator headroom gate: {path}")
-    return {"path": str(path), "record": record, "errors": errors}
+            errors.append(f"invalid allocator headroom record: {path}")
+        elif record.get("passed") is False:
+            warnings.append(f"projected headroom is below advisory margin: {path}")
+    return {"path": str(path), "record": record, "warnings": warnings, "errors": errors}
 
 
 def build_final_audit(state: dict | None = None) -> dict:
@@ -847,11 +865,13 @@ def build_final_audit(state: dict | None = None) -> dict:
         if path.is_file() and sha256_file(path) != EXPECTED_SOURCE_HASHES[iteration]:
             errors.append(f"shared bootstrap checkpoint {iteration} differs from approved v1 source")
     if not V1_FINAL_AUDIT.is_file() or sha256_file(V1_FINAL_AUDIT) != EXPECTED_V1_FINAL_AUDIT_SHA256:
-        errors.append("oneshot_v1 final audit changed during v3")
+        errors.append("oneshot_v1 final audit changed during v4")
     if not V2_FINAL_AUDIT.is_file() or sha256_file(V2_FINAL_AUDIT) != EXPECTED_V2_FINAL_AUDIT_SHA256:
-        errors.append("oneshot_v2 final audit changed during v3")
+        errors.append("oneshot_v2 final audit changed during v4")
+    if not V3_FINAL_AUDIT.is_file() or sha256_file(V3_FINAL_AUDIT) != EXPECTED_V3_FINAL_AUDIT_SHA256:
+        errors.append("oneshot_v3 final audit changed during v4")
     report = {
-        "schema": "rtgs_tier2_oneshot_v3_final_audit", "generated_at": utc_now(),
+        "schema": "rtgs_tier2_oneshot_v4_final_audit", "generated_at": utc_now(),
         "experiment": EXPERIMENT, "retry_identity": RETRY_IDENTITY,
         "resolution": RESOLUTION, "allocator_policy": ALLOCATOR_POLICY, "cpu_only": True,
         "state_path": str(STATE_PATH), "operator_state": state,
@@ -865,6 +885,12 @@ def build_final_audit(state: dict | None = None) -> dict:
             "final_audit": str(V2_FINAL_AUDIT),
             "expected_sha256": EXPECTED_V2_FINAL_AUDIT_SHA256,
             "actual_sha256": sha256_file(V2_FINAL_AUDIT) if V2_FINAL_AUDIT.is_file() else None,
+            "used_as_branch_resume": False,
+        },
+        "v3_evidence": {
+            "final_audit": str(V3_FINAL_AUDIT),
+            "expected_sha256": EXPECTED_V3_FINAL_AUDIT_SHA256,
+            "actual_sha256": sha256_file(V3_FINAL_AUDIT) if V3_FINAL_AUDIT.is_file() else None,
             "used_as_branch_resume": False,
         },
         "bootstrap": {
@@ -886,7 +912,7 @@ def safe_build_final_audit(state: dict | None = None) -> dict:
         return build_final_audit(state)
     except Exception as exc:
         return {
-            "schema": "rtgs_tier2_oneshot_v3_final_audit",
+            "schema": "rtgs_tier2_oneshot_v4_final_audit",
             "generated_at": utc_now(),
             "experiment": EXPERIMENT,
             "retry_identity": RETRY_IDENTITY,

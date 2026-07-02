@@ -292,10 +292,14 @@ def test_operator_shell_is_syntax_valid_print_first_and_finite():
     assert 'EXPERIMENT="C03-r8 Tier 2 onset study"' in source
     assert 'RESOLUTION=8' in source
     assert "tier2_c03_r8_oneshot_shared_d_bootstrap" in source
-    assert "tier2_c03_r8_oneshot_v3_rstart" in source
-    assert 'RETRY_IDENTITY="oneshot_v3_allocator_lifecycle_retry"' in source
-    assert 'ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"' in source
-    assert 'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"' in source
+    assert "tier2_c03_r8_oneshot_v4_rstart" in source
+    assert 'RETRY_IDENTITY="oneshot_v4_memory_bounded_retry"' in source
+    assert 'ALLOCATOR_POLICY="adaptive_pressure_cache_and_ray_retry_v1"' in source
+    assert 'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128,garbage_collection_threshold:0.8"' in source
+    assert "--ray_chunk_size 2048" in source
+    assert "--stage_b_memory_retry_min_chunk_size" in source
+    assert "PRESSURE_RELEASE_FREE_BYTES=2147483648" in source
+    assert "MEMORY_RETRY_MIN_CHUNK_SIZE=512" in source
     assert "--stage_b_telemetry_max_steps" in source
     assert "--d_bootstrap_telemetry_jsonl" not in source
     assert "a-long" in source and "b-long" in source
@@ -326,7 +330,7 @@ def test_oneshot_nodes_and_live_telemetry_are_fail_closed(tmp_path):
     path = tmp_path / "telemetry.jsonl"
     phase = (
         "experiment=C03-r8 Tier 2 onset study;"
-        "retry=oneshot_v3_allocator_lifecycle_retry;resolution=8;phase=a_warmup"
+        "retry=oneshot_v4_memory_bounded_retry;resolution=8;phase=a_warmup"
     )
     records = [
         {"global_iteration": 3001, "reflection_local_iteration": 1, "nonfinite_count": 0,

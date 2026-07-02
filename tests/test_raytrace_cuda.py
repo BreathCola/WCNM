@@ -44,6 +44,59 @@ def test_cuda_extension_loads_and_cuda_matches_reference_with_chunking():
         assert torch.allclose(actual, expected, atol=1e-7, rtol=1e-6)
 
 
+def test_checkpointed_chunks_match_outputs_gradients_and_detach_aux():
+    plain_model = _model()
+    checkpoint_model = _model()
+    for name in ("_xyz", "_rotation", "_scaling", "_opacity", "_color"):
+        setattr(
+            checkpoint_model,
+            name,
+            torch.nn.Parameter(getattr(plain_model, name).detach().clone()),
+        )
+    origins = torch.tensor(
+        [[0.05, 0.02, 0.0], [0.4, 0.0, 0.0], [4.0, 4.0, 0.0]],
+        device="cuda",
+        requires_grad=True,
+    )
+    directions = torch.tensor(
+        [[0.02, 0.01, 1.0], [-0.03, 0.0, 1.0], [0.0, 0.0, 1.0]],
+        device="cuda",
+        requires_grad=True,
+    )
+    retry_origins = origins.detach().clone().requires_grad_(True)
+    retry_directions = directions.detach().clone().requires_grad_(True)
+    plain, plain_aux = raytrace(
+        plain_model, origins, directions, chunk_size=2, return_aux=True
+    )
+    bounded, bounded_aux = raytrace(
+        checkpoint_model,
+        retry_origins,
+        retry_directions,
+        chunk_size=2,
+        return_aux=True,
+        checkpoint_chunks=True,
+    )
+    for actual, expected in zip(bounded[:3], plain[:3]):
+        assert torch.allclose(actual, expected, atol=1e-7, rtol=1e-6)
+    assert torch.equal(bounded[3], plain[3])
+    assert plain_aux.contributing_weights.requires_grad is False
+    assert bounded_aux.contributing_weights.requires_grad is False
+    weights = (0.7, 0.4, 0.2)
+    plain_loss = sum(weight * value.sum() for weight, value in zip(weights, plain[:3]))
+    bounded_loss = sum(weight * value.sum() for weight, value in zip(weights, bounded[:3]))
+    plain_loss.backward()
+    bounded_loss.backward()
+    for name in ("_xyz", "_rotation", "_scaling", "_opacity", "_color"):
+        assert torch.allclose(
+            getattr(checkpoint_model, name).grad,
+            getattr(plain_model, name).grad,
+            atol=1e-6,
+            rtol=1e-5,
+        ), name
+    assert torch.allclose(retry_origins.grad, origins.grad, atol=1e-6, rtol=1e-5)
+    assert torch.allclose(retry_directions.grad, directions.grad, atol=1e-6, rtol=1e-5)
+
+
 def test_lbvh_refits_parameter_updates_and_rebuilds_topology_updates():
     model = _model()
     acceleration = CudaLBVH()

@@ -5,6 +5,7 @@ import time
 
 import torch
 import torch.nn.functional as F
+from torch.utils.checkpoint import checkpoint
 
 from raytracer.acceleration_structure import CudaLBVH
 from raytracer.candidate_parameters import pack_reflection_parameters
@@ -41,6 +42,7 @@ def raytrace(
     return_hit_mask: bool = True,
     return_aux: bool = False,
     return_diagnostics: bool = False,
+    checkpoint_chunks: bool = False,
 ):
     if not (return_alpha and return_depth and return_hit_mask):
         raise ValueError("Stage B raytrace currently requires alpha, depth, and hit-mask outputs")
@@ -82,25 +84,67 @@ def raytrace(
         if return_diagnostics:
             traversal_event = (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
             traversal_event[0].record(stream)
-        candidates, offsets = acceleration.candidates(origins_chunk, directions_chunk)
+        use_checkpoint = checkpoint_chunks and torch.is_grad_enabled() and not return_diagnostics
+        if use_checkpoint:
+            candidates = offsets = None
+        else:
+            candidates, offsets = acceleration.candidates(origins_chunk, directions_chunk)
         if return_diagnostics:
             traversal_event[1].record(stream)
             traversal_events.append(traversal_event)
             candidate_count_chunks.append((offsets[1:] - offsets[:-1]).detach())
             intersection_event = (torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
             intersection_event[0].record(stream)
-        result = trace_candidates(
-            model,
-            origins_chunk,
-            directions_chunk,
-            candidates,
-            offsets,
-            cutoff_sigma,
-            hit_threshold,
-            return_aux=return_aux,
-            return_diagnostics=return_diagnostics,
-            candidate_parameter_table=candidate_parameter_table,
-        )
+        if use_checkpoint:
+            # Recompute candidate/intersection intermediates during backward
+            # rather than retaining every chunk's full graph concurrently.
+            def checkpointed_trace(chunk_origins, chunk_directions, parameter_table):
+                retry_candidates, retry_offsets = acceleration.candidates(
+                    chunk_origins, chunk_directions
+                )
+                retry_result = trace_candidates(
+                    model,
+                    chunk_origins,
+                    chunk_directions,
+                    retry_candidates,
+                    retry_offsets,
+                    cutoff_sigma,
+                    hit_threshold,
+                    return_aux=return_aux,
+                    return_diagnostics=False,
+                    candidate_parameter_table=parameter_table,
+                )
+                if return_aux:
+                    retry_outputs, retry_aux = retry_result
+                    return (*retry_outputs, retry_aux.contributing_indices, retry_aux.contributing_weights)
+                return retry_result
+
+            checkpointed = checkpoint(
+                checkpointed_trace,
+                origins_chunk,
+                directions_chunk,
+                candidate_parameter_table,
+                use_reentrant=False,
+            )
+            if return_aux:
+                outputs = checkpointed[:4]
+                aux = RaytraceAux(checkpointed[4], checkpointed[5])
+                result = outputs, aux
+            else:
+                result = checkpointed
+        else:
+            result = trace_candidates(
+                model,
+                origins_chunk,
+                directions_chunk,
+                candidates,
+                offsets,
+                cutoff_sigma,
+                hit_threshold,
+                return_aux=return_aux,
+                return_diagnostics=return_diagnostics,
+                candidate_parameter_table=candidate_parameter_table,
+            )
         if return_aux and return_diagnostics:
             outputs, aux, trace_diagnostics = result
             exact_count_chunks.append(trace_diagnostics.exact_intersection_counts)

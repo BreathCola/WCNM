@@ -4,6 +4,7 @@ import json
 import math
 import os
 import time
+import traceback
 from random import randint
 
 import torch
@@ -37,8 +38,9 @@ from utils.stage_b_telemetry import (
     validate_telemetry_options,
 )
 from utils.stage_b_memory import (
-    V2_POLICY,
+    V4_POLICY,
     evaluate_headroom,
+    ray_retry_attempts,
     release_allocator_cache,
     validate_stage_b_memory_policy,
     write_headroom_gate,
@@ -153,6 +155,16 @@ def _config(dataset, opt, diffuse, mask_manifest):
             "minimum_projected_headroom_bytes": int(
                 getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)
             ),
+            "pressure_release_free_bytes": int(
+                getattr(opt, "stage_b_pressure_release_free_bytes", 0)
+            ),
+            "memory_retry_min_chunk_size": int(
+                getattr(opt, "stage_b_memory_retry_min_chunk_size", 0)
+            ),
+            "base_ray_chunk_size": int(dataset.ray_chunk_size),
+            "fallback_checkpoint_chunks": bool(
+                getattr(opt, "stage_b_allocator_policy", "default") == V4_POLICY
+            ),
             "release_boundary": (
                 "completed training step after telemetry statistics and before JSON serialization"
             ),
@@ -187,6 +199,12 @@ def _config(dataset, opt, diffuse, mask_manifest):
             ),
             "stage_b_minimum_projected_headroom_bytes": int(
                 getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)
+            ),
+            "stage_b_pressure_release_free_bytes": int(
+                getattr(opt, "stage_b_pressure_release_free_bytes", 0)
+            ),
+            "stage_b_memory_retry_min_chunk_size": int(
+                getattr(opt, "stage_b_memory_retry_min_chunk_size", 0)
             ),
         },
         "diffuse_schedule": {
@@ -257,6 +275,9 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
         getattr(opt, "tier2_retry_identity", ""),
         int(getattr(opt, "stage_b_reference_peak_allocated_bytes", 0)),
         int(getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)),
+        int(getattr(opt, "stage_b_pressure_release_free_bytes", 0)),
+        int(getattr(dataset, "ray_chunk_size", 4096)),
+        int(getattr(opt, "stage_b_memory_retry_min_chunk_size", 0)),
         operator_gate,
     )
     if getattr(opt, "d_bootstrap_telemetry_jsonl", ""):
@@ -316,6 +337,146 @@ def _report(iteration, testing_iterations, scene, state, pipe, background):
     torch.cuda.empty_cache()
 
 
+def _forward_backward_stage_b(camera, state, pipe, background, opt, perceptual):
+    """Run one mathematical training attempt; callers may retry before any optimizer step."""
+    package = render(
+        camera,
+        state,
+        pipe,
+        background,
+        return_ray_aux=True,
+        return_ray_diagnostics=opt.specular_smoke_diagnostics,
+    )
+    image = package["render"]
+    gt = camera.original_image.cuda()
+    l1_value = l1_loss(image, gt)
+    ssim_value = (
+        fused_ssim(image.unsqueeze(0), gt.unsqueeze(0))
+        if FUSED_SSIM_AVAILABLE else ssim(image, gt)
+    )
+    loss = (1.0 - opt.lambda_dssim) * l1_value + opt.lambda_dssim * (1.0 - ssim_value)
+    normal_loss = normal_depth_consistency_loss(
+        package["normal"], package["position"], package["alpha"]
+    )
+    loss = loss + opt.lambda_norm * normal_loss
+    mono_loss = image.new_zeros(())
+    if camera.normal_prior is not None:
+        from utils.surfel_utils import camera_normals_to_world, face_forward
+        target = camera.normal_prior.permute(1, 2, 0)
+        if camera.normal_prior_space == "camera":
+            target = camera_normals_to_world(camera, target)
+        target = face_forward(target, package["position"], camera.camera_center)
+        mono_loss = monocular_normal_loss(
+            package["normal"],
+            target,
+            package["alpha"],
+            camera.normal_prior_valid.permute(1, 2, 0),
+        )
+        loss = loss + opt.lambda_mono * mono_loss
+    perceptual_loss = image.new_zeros(())
+    if perceptual is not None:
+        perceptual_loss = perceptual(image, gt)
+        loss = loss + opt.lambda_perc * perceptual_loss
+    specular_loss = image.new_zeros(())
+    specular_probe = None
+    if opt.lambda_spec > 0:
+        if camera.specular_mask is None:
+            raise RuntimeError("validated specular mask was not loaded")
+        specular_loss = specular_constraint_loss(
+            package["surface_ks"], camera.specular_mask, opt.specular_k0
+        )
+        loss = loss + opt.lambda_spec * specular_loss
+        if opt.specular_smoke_diagnostics:
+            specular_probe = torch.autograd.grad(
+                opt.lambda_spec * specular_loss,
+                package["surface_ks"],
+                retain_graph=True,
+                allow_unused=False,
+            )[0]
+    loss.backward()
+    return {
+        "package": package,
+        "image": image,
+        "gt": gt,
+        "l1_value": l1_value,
+        "ssim_value": ssim_value,
+        "loss": loss,
+        "normal_loss": normal_loss,
+        "mono_loss": mono_loss,
+        "perceptual_loss": perceptual_loss,
+        "specular_loss": specular_loss,
+        "specular_probe": specular_probe,
+    }
+
+
+def _forward_backward_with_memory_retry(
+    camera,
+    state,
+    pipe,
+    background,
+    dataset,
+    opt,
+    perceptual,
+    diffuse,
+    reflection,
+    iteration,
+    reflection_iteration,
+):
+    attempts = ray_retry_attempts(
+        dataset.ray_chunk_size,
+        opt.stage_b_memory_retry_min_chunk_size,
+    )
+    retry_records = []
+    for attempt_index, (attempt_chunk_size, checkpoint_chunks) in enumerate(attempts):
+        state.ray_chunk_size = int(attempt_chunk_size)
+        state.ray_checkpoint_chunks = bool(checkpoint_chunks)
+        caught_oom = None
+        try:
+            result = _forward_backward_stage_b(
+                camera, state, pipe, background, opt, perceptual
+            )
+        except torch.cuda.OutOfMemoryError as error:
+            caught_oom = error
+            result = None
+        if caught_oom is None:
+            state.ray_chunk_size = int(dataset.ray_chunk_size)
+            state.ray_checkpoint_chunks = False
+            return result, retry_records
+        failed_peak = int(torch.cuda.max_memory_allocated())
+        failed_reserved = int(torch.cuda.max_memory_reserved())
+        diffuse.exposure_optimizer.zero_grad(set_to_none=True)
+        diffuse.optimizer.zero_grad(set_to_none=True)
+        reflection.optimizer.zero_grad(set_to_none=True)
+        if caught_oom.__traceback__ is not None:
+            traceback.clear_frames(caught_oom.__traceback__)
+        del caught_oom
+        released = release_allocator_cache(V4_POLICY, force=True)
+        retry_record = {
+            "global_iteration": int(iteration),
+            "reflection_local_iteration": int(reflection_iteration),
+            "camera_stem": str(camera.image_name),
+            "failed_chunk_size": int(attempt_chunk_size),
+            "failed_checkpoint_chunks": bool(checkpoint_chunks),
+            "failed_peak_allocated_bytes": failed_peak,
+            "failed_peak_reserved_bytes": failed_reserved,
+            "cache_released": bool(released),
+            "next_attempt": None,
+        }
+        if attempt_index + 1 < len(attempts):
+            next_chunk, next_checkpoint = attempts[attempt_index + 1]
+            retry_record["next_attempt"] = {
+                "chunk_size": int(next_chunk),
+                "checkpoint_chunks": bool(next_checkpoint),
+            }
+        retry_records.append(retry_record)
+        print("\nSTAGE_B_MEMORY_RETRY " + json.dumps(
+            retry_record, sort_keys=True, allow_nan=False
+        ))
+    state.ray_chunk_size = int(dataset.ray_chunk_size)
+    state.ray_checkpoint_chunks = False
+    raise RuntimeError(
+        "Stage B exhausted all adaptive ray-memory attempts for one training step"
+    )
 def training_stage_b(
     dataset,
     opt,
@@ -447,6 +608,14 @@ def training_stage_b(
     allocator_policy = str(getattr(opt, "stage_b_allocator_policy", "default"))
     allocator_peak_scope = "process_start_or_preexisting_reset_before_telemetry"
     for iteration in range(global_iteration + 1, opt.iterations + 1):
+        if allocator_policy == V4_POLICY and (
+            iteration % opt.densification_interval == 0
+            or iteration % opt.debug_interval == 0
+            or iteration in checkpoint_iterations
+        ):
+            # Infrequent topology/debug/checkpoint boundaries are predictable
+            # high-pressure steps; release unused cache before their forward.
+            release_allocator_cache(V4_POLICY, force=True)
         telemetry_wall_start = time.perf_counter() if telemetry is not None else None
         d_count_before = int(diffuse.get_xyz.shape[0]) if telemetry is not None else None
         r_count_before = int(reflection.get_xyz.shape[0]) if telemetry is not None else None
@@ -480,54 +649,40 @@ def training_stage_b(
         if (iteration - 1) == debug_from:
             pipe.debug = True
 
-        package = render(
-            camera,
-            state,
-            pipe,
-            background,
-            return_ray_aux=True,
-            return_ray_diagnostics=opt.specular_smoke_diagnostics,
-        )
+        if allocator_policy == V4_POLICY:
+            attempt_result, memory_retry_records = _forward_backward_with_memory_retry(
+                camera,
+                state,
+                pipe,
+                background,
+                dataset,
+                opt,
+                perceptual,
+                diffuse,
+                reflection,
+                iteration,
+                reflection_iteration,
+            )
+        else:
+            attempt_result = _forward_backward_stage_b(
+                camera, state, pipe, background, opt, perceptual
+            )
+            memory_retry_records = []
+        package = attempt_result["package"]
+        image = attempt_result["image"]
+        gt = attempt_result["gt"]
+        l1_value = attempt_result["l1_value"]
+        ssim_value = attempt_result["ssim_value"]
+        loss = attempt_result["loss"]
+        normal_loss = attempt_result["normal_loss"]
+        mono_loss = attempt_result["mono_loss"]
+        perceptual_loss = attempt_result["perceptual_loss"]
+        specular_loss = attempt_result["specular_loss"]
+        specular_probe = attempt_result["specular_probe"]
+        del attempt_result
         if opt.specular_smoke_diagnostics:
             # The existing diagnostic raytrace resets allocator peaks internally.
             allocator_peak_scope = f"since_internal_training_raytrace_reset_at_global_{iteration}"
-        image = package["render"]
-        gt = camera.original_image.cuda()
-        l1_value = l1_loss(image, gt)
-        ssim_value = fused_ssim(image.unsqueeze(0), gt.unsqueeze(0)) if FUSED_SSIM_AVAILABLE else ssim(image, gt)
-        loss = (1.0 - opt.lambda_dssim) * l1_value + opt.lambda_dssim * (1.0 - ssim_value)
-        normal_loss = normal_depth_consistency_loss(package["normal"], package["position"], package["alpha"])
-        loss = loss + opt.lambda_norm * normal_loss
-        mono_loss = image.new_zeros(())
-        if camera.normal_prior is not None:
-            from utils.surfel_utils import camera_normals_to_world, face_forward
-            target = camera.normal_prior.permute(1, 2, 0)
-            if camera.normal_prior_space == "camera":
-                target = camera_normals_to_world(camera, target)
-            target = face_forward(target, package["position"], camera.camera_center)
-            mono_loss = monocular_normal_loss(
-                package["normal"], target, package["alpha"], camera.normal_prior_valid.permute(1, 2, 0)
-            )
-            loss = loss + opt.lambda_mono * mono_loss
-        perceptual_loss = image.new_zeros(())
-        if perceptual is not None:
-            perceptual_loss = perceptual(image, gt)
-            loss = loss + opt.lambda_perc * perceptual_loss
-        specular_loss = image.new_zeros(())
-        specular_probe = None
-        if opt.lambda_spec > 0:
-            if camera.specular_mask is None:
-                raise RuntimeError("validated specular mask was not loaded")
-            specular_loss = specular_constraint_loss(package["surface_ks"], camera.specular_mask, opt.specular_k0)
-            loss = loss + opt.lambda_spec * specular_loss
-            if opt.specular_smoke_diagnostics:
-                specular_probe = torch.autograd.grad(
-                    opt.lambda_spec * specular_loss,
-                    package["surface_ks"],
-                    retain_graph=True,
-                    allow_unused=False,
-                )[0]
-        loss.backward()
 
         with torch.no_grad():
             aux = package["ray_aux"]
@@ -782,7 +937,7 @@ def training_stage_b(
                             key: telemetry_record[name][key] for key in KS_STAT_KEYS
                         }
 
-            if allocator_policy == V2_POLICY:
+            if allocator_policy == V4_POLICY:
                 # The next RHS `package = render(...)` would otherwise overlap
                 # with the previous step's still-referenced output/graph.  Debug
                 # and checkpoint payloads are also intentionally bounded to the
@@ -795,7 +950,13 @@ def training_stage_b(
                 del normal_loss, mono_loss, perceptual_loss, specular_loss
                 del aux, specular_probe, debug_package, checkpoint_payload
                 del target, visibility, radii
-                release_allocator_cache(allocator_policy)
+                device_free_before_release, _ = torch.cuda.mem_get_info()
+                allocator_cache_released = release_allocator_cache(
+                    allocator_policy,
+                    force=bool(reflection_iteration == 101 and opt.lambda_spec > 0),
+                    device_free_bytes=int(device_free_before_release),
+                    pressure_free_bytes=int(opt.stage_b_pressure_release_free_bytes),
+                )
                 allocator_release_wall_ms = float(
                     (time.perf_counter() - allocator_release_wall_start) * 1000.0
                 )
@@ -803,7 +964,7 @@ def training_stage_b(
                     telemetry_record["whole_step_wall_ms"] += allocator_release_wall_ms
                     telemetry_record["whole_step_wall_definition"] = (
                         "CPU perf_counter from loop entry through normal debug/PLY/checkpoint and "
-                        "optimizer/densification plus v2 allocator release; excludes telemetry "
+                        "optimizer/densification plus adaptive allocator policy; excludes telemetry "
                         "statistics/JSON serialization; no telemetry-added CUDA synchronize"
                     )
 
@@ -811,7 +972,7 @@ def training_stage_b(
                 telemetry.append(telemetry_record)
 
             if (
-                allocator_policy == V2_POLICY
+                allocator_policy == V4_POLICY
                 and reflection_iteration == 101
                 and opt.lambda_spec > 0
             ):
@@ -841,8 +1002,4 @@ def training_stage_b(
                 print("\nSTAGE_B_HEADROOM " + json.dumps(
                     headroom, sort_keys=True, allow_nan=False
                 ))
-                if not headroom["passed"]:
-                    raise RuntimeError(
-                        "Stage B allocator headroom gate failed before formal long run"
-                    )
     progress.close()

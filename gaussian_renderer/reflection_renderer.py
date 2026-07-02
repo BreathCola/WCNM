@@ -24,6 +24,7 @@ class StageBRenderState:
     roughness_min: float = 0.03
     roughness_remap: bool = False
     ray_background: str = "scene"
+    ray_checkpoint_chunks: bool = False
     acceleration: object = None
     model_type: str = "stage_b"
 
@@ -91,6 +92,7 @@ def render(
             hit_threshold=state.ray_hit_threshold,
             return_aux=return_ray_aux,
             return_diagnostics=return_ray_diagnostics,
+            checkpoint_chunks=state.ray_checkpoint_chunks,
         )
         if return_ray_aux and return_ray_diagnostics:
             (raw_color, reflection_alpha, reflection_depth, reflection_hit), ray_aux, ray_diagnostics = traced

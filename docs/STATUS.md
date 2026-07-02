@@ -92,7 +92,23 @@ preserved at `output/tier2_c03_r8_oneshot_v2_final_audit.json`, SHA-256
 `492464757a0776d6b463a80d0b89fe2e668549586ab5a94bb01394142c0bcb7a`.
 The corrected run identity is `oneshot_v3_allocator_lifecycle_retry`, with
 entirely new v3 output/log/state/audit/JIT paths. V1 and v2 branch outputs are
-never reused. Stage B remains unaccepted and Stage C/D remain forbidden.
+never reused. V3 then also HARD_FAILED: Branch B was conservatively stopped at
+global 7101 / R-local 101 by the old cross-branch headroom gate, while Branch A
+continued to global 3764 / R-local 764 and then OOMed in backward on a 16 MiB
+request with 21.98 GiB allocated and only 1.38 MiB device-free. Its last full
+checkpoint is global 3500 / R-local 500; all completed telemetry is finite. The
+v3 final audit is preserved with SHA-256
+`776ab1102ad74e90ea35985e45ef29b9e73fecb99c20d86b71d53845858c9a4f`.
+
+V3 proves that completed-step `empty_cache()` cannot bound a single step's live
+autograd peak and adds about 46% ordinary-step latency. The new, unrun v4 policy
+uses base ray chunks of 2048, detaches no-grad R densification auxiliaries,
+reclaims cache only below 2 GiB device-free, and automatically retries the same
+camera before any optimizer/topology update at 1024, 512, then checkpointed 512.
+The checkpointed CUDA path recomputes ray candidates/intersections during
+backward and has matching tested outputs and D-ray/R-parameter gradients. V4
+uses entirely new output/log/state/audit/JIT paths and never resumes v1/v2/v3
+branches. Stage B remains unaccepted and Stage C/D remain forbidden.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
@@ -390,8 +406,8 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   proposal/repair paths, missing/extra/corrupt masks, non-L images, dimension
   mismatch, unknown sources, and manifest/hash mismatch. Soft resize is
   recorded as `opencv.INTER_LINEAR`; full-image RGB reconstruction is unchanged.
-- The pre-telemetry Stage A/B suite was 95 passed. The current suite is 117
-  GPU-enabled passes and 102 CPU-only passes with 15 CUDA skips after the v2
+- The pre-telemetry Stage A/B suite was 95 passed. The current suite is 120
+  GPU-enabled passes and 104 CPU-only passes with 16 CUDA skips after the v4
   allocator-lifecycle regressions. This includes formal archive exact-copy
   tests, fail-closed loading, continuous soft resize, L_spec mask-only gradient,
   whole-image RGB, debug transparent-mask/overlay, and all prior regressions.
@@ -446,14 +462,14 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   renderer, or raytracer path.
 - `tools/tier2_operator.sh` uses finite internal phase actions and an explicitly
   acknowledged `run-all --execute` coordinator, read-only `status`, and
-  CPU-only `final-audit`. For the v2 retry, the coordinator assigns Branch A to
+  CPU-only `final-audit`. For the v4 retry, the coordinator assigns Branch A to
   physical GPU 0 and Branch B to physical GPU 1, records process groups and
   terminal state, verifies the protected v1 shared 3k/7k sources without
   modifying them, and advances automatically without the former human GO
   pauses.
-- Existing manual-v1, `oneshot_v1`, and failed `oneshot_v2` assets are
-  preserved. Fresh `oneshot_v3` output/model/log/state/audit paths fail closed
-  if any already exist. Failed
+- Existing manual-v1 and failed `oneshot_v1/v2/v3` assets are preserved. Fresh
+  `oneshot_v4` output/model/log/state/audit paths fail closed if any already
+  exist. Failed
   v1 A/B checkpoints are explicitly excluded as resume sources.
 - The approved experiment identity is exactly `C03-r8 Tier 2 onset study` at
   `resolution=8`. The operator wrapper, cfg_args, telemetry phase tags, output/
@@ -472,11 +488,12 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
   alignment. The controlled 7k/10k/15k Tier-1 pilots are complete and remain
   evidence-only. The `oneshot_v1` long attempt is a preserved HARD_FAILED run.
-  The user, not Codex, may execute the committed `oneshot_v3` retry. R-local
+  The user, not Codex, may execute the committed `oneshot_v4` retry. R-local
   1--100 remains mask-free; local 101+ uses the formal mask and
-  `lambda_spec=0.2`. Both branches use the same allocator policy, and the first
-  formal step must pass its recorded headroom gate before continuing. The output
-  state and CPU-only final-audit JSON are authoritative for v2 progress and
+  `lambda_spec=0.2`. Both branches use the same adaptive memory policy, and the
+  first formal step records advisory headroom without terminating a successful
+  step. The output
+  state and CPU-only final-audit JSON are authoritative for v4 progress and
   outcome.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.

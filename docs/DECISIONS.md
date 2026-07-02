@@ -2086,3 +2086,84 @@ R count changes.
 Impact: The protected v1 D-only 3k/7k sources remain the only branch sources.
 V2 remains a preserved implementation failure. Stage B remains unaccepted and
 Stage C/D remain forbidden.
+
+## B-025 — Memory-bounded v4 after allocator-only retry failure
+
+Date: 2026-07-02
+
+Question: How can Stage B remain fast on ordinary views while recovering from
+the real single-step live-memory peaks demonstrated by `oneshot_v3`?
+
+Observed evidence: V3 Branch B completed local 101 but the old gate stopped it
+because a 0.67 GiB projected margin was below the cross-branch 1 GiB threshold;
+there was no B OOM. V3 Branch A passed that gate, completed finite telemetry
+through global 3764 / R-local 764, and saved a finite global-3500 checkpoint.
+The next backward failed while requesting 16 MiB with 21.98 GiB allocated,
+22.89 GiB reserved, and 1.38 MiB device-free. The preceding successful step
+had already reached a 23,531,863,040-byte scoped allocated peak and performed
+the completed-step cache policy. Therefore fragmentation across iterations is
+not the sufficient explanation: a single training graph can consume almost the
+entire device, and clearing cache after the previous step cannot bound it.
+
+Code audit found that every ray chunk's autograd graph is retained until one
+full-image backward. `RaytraceAux.contributing_weights` also remained attached
+to that graph even though it is consumed only after backward by a `no_grad`
+densification-statistics method. Reducing chunk size lowers padded candidate and
+candidate-reduction temporaries, but only checkpoint/recompute supplies a true
+bounded-graph fallback.
+
+Chosen implementation: Define the new operator identity
+`oneshot_v4_memory_bounded_retry` and policy
+`adaptive_pressure_cache_and_ray_retry_v1`. Both branches start fresh R from
+the same protected D-only 3k/7k sources and use identical rules:
+
+1. Base ray chunk size is 2048 and aux contributing indices/weights are
+   detached immediately; this does not change loss inputs or gradients.
+2. A CUDA OOM before any optimizer, densification, or checkpoint action clears
+   partial D/R/exposure gradients, releases unused cache, and recomputes the
+   same selected camera without consuming RNG at chunk 1024, then 512.
+3. If ordinary chunk 512 still fails, checkpointed 512 recomputes candidate
+   selection and exact intersections during backward instead of retaining all
+   chunk intermediates. Exhausting that final fallback remains a hard failure;
+   no finite-memory implementation can promise completion if the non-ray graph
+   alone exceeds device capacity.
+4. Successful ordinary steps explicitly delete their ephemeral payloads but
+   call `empty_cache()` only when measured device-free memory is below 2 GiB.
+   Retries and the local-101 measurement force a release. The allocator uses
+   `max_split_size_mb:128,garbage_collection_threshold:0.8`.
+5. The local-101 record now measures the v4 path itself against an advisory
+   256 MiB margin and no obsolete v1 cross-branch reference peak. It no longer
+   terminates a successfully computed branch; actual allocation failures are
+   handled by the adaptive retry ladder. Recovery events are emitted as
+   structured `STAGE_B_MEMORY_RETRY` log records and included in the CPU-only
+   final audit.
+
+Retry safety: Camera selection, reflection-local increment, and learning-rate
+updates occur once before the attempt sequence. An OOM occurs before any model,
+optimizer, topology, RNG, telemetry, or checkpoint commit. Partial gradients
+are cleared before recomputation. Candidate selection is deterministic for
+unchanged parameters and acceleration state. The fallback therefore changes
+only chunk grouping/recomputation and floating-point gradient accumulation
+order, not the represented rays, candidates, exact-intersection definition,
+BRDF, loss, schedule, or data.
+
+Alternatives: Continue every-step `empty_cache`; lower resolution/R count;
+disable L_spec; stop D optimization/densification; resume a failed branch; or
+use checkpoint/recompute on every ordinary step.
+
+Why: Per-step cache release measured about 46% slower yet still OOMed. The v4
+fast path avoids that tax, while progressively stronger fallbacks spend extra
+time only on views that need it. Resolution, counts, losses, and schedules stay
+matched across onset branches.
+
+Paper fidelity: Candidate and exact-intersection definitions are unchanged.
+Chunk grouping may change floating-point accumulation order, so v4 is a new
+matched internal experiment identity and is not mixed with v1/v2/v3 numerical
+trajectories. CUDA tests require ordinary and checkpointed outputs plus D-ray
+and all R-parameter gradients to agree within explicit tolerances.
+
+Impact: V1/v2/v3 artifacts and audits remain immutable. V4 uses new output,
+log, telemetry, packet, state, audit, and JIT paths. No v4 real-scene training
+or render was run during implementation. The full GPU-enabled suite passes
+120/120; CPU-only passes 104 with 16 CUDA skips. Stage B remains unaccepted;
+Stage C/D remain forbidden.
