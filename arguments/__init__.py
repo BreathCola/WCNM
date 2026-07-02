@@ -122,6 +122,10 @@ class OptimizationParams(ParamGroup):
         self.operator_gate_continuation = False
         self.operator_gate_expected_global_start = -1
         self.operator_gate_expected_r_local_start = -1
+        self.tier2_retry_identity = ""
+        self.stage_b_allocator_policy = "default"
+        self.stage_b_reference_peak_allocated_bytes = 0
+        self.stage_b_minimum_projected_headroom_bytes = 0
         self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000

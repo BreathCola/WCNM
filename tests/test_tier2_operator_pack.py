@@ -22,7 +22,15 @@ from scene.stage_b_state import (
 from stage_b_training import _validate_operator_restored_state
 from tests.test_reflection_surfel_model import reflection_args
 from tools.audit_tier2_gate import build_gate_packet
-from tools.tier2_oneshot import branch_checkpoint_iterations, validate_live_telemetry
+from tools.tier2_oneshot import (
+    ALLOCATOR_POLICY,
+    EXPERIMENT,
+    RESOLUTION,
+    RETRY_IDENTITY,
+    branch_checkpoint_iterations,
+    safe_build_final_audit,
+    validate_live_telemetry,
+)
 from utils.d_bootstrap_telemetry import (
     DBootstrapTelemetryError,
     DBootstrapTelemetryWriter,
@@ -284,8 +292,12 @@ def test_operator_shell_is_syntax_valid_print_first_and_finite():
     assert 'EXPERIMENT="C03-r8 Tier 2 onset study"' in source
     assert 'RESOLUTION=8' in source
     assert "tier2_c03_r8_oneshot_shared_d_bootstrap" in source
-    assert "--d_bootstrap_telemetry_max_steps 7000" in source
+    assert "tier2_c03_r8_oneshot_v2_rstart" in source
+    assert 'RETRY_IDENTITY="oneshot_v2_allocator_lifecycle_retry"' in source
+    assert 'ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"' in source
+    assert 'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"' in source
     assert "--stage_b_telemetry_max_steps" in source
+    assert "--d_bootstrap_telemetry_jsonl" not in source
     assert "a-long" in source and "b-long" in source
     assert "nohup" not in source and "train.py &" not in source
     printed = subprocess.run(
@@ -312,7 +324,10 @@ def test_oneshot_nodes_and_live_telemetry_are_fail_closed(tmp_path):
         7100, 7200, 7500, 8000, 9000, 10000, 11000, 12000, 13000, 14000, 15000,
     ]
     path = tmp_path / "telemetry.jsonl"
-    phase = "experiment=C03-r8 Tier 2 onset study;resolution=8;phase=a_warmup"
+    phase = (
+        "experiment=C03-r8 Tier 2 onset study;"
+        "retry=oneshot_v2_allocator_lifecycle_retry;resolution=8;phase=a_warmup"
+    )
     records = [
         {"global_iteration": 3001, "reflection_local_iteration": 1, "nonfinite_count": 0,
          "total_loss": 0.5, "phase_tag": phase},
@@ -326,3 +341,20 @@ def test_oneshot_nodes_and_live_telemetry_are_fail_closed(tmp_path):
     path.write_text("".join(json.dumps(record) + "\n" for record in records))
     with pytest.raises(RuntimeError, match="discontinuity"):
         validate_live_telemetry(path, 3001, 1)
+
+
+def test_oneshot_final_audit_always_emits_fail_closed_record(monkeypatch):
+    monkeypatch.setattr(
+        "tools.tier2_oneshot.build_final_audit",
+        lambda _state=None: (_ for _ in ()).throw(RuntimeError("synthetic reader failure")),
+    )
+    state = {"status": "HARD_FAILED"}
+    report = safe_build_final_audit(state)
+    assert report["healthy"] is False
+    assert report["cpu_only"] is True
+    assert report["experiment"] == EXPERIMENT
+    assert report["resolution"] == RESOLUTION
+    assert report["retry_identity"] == RETRY_IDENTITY
+    assert report["allocator_policy"] == ALLOCATOR_POLICY
+    assert report["operator_state"] == state
+    assert "synthetic reader failure" in report["errors"][0]

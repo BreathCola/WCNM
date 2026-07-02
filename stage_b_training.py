@@ -36,6 +36,13 @@ from utils.stage_b_telemetry import (
     mask_ks_stats_from_existing_tensors,
     validate_telemetry_options,
 )
+from utils.stage_b_memory import (
+    V2_POLICY,
+    evaluate_headroom,
+    release_allocator_cache,
+    validate_stage_b_memory_policy,
+    write_headroom_gate,
+)
 from utils.training_state import (
     capture_rng_state,
     make_camera_runtime_state,
@@ -137,6 +144,19 @@ def _config(dataset, opt, diffuse, mask_manifest):
         "lambda_spec": float(opt.lambda_spec),
         "specular_k0": float(opt.specular_k0),
         "operator_gate_continuation": operator_gate,
+        "tier2_retry_identity": str(getattr(opt, "tier2_retry_identity", "")),
+        "allocator_policy": {
+            "name": str(getattr(opt, "stage_b_allocator_policy", "default")),
+            "reference_peak_allocated_bytes": int(
+                getattr(opt, "stage_b_reference_peak_allocated_bytes", 0)
+            ),
+            "minimum_projected_headroom_bytes": int(
+                getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)
+            ),
+            "release_boundary": (
+                "completed training step after telemetry statistics and before JSON serialization"
+            ),
+        },
         "operator_contract": None if not operator_gate else {
             "source_path": dataset.source_path,
             "images": dataset.images,
@@ -158,6 +178,16 @@ def _config(dataset, opt, diffuse, mask_manifest):
             "exposure_lr_delay_mult": float(opt.exposure_lr_delay_mult),
             "percent_dense": float(opt.percent_dense),
             "opacity_reset_interval": int(opt.opacity_reset_interval),
+            "tier2_retry_identity": str(getattr(opt, "tier2_retry_identity", "")),
+            "stage_b_allocator_policy": str(
+                getattr(opt, "stage_b_allocator_policy", "default")
+            ),
+            "stage_b_reference_peak_allocated_bytes": int(
+                getattr(opt, "stage_b_reference_peak_allocated_bytes", 0)
+            ),
+            "stage_b_minimum_projected_headroom_bytes": int(
+                getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)
+            ),
         },
         "diffuse_schedule": {
             "position_lr_init": float(opt.position_lr_init),
@@ -221,6 +251,13 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
         getattr(opt, "stage_b_telemetry_jsonl", ""),
         getattr(opt, "stage_b_telemetry_max_steps", 0),
         getattr(opt, "stage_b_telemetry_phase_tag", ""),
+    )
+    validate_stage_b_memory_policy(
+        getattr(opt, "stage_b_allocator_policy", "default"),
+        getattr(opt, "tier2_retry_identity", ""),
+        int(getattr(opt, "stage_b_reference_peak_allocated_bytes", 0)),
+        int(getattr(opt, "stage_b_minimum_projected_headroom_bytes", 0)),
+        operator_gate,
     )
     if getattr(opt, "d_bootstrap_telemetry_jsonl", ""):
         raise ValueError("D bootstrap telemetry is valid only on the D-only training path")
@@ -407,6 +444,7 @@ def training_stage_b(
     viewpoints, indices = restore_camera_deck(all_train_cameras, runtime_state)
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage B training progress")
     ema_loss = 0.0
+    allocator_policy = str(getattr(opt, "stage_b_allocator_policy", "default"))
     allocator_peak_scope = "process_start_or_preexisting_reset_before_telemetry"
     for iteration in range(global_iteration + 1, opt.iterations + 1):
         telemetry_wall_start = time.perf_counter() if telemetry is not None else None
@@ -415,6 +453,12 @@ def training_stage_b(
         r_topology_before = int(reflection.topology_version) if telemetry is not None else None
         d_densify_prune_called = False
         allocator_peak_before_debug = None
+        debug_package = None
+        checkpoint_payload = None
+        target = None
+        visibility = None
+        radii = None
+        telemetry_record = None
         telemetry_peak_reset = telemetry is not None or bool(opt.specular_smoke_diagnostics)
         if telemetry is not None:
             # Reset allocator counters only. This launches no CUDA work and
@@ -502,7 +546,7 @@ def training_stage_b(
                 diagnostics = package.get("ray_diagnostics")
                 if diagnostics is None:
                     raise RuntimeError("specular smoke requires real ray diagnostics")
-                record = {
+                telemetry_record = {
                     "global_iteration": int(iteration),
                     "reflection_local_iteration": int(reflection_iteration),
                     "camera_stem": camera.image_name,
@@ -571,14 +615,14 @@ def training_stage_b(
                         f"telemetry_step_start_to_pre_debug_global_{iteration}",
                     )
                 fixed = (scene.getTestCameras() or scene.getTrainCameras())[0]
-                debug = render(
+                debug_package = render(
                     fixed, state, pipe, background, return_ray_diagnostics=True
                 )
                 telemetry_peak_reset = True
                 allocator_peak_scope = f"since_internal_debug_raytrace_reset_at_global_{iteration}"
                 directory = os.path.join(scene.model_path, "debug", f"iteration_{iteration:06d}")
                 save_reflection_debug_maps(
-                    debug,
+                    debug_package,
                     fixed.original_image.cuda(),
                     directory,
                     specular_mask=fixed.specular_mask if opt.lambda_spec > 0 else None,
@@ -625,7 +669,7 @@ def training_stage_b(
 
             if iteration in checkpoint_iterations:
                 print(f"\n[ITER {iteration}] Saving Stage B Checkpoint")
-                checkpoint = make_stage_b_checkpoint(
+                checkpoint_payload = make_stage_b_checkpoint(
                     diffuse,
                     reflection,
                     iteration,
@@ -640,7 +684,10 @@ def training_stage_b(
                         optimizer_step_completed if opt.operator_gate_continuation else None
                     ),
                 )
-                torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
+                torch.save(
+                    checkpoint_payload,
+                    os.path.join(scene.model_path, f"chkpnt{iteration}.pth"),
+                )
 
             if telemetry is not None:
                 # This CPU wall boundary includes the normal loop work through
@@ -730,7 +777,72 @@ def training_stage_b(
                 # Keep the nested ks schema explicit even if future internal
                 # helpers return additional bookkeeping fields.
                 for name in ("ks_inside", "ks_outside"):
-                    if record[name] is not None:
-                        record[name] = {key: record[name][key] for key in KS_STAT_KEYS}
-                telemetry.append(record)
+                    if telemetry_record[name] is not None:
+                        telemetry_record[name] = {
+                            key: telemetry_record[name][key] for key in KS_STAT_KEYS
+                        }
+
+            if allocator_policy == V2_POLICY:
+                # The next RHS `package = render(...)` would otherwise overlap
+                # with the previous step's still-referenced output/graph.  Debug
+                # and checkpoint payloads are also intentionally bounded to the
+                # step that created them.  Deleting references and releasing
+                # only unused cached blocks changes no tensor values, RNG, or
+                # optimizer state.
+                step_peak_allocated = int(torch.cuda.max_memory_allocated())
+                allocator_release_wall_start = time.perf_counter()
+                del package, image, gt, l1_value, ssim_value, loss
+                del normal_loss, mono_loss, perceptual_loss, specular_loss
+                del aux, specular_probe, debug_package, checkpoint_payload
+                del target, visibility, radii
+                release_allocator_cache(allocator_policy)
+                allocator_release_wall_ms = float(
+                    (time.perf_counter() - allocator_release_wall_start) * 1000.0
+                )
+                if telemetry_record is not None:
+                    telemetry_record["whole_step_wall_ms"] += allocator_release_wall_ms
+                    telemetry_record["whole_step_wall_definition"] = (
+                        "CPU perf_counter from loop entry through normal debug/PLY/checkpoint and "
+                        "optimizer/densification plus v2 allocator release; excludes telemetry "
+                        "statistics/JSON serialization; no telemetry-added CUDA synchronize"
+                    )
+
+            if telemetry_record is not None:
+                telemetry.append(telemetry_record)
+
+            if (
+                allocator_policy == V2_POLICY
+                and reflection_iteration == 101
+                and opt.lambda_spec > 0
+            ):
+                device_free, device_total = torch.cuda.mem_get_info()
+                headroom = evaluate_headroom(
+                    experiment=dataset.experiment,
+                    retry_identity=opt.tier2_retry_identity,
+                    policy=allocator_policy,
+                    global_iteration=iteration,
+                    reflection_local_iteration=reflection_iteration,
+                    current_allocated_bytes=int(torch.cuda.memory_allocated()),
+                    current_reserved_bytes=int(torch.cuda.memory_reserved()),
+                    device_free_bytes=int(device_free),
+                    device_total_bytes=int(device_total),
+                    current_step_peak_allocated_bytes=step_peak_allocated,
+                    reference_peak_allocated_bytes=int(
+                        opt.stage_b_reference_peak_allocated_bytes
+                    ),
+                    minimum_projected_headroom_bytes=int(
+                        opt.stage_b_minimum_projected_headroom_bytes
+                    ),
+                )
+                headroom_path = os.path.join(
+                    scene.model_path, "allocator_headroom_gate.json"
+                )
+                write_headroom_gate(headroom_path, headroom)
+                print("\nSTAGE_B_HEADROOM " + json.dumps(
+                    headroom, sort_keys=True, allow_nan=False
+                ))
+                if not headroom["passed"]:
+                    raise RuntimeError(
+                        "Stage B allocator headroom gate failed before formal long run"
+                    )
     progress.close()

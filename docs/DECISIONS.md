@@ -1957,3 +1957,98 @@ hard failure. Stage B remains unaccepted; Stage C/D remain forbidden.
 
 Required ablation: This one C03-r8 3k-versus-7k long onset study. It does not by
 itself establish that either onset is superior.
+
+## B-023 — Allocator-lifecycle retry after `oneshot_v1` HARD_FAILED
+
+Date: 2026-07-02
+
+Question: What is the smallest evidence-backed repair for the two formal-branch
+CUDA OOMs that preserves the C03-r8 3k-versus-7k onset treatment?
+
+Observed evidence: `oneshot_v1` completed the shared D-only bootstrap and both
+R-local 1--100 warmups. Branch A's last complete telemetry was global 3347 /
+R-local 347; backward then failed on a 32 MiB request with 20.65 GiB allocated,
+22.87 GiB reserved, and 25.38 MiB device-free. Its scoped allocated/reserved
+maxima were 21.676/22.893 GiB. Branch B's last complete telemetry was global
+7179 / R-local 179; raytrace forward failed on a 26 MiB request with 21.01 GiB
+allocated, 22.34 GiB reserved, and 41.75 MiB device-free. Its scoped maxima
+were 20.812/22.332 GiB. Both paths have finite saved checkpoints and zero
+telemetry nonfinites. Candidate/exact p99 stayed in the same hundreds-scale
+range rather than increasing by an order of magnitude.
+
+The full telemetry also shows end-of-step allocated memory returning to roughly
+1--2 GiB and no monotonic increase. Reserved memory instead grows near device
+capacity and occasionally falls sharply after a successful high-pressure step,
+which is consistent with PyTorch allocation retry releasing cached blocks.
+Training keeps the prior step's `package` alive while evaluating the next
+render RHS; debug and checkpoint payload locals can also retain bounded CUDA
+references until their next replacement. These are bounded lifetime overlaps,
+not an unbounded graph/telemetry leak. Debug retention can reduce Branch A's
+margin but cannot be the common sole cause because Branch B failed before its
+first formal debug node. D topology and sampled camera determine the real live
+peak; allocator fragmentation then makes a small contiguous allocation fail.
+The failed-camera identities are unavailable because neither failed step wrote
+a complete telemetry line, so no single camera is asserted as causal.
+
+Chosen implementation: Introduce the opt-in retry identity
+`oneshot_v2_allocator_lifecycle_retry` and allocator policy
+`release_ephemeral_cache_each_step_v1`. At every completed Stage B step, after
+all loss, optimizer, densification, debug, checkpoint, and telemetry consumers
+finish, explicitly delete step-owned forward/loss/debug/checkpoint references
+and call `torch.cuda.empty_cache()` to return only unused cached blocks. Launch
+both A and B with exactly
+`PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128`. The policy is default-off and
+operator-only. It performs no renderer/raytrace/backward work, consumes no RNG,
+and changes no tensor, optimizer, scheduler, topology, or checkpoint state.
+
+At each branch's first formal step (R-local 101), after the safe-boundary release,
+record current allocated/reserved, device free/total, and that step's scoped
+allocated peak. Define allocator capacity as `current allocated + device free`,
+required peak as the maximum of the current scoped peak and v1's largest
+successful scoped peak, 23,274,475,520 bytes, and projected headroom as capacity
+minus required peak. Require at least 1,073,741,824 bytes (1 GiB) or stop before
+the long formal segment. The margin is over 32 times either failed 26/32 MiB
+request and is anchored to a real successful v1 high-water mark; it is a
+fail-closed engineering gate, not proof that later cameras cannot exceed it.
+
+Reuse the immutable `oneshot_v1` shared D-only 3k and 7k full-state checkpoints,
+whose approved SHA-256 values are respectively
+`c8f83b17d53f49a3f283d25078e69cb4c8073b2b09354cc901ecc23eae772e6c`
+and `59461b60ac721f4e724b48ced9ee319f98ede49490f38bce91651590bb760d89`.
+This is valid because the repair is Stage-B-only and therefore cannot change
+the completed D-only mathematics or RNG trajectory. Fresh R is recreated from
+each shared source at local 0. Do not continue from v1 A3200 or B7100: A already
+contains 100 formal steps while B contains none, and neither trajectory applied
+the v2 memory policy from R-local 1 or records its identity/headroom contract.
+
+Alternative retained but not implemented: If the allocator-only retry still
+lacks measured headroom, use one fixed, identical memory-bounded ray chunk size
+for both branches under a new retry decision. Chunking preserves candidate and
+exact-intersection definitions but may change floating-point accumulation order
+in backward; it therefore requires matched equivalence/gradient tests and must
+be recorded as an additional common treatment. Resolution, R count, L_spec,
+D optimization, and densification remain unchanged unless both prior options
+are proven insufficient and a separately named experiment is approved.
+
+Why: The selected repair directly targets both demonstrated mechanisms while
+leaving the onset comparison intact. It does not attribute the OOM to generic
+"insufficient VRAM," nor claim allocator configuration alone is guaranteed;
+the local-101 measurement decides whether adequate real headroom exists.
+
+Paper fidelity: Allocator lifetime and operator observability only. No renderer,
+ray tracer, BVH, candidate selection, exact intersection, BRDF, loss, optimizer,
+scheduler, densification threshold/timing, checkpoint state meaning, R
+initialization, random-number consumption, data, mask schedule, or resolution
+changes.
+
+Impact: All v1 outputs/logs/checkpoints/telemetry/state/audit remain immutable.
+V2 uses new branch, log, telemetry, state, packet, audit, and JIT paths and runs
+the same memory policy on both GPUs. The full GPU-enabled suite passes 117/117;
+the CPU-only suite passes 102 with 15 CUDA skips. No v2 bootstrap, branch,
+render, or real-scene smoke was run while implementing this decision. Stage B
+remains unaccepted; Stage C/D remain forbidden.
+
+Required ablation: The user may run only the single committed `oneshot_v2`
+workflow. If either headroom gate fails or either branch OOMs, retain the CPU-only
+final audit and return for a new decision; do not auto-retry or silently change
+chunk size.

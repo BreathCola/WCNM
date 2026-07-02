@@ -28,16 +28,26 @@ from tools.audit_tier2_gate import ANOMALY_RE, _checkpoint_counts, _finite_scan,
 OUTPUT = ROOT / "output"
 EXPERIMENT = "C03-r8 Tier 2 onset study"
 RESOLUTION = 8
+RETRY_IDENTITY = "oneshot_v2_allocator_lifecycle_retry"
+ALLOCATOR_POLICY = "release_ephemeral_cache_each_step_v1"
+REFERENCE_PEAK_ALLOCATED_BYTES = 23274475520
+MINIMUM_PROJECTED_HEADROOM_BYTES = 1073741824
 BOOTSTRAP = OUTPUT / "tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A = OUTPUT / "tier2_c03_r8_oneshot_rstart_g03000_to_g15000_v1"
-BRANCH_B = OUTPUT / "tier2_c03_r8_oneshot_rstart_g07000_to_g15000_v1"
-STATE_PATH = OUTPUT / "tier2_c03_r8_oneshot_state_v1.json"
-REPORT_PATH = OUTPUT / "tier2_c03_r8_oneshot_final_audit_v1.json"
-COORDINATOR_LOG = OUTPUT / "tier2_c03_r8_oneshot_coordinator_v1.log"
-PACKET_3000 = OUTPUT / "tier2_c03_r8_oneshot_bootstrap_g03000_audit_v1.json"
-PACKET_7000 = OUTPUT / "tier2_c03_r8_oneshot_bootstrap_g07000_audit_v1.json"
-PACKET_A100 = OUTPUT / "tier2_c03_r8_oneshot_a_r0100_audit_v1.json"
-PACKET_B100 = OUTPUT / "tier2_c03_r8_oneshot_b_r0100_audit_v1.json"
+BRANCH_A = OUTPUT / "tier2_c03_r8_oneshot_v2_rstart_g03000_to_g15000"
+BRANCH_B = OUTPUT / "tier2_c03_r8_oneshot_v2_rstart_g07000_to_g15000"
+STATE_PATH = OUTPUT / "tier2_c03_r8_oneshot_v2_state.json"
+REPORT_PATH = OUTPUT / "tier2_c03_r8_oneshot_v2_final_audit.json"
+COORDINATOR_LOG = OUTPUT / "tier2_c03_r8_oneshot_v2_coordinator.log"
+PACKET_3000 = OUTPUT / "tier2_c03_r8_oneshot_v2_source_g03000_audit.json"
+PACKET_7000 = OUTPUT / "tier2_c03_r8_oneshot_v2_source_g07000_audit.json"
+PACKET_A100 = OUTPUT / "tier2_c03_r8_oneshot_v2_a_r0100_audit.json"
+PACKET_B100 = OUTPUT / "tier2_c03_r8_oneshot_v2_b_r0100_audit.json"
+V1_FINAL_AUDIT = OUTPUT / "tier2_c03_r8_oneshot_final_audit_v1.json"
+EXPECTED_V1_FINAL_AUDIT_SHA256 = "72887af7b8d93ee64f59747c745030970e96aa379e7dc09f980bd749af8df88a"
+EXPECTED_SOURCE_HASHES = {
+    3000: "c8f83b17d53f49a3f283d25078e69cb4c8073b2b09354cc901ecc23eae772e6c",
+    7000: "59461b60ac721f4e724b48ced9ee319f98ede49490f38bce91651590bb760d89",
+}
 SCRIPT = ROOT / "tools" / "tier2_operator.sh"
 MASK = ROOT / "data" / "TiHuBird" / "specular_masks_reviewed_v1" / "manifest.json"
 PRIORS = ROOT / "data" / "TiHuBird" / "diffrender_priors_candidates" / "axis_smoke" / "C03" / "normal"
@@ -46,32 +56,32 @@ GPU_POLL_SECONDS = 30.0
 
 TASK_SPECS = {
     "bootstrap": {
-        "action": "bootstrap", "gpu": 1,
+        "action": None, "gpu": None,
         "log": OUTPUT / "tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1.log",
         "telemetry": BOOTSTRAP / "telemetry" / "bootstrap_g00001_07000.jsonl",
         "global_start": 1, "local_start": None,
     },
     "branch_a_warmup": {
         "action": "a-phase-a", "gpu": 0,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_a_warmup_g03001_03100.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v2_a_warmup_g03001_03100.log",
         "telemetry": BRANCH_A / "telemetry" / "warmup_g03001_03100.jsonl",
         "global_start": 3001, "local_start": 1,
     },
     "branch_a_formal": {
         "action": "a-long", "gpu": 0,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_a_formal_g03101_15000.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v2_a_formal_g03101_15000.log",
         "telemetry": BRANCH_A / "telemetry" / "formal_g03101_15000.jsonl",
         "global_start": 3101, "local_start": 101,
     },
     "branch_b_warmup": {
         "action": "b-phase-a", "gpu": 1,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_b_warmup_g07001_07100.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v2_b_warmup_g07001_07100.log",
         "telemetry": BRANCH_B / "telemetry" / "warmup_g07001_07100.jsonl",
         "global_start": 7001, "local_start": 1,
     },
     "branch_b_formal": {
         "action": "b-long", "gpu": 1,
-        "log": OUTPUT / "tier2_c03_r8_oneshot_b_formal_g07101_15000.log",
+        "log": OUTPUT / "tier2_c03_r8_oneshot_v2_b_formal_g07101_15000.log",
         "telemetry": BRANCH_B / "telemetry" / "formal_g07101_15000.jsonl",
         "global_start": 7101, "local_start": 101,
     },
@@ -135,6 +145,8 @@ def validate_live_telemetry(path: Path, global_start: int, local_start: int | No
         phase = str(record.get("phase_tag", ""))
         if f"experiment={EXPERIMENT}" not in phase or f"resolution={RESOLUTION}" not in phase:
             raise RuntimeError(f"telemetry experiment identity mismatch: {path}")
+        if local_start is not None and f"retry={RETRY_IDENTITY}" not in phase:
+            raise RuntimeError(f"telemetry retry identity mismatch: {path}")
     return {
         "rows": len(records),
         "last_global": globals_seen[-1] if globals_seen else None,
@@ -188,15 +200,25 @@ def preflight() -> dict:
     if dirty:
         raise RuntimeError(f"working tree is not clean:\n{dirty}")
     reserved = [
-        BOOTSTRAP, BRANCH_A, BRANCH_B, STATE_PATH, REPORT_PATH, COORDINATOR_LOG,
+        BRANCH_A, BRANCH_B, STATE_PATH, REPORT_PATH, COORDINATOR_LOG,
         PACKET_3000, PACKET_7000, PACKET_A100, PACKET_B100,
-        *(spec["log"] for spec in TASK_SPECS.values()),
+        *(spec["log"] for key, spec in TASK_SPECS.items() if key != "bootstrap"),
     ]
     conflicts = [str(path) for path in reserved if path.exists()]
     if conflicts:
         raise FileExistsError(f"one-shot outputs already exist; refusing overwrite: {conflicts}")
     if not MASK.is_file() or not PRIORS.is_dir():
         raise FileNotFoundError("formal mask or C03 normal priors are missing")
+    if not V1_FINAL_AUDIT.is_file() or sha256_file(V1_FINAL_AUDIT) != EXPECTED_V1_FINAL_AUDIT_SHA256:
+        raise RuntimeError("oneshot_v1 final audit is missing or changed")
+    if not BOOTSTRAP.is_dir() or bool(BOOTSTRAP.stat().st_mode & 0o222):
+        raise RuntimeError("protected oneshot_v1 shared bootstrap is missing or writable")
+    for iteration, expected_hash in EXPECTED_SOURCE_HASHES.items():
+        source = BOOTSTRAP / f"chkpnt{iteration}.pth"
+        if not source.is_file() or sha256_file(source) != expected_hash:
+            raise RuntimeError(f"protected bootstrap checkpoint {iteration} is missing or changed")
+        if bool(source.stat().st_mode & 0o222):
+            raise RuntimeError(f"protected bootstrap checkpoint {iteration} is writable")
     gpus, apps = _gpu_inventory()
     if set(gpus) != {0, 1} or any("RTX 3090" not in gpus[index]["name"] for index in (0, 1)):
         raise RuntimeError(f"preflight requires exactly GPU 0/1 RTX 3090 devices: {gpus}")
@@ -209,7 +231,12 @@ def preflight() -> dict:
     source = SCRIPT.read_text(encoding="utf-8")
     required_literals = (
         'RESOLUTION=8', 'EXPERIMENT="C03-r8 Tier 2 onset study"',
-        "tier2_c03_r8_oneshot_shared_d_bootstrap", "--resolution \"$RESOLUTION\"",
+        'RETRY_IDENTITY="oneshot_v2_allocator_lifecycle_retry"',
+        'ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"',
+        'REFERENCE_PEAK_ALLOCATED_BYTES=23274475520',
+        'MINIMUM_PROJECTED_HEADROOM_BYTES=1073741824',
+        "tier2_c03_r8_oneshot_v2_rstart", "--resolution \"$RESOLUTION\"",
+        'PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"',
     )
     if any(value not in source for value in required_literals):
         raise RuntimeError("operator script failed the C03-r8 static identity preflight")
@@ -217,10 +244,13 @@ def preflight() -> dict:
         "git_commit": _run_checked(["git", "rev-parse", "HEAD"]).strip(),
         "git_clean": True,
         "experiment": EXPERIMENT,
+        "retry_identity": RETRY_IDENTITY,
         "resolution": RESOLUTION,
         "gpus": gpus,
         "preexisting_compute_apps": apps,
         "legacy_r2_used": False,
+        "shared_bootstrap_reused_read_only": True,
+        "v1_final_audit_sha256": EXPECTED_V1_FINAL_AUDIT_SHA256,
     }
 
 
@@ -280,6 +310,12 @@ def checkpoint_packet(
     if config.get("experiment") != EXPERIMENT or int(config.get("resolution", -1)) != RESOLUTION:
         packet["missing_or_mismatched"].append("checkpoint experiment/resolution mismatch")
         packet["packet_ready_for_codex_review"] = False
+    if checkpoint_data.get("format") == "rtgs_stage_b" and (
+        config.get("tier2_retry_identity") != RETRY_IDENTITY
+        or config.get("allocator_policy", {}).get("name") != ALLOCATOR_POLICY
+    ):
+        packet["missing_or_mismatched"].append("checkpoint retry/allocator policy mismatch")
+        packet["packet_ready_for_codex_review"] = False
     if expected_source_hash is not None and checkpoint_data.get("provenance", {}).get("sha256") != expected_source_hash:
         packet["missing_or_mismatched"].append("checkpoint shared-source provenance mismatch")
         packet["packet_ready_for_codex_review"] = False
@@ -287,12 +323,6 @@ def checkpoint_packet(
     if not packet["packet_ready_for_codex_review"]:
         raise RuntimeError(f"checkpoint gate audit failed: {packet_path}")
     return packet
-
-
-def make_read_only_tree(root: Path) -> None:
-    for path in sorted(root.rglob("*"), key=lambda value: len(value.parts), reverse=True):
-        path.chmod(0o555 if path.is_dir() else 0o444)
-    root.chmod(0o555)
 
 
 def _log_anomaly(path: Path) -> str | None:
@@ -307,8 +337,9 @@ def _log_anomaly(path: Path) -> str | None:
 class Coordinator:
     def __init__(self, preflight_data: dict):
         self.state = {
-            "schema": "rtgs_tier2_oneshot_state_v1",
+            "schema": "rtgs_tier2_oneshot_v2_state",
             "experiment": EXPERIMENT,
+            "retry_identity": RETRY_IDENTITY,
             "resolution": RESOLUTION,
             "coordinator_pid": os.getpid(),
             "started_at": utc_now(),
@@ -345,6 +376,8 @@ class Coordinator:
 
     def start(self, label: str) -> None:
         spec = TASK_SPECS[label]
+        if spec["action"] is None:
+            raise ValueError(f"task {label} is a read-only source, not an executable action")
         log_handle = COORDINATOR_LOG.open("a", encoding="utf-8")
         process = subprocess.Popen(
             [str(SCRIPT), spec["action"], "--execute"],
@@ -392,7 +425,7 @@ class Coordinator:
             task["last_telemetry_r_local"] = telemetry["last_r_local"]
         except Exception as exc:
             self.stop(label, str(exc))
-        run_dir = BOOTSTRAP if label == "bootstrap" else BRANCH_A if "branch_a" in label else BRANCH_B
+        run_dir = BRANCH_A if "branch_a" in label else BRANCH_B
         completed_global = telemetry["last_global"]
         checkpoints = sorted(
             (
@@ -421,23 +454,11 @@ class Coordinator:
         task = self.state["tasks"].get(label)
         return bool(task and task["exit_code"] == 0)
 
-    def audit_3000_and_start_a(self) -> bool:
-        checkpoint = BOOTSTRAP / "chkpnt3000.pth"
-        if not checkpoint.is_file():
-            return False
+    def audit_sources_and_start_warmups(self) -> None:
         checkpoint_packet(
-            checkpoint, TASK_SPECS["bootstrap"]["telemetry"], BOOTSTRAP,
+            BOOTSTRAP / "chkpnt3000.pth", TASK_SPECS["bootstrap"]["telemetry"], BOOTSTRAP,
             TASK_SPECS["bootstrap"]["log"], 1, 3000, PACKET_3000,
-            allow_running=not self.completed_ok("bootstrap"),
         )
-        digest = sha256_file(checkpoint)
-        checkpoint.chmod(0o444)
-        self.state["source_checkpoint_hashes"]["global_3000"] = digest
-        self.event(f"bootstrap checkpoint 3000 audited and protected: {digest}")
-        self.start("branch_a_warmup")
-        return True
-
-    def audit_bootstrap_7000_and_start_b(self) -> None:
         checkpoint_packet(
             BOOTSTRAP / "chkpnt7000.pth", TASK_SPECS["bootstrap"]["telemetry"], BOOTSTRAP,
             TASK_SPECS["bootstrap"]["log"], 1, 7000, PACKET_7000,
@@ -448,9 +469,10 @@ class Coordinator:
             for iteration in range(1000, 7001, 1000)
         }
         self.state["source_checkpoint_hashes"]["bootstrap_1k_7k"] = hashes
+        self.state["source_checkpoint_hashes"]["global_3000"] = hashes["3000"]
         self.state["source_checkpoint_hashes"]["global_7000"] = hashes["7000"]
-        make_read_only_tree(BOOTSTRAP)
-        self.event("bootstrap 7000 audited; all bootstrap assets protected read-only")
+        self.event("protected oneshot_v1 bootstrap 3000/7000 audited read-only for v2 reuse")
+        self.start("branch_a_warmup")
         self.start("branch_b_warmup")
 
     def audit_warmup_and_start_formal(self, branch: str) -> None:
@@ -476,9 +498,10 @@ class Coordinator:
 
         signal.signal(signal.SIGINT, request_stop)
         signal.signal(signal.SIGTERM, request_stop)
-        self.start("bootstrap")
-        a_source_started = False
-        b_source_started = False
+        try:
+            self.audit_sources_and_start_warmups()
+        except Exception as exc:
+            self.fail("shared_bootstrap_source_audit", str(exc))
         while True:
             for label in list(self.processes):
                 self.refresh_task(label)
@@ -495,36 +518,12 @@ class Coordinator:
                             self.stop(label, str(exc))
                 self.last_gpu_poll = time.monotonic()
 
-            bootstrap = self.state["tasks"].get("bootstrap", {})
-            if not a_source_started and not any(item["task"] == "bootstrap" for item in self.state["failures"]):
-                try:
-                    a_source_started = self.audit_3000_and_start_a()
-                except Exception as exc:
-                    if bootstrap.get("exit_code") is not None:
-                        self.fail("bootstrap_g3000_audit", str(exc))
-                        a_source_started = True
-
             if self.completed_ok("branch_a_warmup") and "branch_a_warmup" not in self.handled:
                 self.handled.add("branch_a_warmup")
                 try:
                     self.audit_warmup_and_start_formal("a")
                 except Exception as exc:
                     self.fail("branch_a_warmup_audit", str(exc))
-
-            if self.completed_ok("bootstrap") and "bootstrap" not in self.handled:
-                self.handled.add("bootstrap")
-                if not a_source_started:
-                    try:
-                        a_source_started = self.audit_3000_and_start_a()
-                    except Exception as exc:
-                        self.fail("bootstrap_g3000_audit", str(exc))
-                        a_source_started = True
-                try:
-                    self.audit_bootstrap_7000_and_start_b()
-                    b_source_started = True
-                except Exception as exc:
-                    self.fail("bootstrap_g7000_audit", str(exc))
-                    b_source_started = True
 
             if self.completed_ok("branch_b_warmup") and "branch_b_warmup" not in self.handled:
                 self.handled.add("branch_b_warmup")
@@ -533,43 +532,48 @@ class Coordinator:
                 except Exception as exc:
                     self.fail("branch_b_warmup_audit", str(exc))
 
-            bootstrap_terminal = bootstrap.get("exit_code") is not None
+            source_failed = any(
+                item["task"] == "shared_bootstrap_source_audit"
+                for item in self.state["failures"]
+            )
             a_terminal = (
                 self.state["tasks"].get("branch_a_formal", {}).get("exit_code") is not None
                 or any(
-                    item["task"].startswith("branch_a") or item["task"] == "bootstrap_g3000_audit"
+                    item["task"].startswith("branch_a")
                     for item in self.state["failures"]
                 )
                 and not any(process.poll() is None for label, process in self.processes.items() if "branch_a" in label)
+                or source_failed
             )
             b_terminal = (
                 self.state["tasks"].get("branch_b_formal", {}).get("exit_code") is not None
-                or (bootstrap_terminal and b_source_started and any(
-                        item["task"].startswith("branch_b") or item["task"] == "bootstrap_g7000_audit"
+                or (any(
+                        item["task"].startswith("branch_b")
                         for item in self.state["failures"]
                     )
                     and not any(process.poll() is None for label, process in self.processes.items() if "branch_b" in label))
-                or (bootstrap_terminal and not self.completed_ok("bootstrap"))
+                or source_failed
             )
-            if bootstrap_terminal and a_terminal and b_terminal:
+            if a_terminal and b_terminal:
                 break
             time.sleep(POLL_SECONDS)
 
         for label in list(self.processes):
             self.refresh_task(label)
         self.state["ended_at"] = utc_now()
-        report = build_final_audit(self.state)
+        report = safe_build_final_audit(self.state)
         fully_completed = bool(
-            self.completed_ok("bootstrap")
-            and self.completed_ok("branch_a_formal")
+            self.completed_ok("branch_a_formal")
             and self.completed_ok("branch_b_formal")
             and report["healthy"]
         )
         completed_major = sum(
-            self.completed_ok(label) for label in ("bootstrap", "branch_a_formal", "branch_b_formal")
+            self.completed_ok(label) for label in ("branch_a_formal", "branch_b_formal")
         )
         self.state["status"] = (
-            "FULLY_COMPLETED" if fully_completed else "PARTIALLY_COMPLETED" if completed_major else "HARD_FAILED"
+            "FULLY_COMPLETED" if fully_completed
+            else "HARD_FAILED" if self.state["failures"]
+            else "PARTIALLY_COMPLETED" if completed_major else "HARD_FAILED"
         )
         self.state["final_audit_healthy"] = report["healthy"]
         self._save()
@@ -587,6 +591,8 @@ def _distribution(values: list[float | int | None]) -> dict | None:
         position = (len(clean) - 1) * q
         low = int(position)
         high = min(low + 1, len(clean) - 1)
+        if low == high:
+            return clean[low]
         return clean[low] * (high - position) + clean[high] * (position - low)
     return {"min": clean[0], "mean": sum(clean) / len(clean), "p50": percentile(0.5),
             "p95": percentile(0.95), "max": clean[-1]}
@@ -620,6 +626,11 @@ def scan_checkpoint(
         errors.append("checkpoint iteration mismatch")
     if config.get("experiment") != EXPERIMENT or int(config.get("resolution", -1)) != RESOLUTION:
         errors.append("checkpoint experiment/resolution mismatch")
+    if stage_b and (
+        config.get("tier2_retry_identity") != RETRY_IDENTITY
+        or config.get("allocator_policy", {}).get("name") != ALLOCATOR_POLICY
+    ):
+        errors.append("checkpoint retry/allocator policy mismatch")
     if checkpoint.get("checkpoint_version") != 2 or checkpoint.get("optimizer_step_completed") is not True:
         errors.append("checkpoint is not complete version-2 continuation state")
     if result["finite_scan"]["nonfinite_count"]:
@@ -751,6 +762,27 @@ def audit_logs(paths: list[Path]) -> dict:
     return {"entries": entries, "errors": errors}
 
 
+def audit_headroom(run_dir: Path) -> dict:
+    path = run_dir / "allocator_headroom_gate.json"
+    errors = []
+    record = None
+    if not path.is_file():
+        errors.append(f"missing allocator headroom gate: {path}")
+    else:
+        record = json.loads(path.read_text(encoding="utf-8"))
+        if (
+            record.get("schema") != "rtgs_stage_b_headroom_gate_v1"
+            or record.get("retry_identity") != RETRY_IDENTITY
+            or record.get("allocator_policy") != ALLOCATOR_POLICY
+            or record.get("reflection_local_iteration") != 101
+            or record.get("reference_peak_allocated_bytes") != REFERENCE_PEAK_ALLOCATED_BYTES
+            or record.get("minimum_projected_headroom_bytes") != MINIMUM_PROJECTED_HEADROOM_BYTES
+            or record.get("passed") is not True
+        ):
+            errors.append(f"invalid or failed allocator headroom gate: {path}")
+    return {"path": str(path), "record": record, "errors": errors}
+
+
 def build_final_audit(state: dict | None = None) -> dict:
     if state is None:
         state = json.loads(STATE_PATH.read_text(encoding="utf-8")) if STATE_PATH.is_file() else {}
@@ -785,11 +817,15 @@ def build_final_audit(state: dict | None = None) -> dict:
         )
         debug = audit_debug(run_dir, nodes, onset)
         logs = audit_logs([TASK_SPECS[f"{prefix}_warmup"]["log"], TASK_SPECS[f"{prefix}_formal"]["log"]])
-        errors.extend(f"Branch {name}: {value}" for value in telemetry["errors"] + debug["errors"] + logs["errors"])
+        headroom = audit_headroom(run_dir)
+        errors.extend(
+            f"Branch {name}: {value}"
+            for value in telemetry["errors"] + debug["errors"] + logs["errors"] + headroom["errors"]
+        )
         branches[name] = {
             "onset": onset, "output": str(run_dir), "checkpoints": scans,
             "final_checkpoint": scans.get("15000"), "telemetry": telemetry,
-            "debug": debug, "logs": logs,
+            "debug": debug, "logs": logs, "headroom_gate": headroom,
         }
 
     bootstrap_telemetry = audit_telemetry(
@@ -803,13 +839,25 @@ def build_final_audit(state: dict | None = None) -> dict:
         expected = protected_hashes.get(key)
         if expected and path.is_file() and sha256_file(path) != expected:
             errors.append(f"shared bootstrap checkpoint {iteration} changed after protection")
+        if path.is_file() and sha256_file(path) != EXPECTED_SOURCE_HASHES[iteration]:
+            errors.append(f"shared bootstrap checkpoint {iteration} differs from approved v1 source")
+    if not V1_FINAL_AUDIT.is_file() or sha256_file(V1_FINAL_AUDIT) != EXPECTED_V1_FINAL_AUDIT_SHA256:
+        errors.append("oneshot_v1 final audit changed during v2")
     report = {
-        "schema": "rtgs_tier2_oneshot_final_audit_v1", "generated_at": utc_now(),
-        "experiment": EXPERIMENT, "resolution": RESOLUTION, "cpu_only": True,
+        "schema": "rtgs_tier2_oneshot_v2_final_audit", "generated_at": utc_now(),
+        "experiment": EXPERIMENT, "retry_identity": RETRY_IDENTITY,
+        "resolution": RESOLUTION, "allocator_policy": ALLOCATOR_POLICY, "cpu_only": True,
         "state_path": str(STATE_PATH), "operator_state": state,
+        "v1_evidence": {
+            "final_audit": str(V1_FINAL_AUDIT),
+            "expected_sha256": EXPECTED_V1_FINAL_AUDIT_SHA256,
+            "actual_sha256": sha256_file(V1_FINAL_AUDIT) if V1_FINAL_AUDIT.is_file() else None,
+            "used_as_branch_resume": False,
+        },
         "bootstrap": {
             "output": str(BOOTSTRAP), "checkpoints": bootstrap_scans,
             "telemetry": bootstrap_telemetry, "logs": bootstrap_logs,
+            "reused_read_only": True,
             "read_only": BOOTSTRAP.is_dir() and not bool(BOOTSTRAP.stat().st_mode & 0o222),
         },
         "branches": branches,
@@ -817,6 +865,26 @@ def build_final_audit(state: dict | None = None) -> dict:
     }
     report["healthy"] = not errors
     return report
+
+
+def safe_build_final_audit(state: dict | None = None) -> dict:
+    """Always return a CPU-only terminal artifact, even if an audit reader fails."""
+    try:
+        return build_final_audit(state)
+    except Exception as exc:
+        return {
+            "schema": "rtgs_tier2_oneshot_v2_final_audit",
+            "generated_at": utc_now(),
+            "experiment": EXPERIMENT,
+            "retry_identity": RETRY_IDENTITY,
+            "resolution": RESOLUTION,
+            "allocator_policy": ALLOCATOR_POLICY,
+            "cpu_only": True,
+            "state_path": str(STATE_PATH),
+            "operator_state": state or {},
+            "healthy": False,
+            "errors": [f"CPU-only final-audit reader failed closed: {type(exc).__name__}: {exc}"],
+        }
 
 
 def print_status() -> int:
@@ -842,7 +910,7 @@ def main() -> int:
     if args.action == "status":
         return print_status()
     if args.action == "final-audit":
-        report = build_final_audit()
+        report = safe_build_final_audit()
         atomic_json(REPORT_PATH, report)
         print(json.dumps({"healthy": report["healthy"], "report": str(REPORT_PATH),
                           "errors": report["errors"]}, indent=2, allow_nan=False))

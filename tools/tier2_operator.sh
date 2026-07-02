@@ -7,12 +7,17 @@ cd "$ROOT"
 ACTION="${1:-help}"
 MODE="${2:-print}"
 BOOTSTRAP="output/tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1"
-BRANCH_A="output/tier2_c03_r8_oneshot_rstart_g03000_to_g15000_v1"
-BRANCH_B="output/tier2_c03_r8_oneshot_rstart_g07000_to_g15000_v1"
+BRANCH_A="output/tier2_c03_r8_oneshot_v2_rstart_g03000_to_g15000"
+BRANCH_B="output/tier2_c03_r8_oneshot_v2_rstart_g07000_to_g15000"
 MASK="$ROOT/data/TiHuBird/specular_masks_reviewed_v1/manifest.json"
 RESOLUTION=8
 EXPERIMENT="C03-r8 Tier 2 onset study"
-PHASE_PREFIX="experiment=${EXPERIMENT};resolution=${RESOLUTION};phase="
+RETRY_IDENTITY="oneshot_v2_allocator_lifecycle_retry"
+ALLOCATOR_POLICY="release_ephemeral_cache_each_step_v1"
+REFERENCE_PEAK_ALLOCATED_BYTES=23274475520
+MINIMUM_PROJECTED_HEADROOM_BYTES=1073741824
+PYTORCH_ALLOCATOR_CONFIG="max_split_size_mb:128"
+PHASE_PREFIX="experiment=${EXPERIMENT};retry=${RETRY_IDENTITY};resolution=${RESOLUTION};phase="
 
 COMMON_MODEL=(
   --source_path data/TiHuBird
@@ -75,6 +80,10 @@ COMMON_STAGE_B=(
   --reflection_prune_unhit_after 500
   --debug_interval 100
   --operator_gate_continuation
+  --tier2_retry_identity "$RETRY_IDENTITY"
+  --stage_b_allocator_policy "$ALLOCATOR_POLICY"
+  --stage_b_reference_peak_allocated_bytes "$REFERENCE_PEAK_ALLOCATED_BYTES"
+  --stage_b_minimum_projected_headroom_bytes "$MINIMUM_PROJECTED_HEADROOM_BYTES"
 )
 
 quote_command() {
@@ -87,14 +96,20 @@ run_or_print() {
   shift
   if [[ "$MODE" != "--execute" ]]; then
     echo "# experiment=$EXPERIMENT"
+    echo "# retry_identity=$RETRY_IDENTITY"
     echo "# resolution=$RESOLUTION"
+    echo "# allocator_policy=$ALLOCATOR_POLICY"
+    echo "# PYTORCH_CUDA_ALLOC_CONF=$PYTORCH_ALLOCATOR_CONFIG"
     quote_command "$@"
     echo "# log: $log_path"
     return
   fi
   {
     echo "# experiment=$EXPERIMENT"
+    echo "# retry_identity=$RETRY_IDENTITY"
     echo "# resolution=$RESOLUTION"
+    echo "# allocator_policy=$ALLOCATOR_POLICY"
+    echo "# PYTORCH_CUDA_ALLOC_CONF=$PYTORCH_ALLOCATOR_CONFIG"
     quote_command "$@"
     "$@"
   } 2>&1 | tee "$log_path"
@@ -112,36 +127,20 @@ require_new_dir() {
   fi
 }
 
-bootstrap() {
-  require_new_dir "$BOOTSTRAP"
-  run_or_print output/tier2_c03_r8_oneshot_shared_d_bootstrap_g00000_07000_v1.log \
-    env CUDA_VISIBLE_DEVICES=1 RTGS_BVH_JIT_ROOT=/tmp/rtgs-bvh-tier2-gpu1 \
-      PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
-    conda run --no-capture-output -n RT-GS python train.py \
-      "${COMMON_MODEL[@]}" --stage stage_a --model_path "$BOOTSTRAP" \
-      --iterations 7000 --test_iterations 7000 --save_iterations 7000 \
-      --checkpoint_iterations 1000 2000 3000 4000 5000 6000 7000 \
-      --debug_interval 1000 --require_nonzero_mono \
-      --operator_gate_continuation --operator_gate_expected_global_start 0 \
-      --d_bootstrap_telemetry_jsonl "$BOOTSTRAP/telemetry/bootstrap_g00001_07000.jsonl" \
-      --d_bootstrap_telemetry_max_steps 7000 \
-      --d_bootstrap_telemetry_phase_tag "${PHASE_PREFIX}shared_d_bootstrap"
-}
-
 stage_b_long() {
   local branch_name="$1" branch gpu jit start_global start_local telemetry_name log_path
   local -a checkpoints
   if [[ "$branch_name" == "a" ]]; then
-    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-oneshot-gpu0
+    branch="$BRANCH_A"; gpu=0; jit=/tmp/rtgs-bvh-tier2-oneshot-v2-gpu0
     start_global=3100; start_local=100
     telemetry_name=formal_g03101_15000.jsonl
-    log_path=output/tier2_c03_r8_oneshot_a_formal_g03101_15000.log
+    log_path=output/tier2_c03_r8_oneshot_v2_a_formal_g03101_15000.log
     checkpoints=(3200 3500 4000 5000 6000 7000 8000 9000 10000 11000 12000 13000 14000 15000)
   elif [[ "$branch_name" == "b" ]]; then
-    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-oneshot-gpu1
+    branch="$BRANCH_B"; gpu=1; jit=/tmp/rtgs-bvh-tier2-oneshot-v2-gpu1
     start_global=7100; start_local=100
     telemetry_name=formal_g07101_15000.jsonl
-    log_path=output/tier2_c03_r8_oneshot_b_formal_g07101_15000.log
+    log_path=output/tier2_c03_r8_oneshot_v2_b_formal_g07101_15000.log
     checkpoints=(7200 7500 8000 9000 10000 11000 12000 13000 14000 15000)
   else
     echo "unknown branch: $branch_name" >&2
@@ -150,6 +149,7 @@ stage_b_long() {
   require_file "$branch/chkpnt${start_global}.pth"
   run_or_print "$log_path" \
     env CUDA_VISIBLE_DEVICES="$gpu" RTGS_BVH_JIT_ROOT="$jit" \
+      PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_ALLOCATOR_CONFIG" \
       PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
     conda run --no-capture-output -n RT-GS python train.py \
       "${COMMON_STAGE_B[@]}" --model_path "$branch" \
@@ -212,6 +212,7 @@ stage_b_gate() {
   fi
   run_or_print "$log_path" \
     env CUDA_VISIBLE_DEVICES="$gpu" RTGS_BVH_JIT_ROOT="$jit" \
+      PYTORCH_CUDA_ALLOC_CONF="$PYTORCH_ALLOCATOR_CONFIG" \
       PYTHONHASHSEED=0 PYTHONDONTWRITEBYTECODE=1 \
     conda run --no-capture-output -n RT-GS python train.py \
       "${COMMON_STAGE_B[@]}" --model_path "$branch" "${source_args[@]}" "${mask_args[@]}" \
@@ -228,16 +229,15 @@ case "$ACTION" in
   run-all) run_all ;;
   status) status ;;
   final-audit) final_audit ;;
-  bootstrap) bootstrap ;;
-  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-oneshot-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_warmup" warmup_g03001_03100.jsonl output/tier2_c03_r8_oneshot_a_warmup_g03001_03100.log 0 ;;
+  a-phase-a) stage_b_gate "$BRANCH_A" 0 /tmp/rtgs-bvh-tier2-oneshot-v2-gpu0 diffuse "$BOOTSTRAP/chkpnt3000.pth" 3000 0 3100 100 "${PHASE_PREFIX}a_warmup" warmup_g03001_03100.jsonl output/tier2_c03_r8_oneshot_v2_a_warmup_g03001_03100.log 0 ;;
   a-long) stage_b_long a ;;
-  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-oneshot-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_warmup" warmup_g07001_07100.jsonl output/tier2_c03_r8_oneshot_b_warmup_g07001_07100.log 0 ;;
+  b-phase-a) stage_b_gate "$BRANCH_B" 1 /tmp/rtgs-bvh-tier2-oneshot-v2-gpu1 diffuse "$BOOTSTRAP/chkpnt7000.pth" 7000 0 7100 100 "${PHASE_PREFIX}b_warmup" warmup_g07001_07100.jsonl output/tier2_c03_r8_oneshot_v2_b_warmup_g07001_07100.log 0 ;;
   b-long) stage_b_long b ;;
   help|*)
     cat <<'EOF'
 Run or inspect the C03-r8 Tier-2 one-shot study:
   run-all --execute | status | final-audit --execute
-Internal coordinator actions: bootstrap, a-phase-a, a-long, b-phase-a, b-long.
+Internal coordinator actions: a-phase-a, a-long, b-phase-a, b-long.
 EOF
     ;;
 esac

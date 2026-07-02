@@ -189,7 +189,7 @@ No result from an earlier run is retroactively upgraded by this code.
 - [x] Add a print-by-default shell wrapper for bootstrap, checkpoint protection,
   Branch A/B gates, global-1000 segments, and one-command audits. It never
   advances a later gate automatically.
-- [x] Pass the GPU-enabled full 112-test repository suite and CPU-only 97-pass /
+- [x] Pass the GPU-enabled full 117-test repository suite and CPU-only 102-pass /
   15-skip suite without running training.
 - [x] Resolve the Tier-2 image-resolution contract: the user approved the
   internally matched `C03-r8 Tier 2 onset study` at resolution 8 across the
@@ -210,8 +210,25 @@ No result from an earlier run is retroactively upgraded by this code.
 - [x] Preserve complete checkpoints at bootstrap 1k--7k and branch local
   100/200/500/1000, every later global 1000, and global 15000; retain debug every
   100 global steps so all required nodes are covered.
-- [ ] Execute the committed one-shot coordinator through both branches or a hard
-  failure, then generate the CPU-only final report. No Stage C/D work is allowed.
+- [x] Execute `oneshot_v1` through a hard failure and generate its CPU-only final
+  report. The shared bootstrap and both warmups completed; both formal branches
+  OOMed, so this is a HARD_FAILED experiment, not acceptance evidence.
+- [x] Diagnose v1 without rerunning training: no nonfinite/checkpoint corruption
+  or monotonic graph retention; camera/topology-dependent live peaks combine
+  with severe allocator cache fragmentation in both branches.
+- [x] Add an independent, fail-closed `oneshot_v2` allocator-lifecycle retry
+  identity. Reuse only the immutable shared D-only 3k/7k sources; never resume
+  failed v1 A/B checkpoints.
+- [x] Apply the same `max_split_size_mb:128`, completed-step ephemeral-reference
+  release, and safe-boundary `empty_cache` policy to both branches without
+  changing renderer, ray/tracing definitions, loss, optimizer, scheduler,
+  densification, RNG, resolution, R initialization, or R count.
+- [x] Require a local-101 per-branch allocator headroom record and fail closed if
+  projected capacity does not exceed the greater of the observed step peak and
+  the 23,274,475,520-byte v1 reference by at least 1 GiB.
+- [ ] User executes the committed v2 one-shot through both branches or a hard
+  failure. The coordinator must automatically generate the CPU-only v2 final
+  audit in either case. No Stage C/D work is allowed.
 
 Gate decisions after the user returns one generated packet:
 
@@ -477,7 +494,7 @@ dummy outputs are permitted in Stage B.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
 - [x] Existing Stage A regression suite plus DR proposal/review/repair,
   formal-mask/L_spec, bounded telemetry, and Tier-2 lifecycle contracts: full
-  repository result is 111 passed.
+  repository result is 117 passed; CPU-only is 102 passed / 15 skipped.
 
 ## Acceptance checklist
 
