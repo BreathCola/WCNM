@@ -2167,3 +2167,54 @@ log, telemetry, packet, state, audit, and JIT paths. No v4 real-scene training
 or render was run during implementation. The full GPU-enabled suite passes
 120/120; CPU-only passes 104 with 16 CUDA skips. Stage B remains unaccepted;
 Stage C/D remain forbidden.
+
+## B-026 — Tier-2 v4 closeout and Stage C geometry source
+
+Date: 2026-07-03
+
+Question: Did the completed C03-r8 onset study satisfy Stage B closeout, and
+which final Diffuse state should seed Stage C geometry work?
+
+Observed evidence: Both isolated v4 branches completed with exit code zero at
+global 15,000. Branch A is R-local 12,000 with D/R counts 258,593/3,088 and
+checkpoint SHA-256
+`050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`.
+Branch B is R-local 8,000 with D/R counts 264,303/3,044 and checkpoint SHA-256
+`f79c0e3a0548aee3278b816d2d37edd9f4c89d4e5cc3de82b0c470fea8dc4d68`.
+Both checkpoints have zero recursively scanned non-finite elements, every
+telemetry row has `nonfinite_count=0`, all required debug/PLY nodes exist, and
+both logs end in `Training complete.` Branch A has lower matched loss and
+L_spec through the final window, sampled-train PSNR 28.562 versus 28.184,
+fixed-view PSNR proxy 36.258 versus 35.941, candidate/exact p99 495/124 versus
+529/153, and no adaptive retries. Branch B completed after 731 retry attempts
+across 399 steps.
+
+The first automatically written final audit incorrectly classified all Branch
+B retry records as malformed because the logger appends a timestamp after each
+valid JSON object. The repaired parser uses `JSONDecoder.raw_decode`, accepts
+only the exact `[DD/DD HH:MM:SS]` suffix, and rejects all other trailing text.
+The regenerated CPU-only report is healthy with no errors.
+
+Chosen implementation: Formally close Stage B and select Branch A global
+15,000 as the sole Stage C D-geometry source. Preserve Branch B as the matched
+7k control. Stage C may read the selected D state for geometry audit, mesh
+extraction, mask-hard camera-ray two-hit intersection, and versioned caches.
+Reflection rays remain full valid-surface rays. `mask_soft` remains L_spec-only,
+`mask_hard` gates two-hit rays, `mask_eroded` gates mesh/depth validation, and
+RGB reconstruction remains full-frame.
+
+Why: In this single matched resolution-8 experiment, 3k onset is both viable
+and the stronger downstream geometry-source candidate; choosing it avoids
+mixing branches in Stage C. A healthy audit and explicit source hash make the
+transition reproducible.
+
+Evidence boundary: There is no Reflection ground truth. Higher mask-interior
+ks and lower RGB/L_spec do not prove semantic Reflection separation, and small
+mask-exterior ks/contribution differences remain indirect proxies. This study
+does not prove 3k is globally optimal, does not reproduce the old resolution-2
+C03 baseline, and does not authorize Transmittance, second bounce, or Stage D.
+
+Required next validation: Before extracting a fixed glass mesh, audit the
+selected D alpha/depth/normal against all formal masks for cross-view coverage,
+boundary agreement, gaps, floaters, and background adhesion. Continue to mesh
+and two-hit preprocessing only on an explicit `STAGE_C_MESH_AUDIT_PASS`.

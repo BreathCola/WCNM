@@ -241,7 +241,7 @@ No result from an earlier run is retroactively upgraded by this code.
   ordinary path.
 - [x] Replace every-step `empty_cache` with a 2 GiB device-free pressure trigger
   plus forced release on retry; retain allocator split/garbage-collection policy.
-- [ ] User executes the committed, path-isolated v4 one-shot through both
+- [x] User executes the committed, path-isolated v4 one-shot through both
   branches or a hard failure. The coordinator must automatically generate the
   CPU-only v4 final audit in either case. No Stage C/D work is allowed.
 
@@ -532,12 +532,13 @@ dummy outputs are permitted in Stage B.
 - [x] The post-repair 100-step health pilot completed with finite state, stable
   counts/contribution, preserved performance, final checkpoint, and complete
   diagnostics; its reserved-memory risk is explicitly recorded.
-- [ ] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
+- [x] `docs/STATUS.md`, `docs/DECISIONS.md`, and this checklist reflect verified
   reality before any Stage C transition.
 - [x] Separate B-1a, B-1b, and B-1c rollback commits exist.
 
-The project remains in Stage B until every applicable item above is verified.
-Passing B-0 alone does not authorize Stage C or Stage D.
+Every applicable Stage B item is verified. The user formally accepted Stage B
+on 2026-07-03 and authorized the bounded Stage C mesh/two-hit scope. Stage D
+remains forbidden.
 
 ## B-1 implementation commits and current stop point
 
@@ -558,11 +559,15 @@ c87bb66934ddfcf86173c77dc9dcd724837ca8ae  grouped candidate-gradient reduction
 e50eae723548ad9963b0bf236fa4da0d408e2da9  three-step L_spec smoke evidence
 ```
 
-Implemented and tested does not mean accepted. The successful user smoke proved
+The successful user smoke proved
 the structural Stage B path, and B-1d diagnostics, the candidate-gradient
 performance repair, and the 100-step health pilot have real evidence. The user
 has since accepted the 111-view reviewed-v1 masks, and their formal manifest/
 loader tests pass. Real-scene L_spec smoke and the single authorized 100-step
-L_spec pilot have now run, but the pilot is evidence for human evaluation only
-and carries an explicit whole-step memory telemetry gap. Stage B remains
-unaccepted, and Stage C and Stage D remain forbidden.
+L_spec pilot were followed by the complete matched C03-r8 Tier-2 v4 onset study.
+Both v4 branches reached global 15,000 with finite full-state checkpoints and
+complete telemetry. The regenerated CPU-only audit is healthy after correcting
+its timestamp-suffix parser. Branch A (R onset 3k) is selected only as the Stage
+C geometry source; Branch B (R onset 7k) remains a complete control. This does
+not establish globally optimal onset or completed Reflection separation. Stage
+B is closed; Stage D remains forbidden.

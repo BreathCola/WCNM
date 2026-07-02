@@ -770,8 +770,17 @@ def audit_logs(paths: list[Path]) -> dict:
             marker = "STAGE_B_MEMORY_RETRY "
             if marker in line:
                 try:
-                    memory_retries.append(json.loads(line.split(marker, 1)[1]))
-                except json.JSONDecodeError:
+                    payload = line.split(marker, 1)[1].strip()
+                    record, end = json.JSONDecoder().raw_decode(payload)
+                    suffix = payload[end:].strip()
+                    if suffix and re.fullmatch(
+                        r"\[\d{2}/\d{2} \d{2}:\d{2}:\d{2}\]", suffix
+                    ) is None:
+                        raise json.JSONDecodeError(
+                            "unexpected text after memory retry JSON", payload, end
+                        )
+                    memory_retries.append(record)
+                except (json.JSONDecodeError, TypeError):
                     errors.append(f"malformed memory retry record: {path}")
         anomalies = [line.strip() for line in text.replace("\r", "\n").splitlines() if ANOMALY_RE.search(line)]
         complete = "Training complete." in text

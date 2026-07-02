@@ -1,10 +1,40 @@
 # RT-GS Status
 
-Current stage: Stage B — Differentiable Ray Tracing and Reflection
+Current stage: Stage C — Transparent Mesh and Two-Hit Geometry
 
-Current branch: `feature/stage-b-reflection-dr-c03`
+Current branch at Stage B closeout: `feature/stage-b-reflection-dr-c03`
 
-Stage state: Stage A is formally closed. Stage B-0 was approved by the user and
+Stage B was formally accepted and closed by explicit user authorization on
+2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
+branches at global 15,000: Branch A started Reflection at global 3,000 and
+finished at R-local 12,000, while Branch B started at global 7,000 and finished
+at R-local 8,000. Both final checkpoints, telemetry streams, logs, point clouds,
+and debug nodes are complete and recursively finite. The regenerated CPU-only
+final audit is healthy at
+`output/tier2_c03_r8_oneshot_v4_final_audit.json`. Its earlier false
+`PARTIALLY_COMPLETED` classification came only from parsing valid structured
+retry JSON together with the logger's trailing timestamp; the parser now
+accepts only the documented timestamp suffix and remains fail-closed for any
+other trailing text.
+
+Branch A global 15,000 is the selected Stage C geometry source. Its checkpoint
+SHA-256 is
+`050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`.
+This choice is specific to the matched resolution-8 study: A had lower matched
+loss/L_spec, slightly better fixed-view and sampled-train reconstruction, and
+no memory retries. Branch B is retained as the complete 7k onset control. The
+result does not prove that 3k is globally optimal, that Reflection separation
+is complete, or that mask-exterior Reflection/ks is causally correct. There is
+no Reflection ground truth and the Stage B fixed debug view is not a complete
+cross-view quality evaluation.
+
+Stage C is authorized only for read-only D geometry audit, transparent mesh
+extraction, mask-hard camera-ray two-hit intersection, and versioned per-view
+cache generation. Reflection rays remain enabled on every valid D surface;
+RGB loss remains full-frame. No Transmittance Gaussian, T training, second
+bounce, or Stage D work is authorized.
+
+Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then
 aborted before its first optimization step on an ASCII-locale CUDA JIT path
@@ -101,14 +131,15 @@ v3 final audit is preserved with SHA-256
 `776ab1102ad74e90ea35985e45ef29b9e73fecb99c20d86b71d53845858c9a4f`.
 
 V3 proves that completed-step `empty_cache()` cannot bound a single step's live
-autograd peak and adds about 46% ordinary-step latency. The new, unrun v4 policy
+autograd peak and adds about 46% ordinary-step latency. The subsequently executed v4 policy
 uses base ray chunks of 2048, detaches no-grad R densification auxiliaries,
 reclaims cache only below 2 GiB device-free, and automatically retries the same
 camera before any optimizer/topology update at 1024, 512, then checkpointed 512.
 The checkpointed CUDA path recomputes ray candidates/intersections during
 backward and has matching tested outputs and D-ray/R-parameter gradients. V4
-uses entirely new output/log/state/audit/JIT paths and never resumes v1/v2/v3
-branches. Stage B remains unaccepted and Stage C/D remain forbidden.
+used entirely new output/log/state/audit/JIT paths and never resumed v1/v2/v3
+branches. Both branches completed; the formal closeout above supersedes this
+historical pre-run status.
 
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 

@@ -27,6 +27,7 @@ from tools.tier2_oneshot import (
     EXPERIMENT,
     RESOLUTION,
     RETRY_IDENTITY,
+    audit_logs,
     branch_checkpoint_iterations,
     safe_build_final_audit,
     validate_live_telemetry,
@@ -362,3 +363,38 @@ def test_oneshot_final_audit_always_emits_fail_closed_record(monkeypatch):
     assert report["allocator_policy"] == ALLOCATOR_POLICY
     assert report["operator_state"] == state
     assert "synthetic reader failure" in report["errors"][0]
+
+
+def test_oneshot_audit_accepts_timestamped_memory_retry_json(tmp_path):
+    log = tmp_path / "formal.log"
+    retry = {
+        "global_iteration": 7307,
+        "reflection_local_iteration": 307,
+        "failed_chunk_size": 2048,
+        "failed_checkpoint_chunks": False,
+        "next_attempt": {"chunk_size": 1024, "checkpoint_chunks": False},
+    }
+    log.write_text(
+        "STAGE_B_MEMORY_RETRY " + json.dumps(retry) + " [02/07 18:49:48]\n"
+        "Training complete.\n",
+        encoding="utf-8",
+    )
+
+    result = audit_logs([log])
+
+    assert result["errors"] == []
+    assert result["memory_retries"] == [retry]
+
+
+def test_oneshot_audit_rejects_unknown_retry_suffix(tmp_path):
+    log = tmp_path / "formal.log"
+    log.write_text(
+        'STAGE_B_MEMORY_RETRY {"global_iteration": 1} trailing-garbage\n'
+        "Training complete.\n",
+        encoding="utf-8",
+    )
+
+    result = audit_logs([log])
+
+    assert result["memory_retries"] == []
+    assert result["errors"] == [f"malformed memory retry record: {log}"]
