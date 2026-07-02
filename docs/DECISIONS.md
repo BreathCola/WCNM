@@ -1674,3 +1674,90 @@ Required ablation: Human inspection of the 15025/15050/15075/15100/15103 fixed
 debug masks, overlays, ks maps, reflection contribution, scalar L_spec behavior,
 and the memory telemetry caveat before deciding whether Stage B is ready for
 acceptance review or needs an additional instrumented pilot.
+
+## B-019 — Bounded, semantics-preserving Tier-1 telemetry
+
+Date: 2026-07-02
+
+Question: How can a future matched 10k-versus-15k Reflection handoff viability
+pilot preserve auditable per-step topology, loss, mask/material, timing, and
+allocator evidence without changing the Stage B training path or pretending
+that unavailable raytrace measurements exist?
+
+Chosen implementation: Add a default-off JSONL mode controlled only by
+`--stage_b_telemetry_jsonl`, a required positive
+`--stage_b_telemetry_max_steps`, and a nonempty caller-supplied
+`--stage_b_telemetry_phase_tag`. Validate the planned remaining iteration count
+against the bound before the loop, reject a nonempty destination, enforce an
+exact versioned schema on every line, and fail closed on overflow, missing,
+extra, non-finite, or inconsistently nullable fields.
+
+The normal render continues to request ray diagnostics only from the existing
+`specular_smoke_diagnostics` flag. Telemetry neither enables that flag nor adds
+a renderer, raytrace, candidate/exact pass, backward pass, or CUDA
+synchronization. Ordinary steps therefore record candidate/exact percentiles
+and raytrace-forward/candidate-backward timing as null and name them in
+`unavailable_fields`. If the separately requested existing smoke mode has
+already produced candidate/exact and raytrace-forward statistics, those values
+may be reused. No existing boundary provides candidate-backward time.
+
+Reuse the existing loss scalars, D/R counts, D densify/prune call and count
+change, real R topology version, sampled camera, global/R-local iterations, and
+forward `surface_ks`, valid-surface, and formal-mask tensors. Phase A with
+`lambda_spec=0` does not validate or load a formal mask and emits null
+mask/material summaries. Phase B transfers the already-rendered tensors to CPU
+and records mask support plus inside/outside min/mean/p50/p95/p99. These values
+describe the pre-optimizer forward state used by total loss; obtaining a true
+post-update map would require a forbidden rerender. The record therefore does
+not claim a post-update map or zero total-loss gradient outside the mask.
+
+Measure `whole_step_wall_ms` with CPU `perf_counter` from loop entry through
+normal debug/save/checkpoint/optimizer/densification work, excluding telemetry
+statistics and JSON serialization and adding no synchronize. Reset only
+PyTorch allocator peak counters at an enabled telemetry step's loop entry.
+Record current allocated/reserved separately from maximum allocated/reserved.
+When the existing debug raytrace resets peak counters internally, preserve the
+pre-debug maximum and combine it with the post-reset maximum; record both that
+scope and the unobservable transient interval before the internal reset.
+These are PyTorch allocator bytes, never `nvidia-smi` process or device-total
+memory. A smoke diagnostic's internal training-ray reset may also truncate the
+scope and is labeled accordingly.
+
+Add `tools/compare_stage_b_pilots.py` as an offline CPU/PIL/numpy tool. It
+selects the latest existing debug directory from two completed runs, requires
+matching fixed-view ground truth and shapes, hashes input trees before and
+after, and creates shared-scale ks, reflection contribution, and final-residual
+views plus signed deltas. All scales are written to comparison metadata. It
+does not import training, renderer, raytracer, Torch, or CUDA code. Existing
+physical maps are 8-bit PNGs; if sub-code-value reflection has quantized away,
+the affected spatial comparison is unavailable and cannot be reconstructed
+from scalar metadata.
+
+Alternatives: Enable the existing smoke diagnostics for every pilot step; add a
+second traversal or post-update render; use per-image p99 display scales; infer
+spatial reflection from metadata summaries; use external device memory as a
+PyTorch allocator peak; silently append to a prior run; or leave the earlier
+whole-step memory evidence gap unresolved.
+
+Why: The future Tier-1 comparison needs a strict common evidence contract, but
+its treatment variable must remain the D handoff checkpoint rather than an
+instrumented rendering/training variant. Explicit nulls preserve that boundary
+more honestly than extra GPU work. A bounded writer prevents an observability
+flag from accidentally becoming an unbounded production logger.
+
+Paper fidelity: This changes only optional observability and offline display.
+It changes no field representation, renderer, reflection ray, BVH, candidate
+selection, exact intersection, BRDF, composition, loss, optimizer, scheduler,
+densification/pruning rule, checkpoint meaning, R initialization, model update,
+or RNG consumption.
+
+Impact: Seven new regression tests bring the full repository suite to 102
+passing tests. No training, bootstrap, render, Tier-1 pilot, checkpoint, debug
+artifact, Stage C, or Stage D work was performed. Stage B remains unaccepted,
+and previous pilots retain their historical memory evidence gap.
+
+Required ablation: After separate user authorization, run only the matched
+bounded 10k/15k Phase A and Phase B Tier-1 protocol with identical R seed/count,
+mask policy, resolution, chunks, ray settings, and phase lengths. Treat it as
+handoff viability evidence only; it cannot establish the long-horizon causal
+optimality of early versus late R intervention.

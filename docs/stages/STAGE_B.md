@@ -135,6 +135,39 @@ is about 319 MiB. D/R checkpoint state is finite. Microfacet D lies in
 `1.270–1.276`, so its nearly white map is a real low-variance result. The LBVH is
 not a full-field brute-force traversal; R count and initial scale remain fixed.
 
+### Bounded Tier-1 pilot observability
+
+- [x] Add a default-off, explicitly named Stage B JSONL mode with a required
+  positive maximum-step bound and caller-provided phase tag.
+- [x] Keep it independent of `lambda_spec` and smoke diagnostics; never enable
+  candidate/exact diagnostics, traversal timing, renderer work, backward, or a
+  second CUDA traversal merely to populate telemetry.
+- [x] Record D/R counts and deltas, real R topology version/event, D densify-call
+  or count event, loss, camera/global/local iteration, CPU loop wall boundary,
+  current allocator state, and correctly scoped allocator maxima.
+- [x] Leave unavailable candidate/exact/forward/backward timing fields explicit
+  and null on ordinary Tier-1 steps.
+- [x] Keep Phase A mask-free. In Phase B, summarize the existing forward ks map
+  and formal mask on CPU; label it as the pre-optimizer state consumed by total
+  loss rather than claiming a post-update rerender or zero outside total gradient.
+- [x] Add a CPU-only, read-only two-run comparison that uses one shared display
+  scale per quantity and fails honestly when physical 8-bit maps lack spatial
+  information.
+- [x] Verify default-off behavior, loss/parameter/RNG invariance, Phase A/B mask
+  policy, strict schema/bounds, allocator labels, and postprocess imports and
+  input immutability in the full 102-test repository suite.
+- [ ] Run the dual-RTX-3090 10k-versus-15k Tier-1 pilot. This remains separately
+  gated by user authorization and is not implied by the observability patch.
+
+This instrumentation does not alter renderer, tracer, BVH, candidate/exact
+logic, BRDF, losses, optimizer/scheduler, densification thresholds/timing,
+checkpoint semantics, R initialization, or RNG consumption. Resetting PyTorch
+peak allocator counters changes observability counters only. On ordinary steps,
+the scoped maximum spans the complete loop boundary; on debug steps, maxima
+from before debug begins and after the debug path's existing reset are combined,
+while the transient interval before that internal reset is labeled unavailable.
+No result from an earlier run is retroactively upgraded by this code.
+
 ### Formal-mask L_spec smoke
 
 - [x] Archive the accepted 111 masks in an immutable versioned directory and
@@ -378,8 +411,9 @@ dummy outputs are permitted in Stage B.
 - [x] Candidate/exact-intersection chunking, timing/memory, physical-map
   preservation, and companion-scale tests.
 - [x] On-disk CUDA-map-location RNG restoration with CPU/CUDA state equality.
-- [x] Existing Stage A regression suite plus DR proposal/review/repair and
-  formal-mask/L_spec contracts: full repository result is 95 passed.
+- [x] Existing Stage A regression suite plus DR proposal/review/repair,
+  formal-mask/L_spec, and bounded telemetry contracts: full repository result
+  is 102 passed.
 
 ## Acceptance checklist
 

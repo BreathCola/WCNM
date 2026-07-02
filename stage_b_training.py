@@ -1,7 +1,9 @@
 """Stage B-only training loop. It contains no Stage C/D paths or outputs."""
 
 import json
+import math
 import os
+import time
 from random import randint
 
 import torch
@@ -26,6 +28,14 @@ from utils.loss_utils import (
 )
 from utils.reflection_debug import save_reflection_debug_maps
 from utils.specular_mask import validate_specular_mask_set
+from utils.stage_b_telemetry import (
+    KS_STAT_KEYS,
+    SCHEMA_VERSION as TELEMETRY_SCHEMA_VERSION,
+    StageBTelemetryWriter,
+    cuda_allocator_snapshot,
+    mask_ks_stats_from_existing_tensors,
+    validate_telemetry_options,
+)
 
 try:
     from fused_ssim import fused_ssim
@@ -172,6 +182,11 @@ def _validate_stage_b_args(dataset, opt, start_checkpoint, diffuse_init_checkpoi
         raise ValueError("B-1 currently implements reflection_init_mode=random_bbox only")
     if diffuse_init_checkpoint and dataset.reflection_init_count <= 0:
         raise ValueError("new Stage B runs require an explicit positive --reflection_init_count")
+    validate_telemetry_options(
+        getattr(opt, "stage_b_telemetry_jsonl", ""),
+        getattr(opt, "stage_b_telemetry_max_steps", 0),
+        getattr(opt, "stage_b_telemetry_phase_tag", ""),
+    )
 
 
 def _report(iteration, testing_iterations, scene, state, pipe, background):
@@ -261,6 +276,15 @@ def training_stage_b(
     if opt.specular_smoke_diagnostics and opt.iterations - global_iteration > 3:
         raise ValueError("--specular_smoke_diagnostics is fail-closed to at most three added iterations")
 
+    telemetry = None
+    if getattr(opt, "stage_b_telemetry_jsonl", ""):
+        telemetry = StageBTelemetryWriter(
+            opt.stage_b_telemetry_jsonl,
+            opt.stage_b_telemetry_max_steps,
+            opt.stage_b_telemetry_phase_tag,
+        )
+        telemetry.validate_planned_steps(opt.iterations - global_iteration)
+
     print(
         "Stage B initialization: D_iteration={} R_local_step={} R_count={} mode={} bbox_min={} bbox_max={}".format(
             global_iteration,
@@ -298,9 +322,23 @@ def training_stage_b(
     indices = list(range(len(viewpoints)))
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage B training progress")
     ema_loss = 0.0
+    allocator_peak_scope = "process_start_or_preexisting_reset_before_telemetry"
     for iteration in range(global_iteration + 1, opt.iterations + 1):
-        if opt.specular_smoke_diagnostics:
+        telemetry_wall_start = time.perf_counter() if telemetry is not None else None
+        d_count_before = int(diffuse.get_xyz.shape[0]) if telemetry is not None else None
+        r_count_before = int(reflection.get_xyz.shape[0]) if telemetry is not None else None
+        r_topology_before = int(reflection.topology_version) if telemetry is not None else None
+        d_densify_prune_called = False
+        allocator_peak_before_debug = None
+        telemetry_peak_reset = telemetry is not None or bool(opt.specular_smoke_diagnostics)
+        if telemetry is not None:
+            # Reset allocator counters only. This launches no CUDA work and
+            # gives ordinary telemetry steps an exact per-loop peak scope.
             torch.cuda.reset_peak_memory_stats()
+            allocator_peak_scope = f"since_explicit_telemetry_step_start_reset_at_global_{iteration}"
+        elif opt.specular_smoke_diagnostics:
+            torch.cuda.reset_peak_memory_stats()
+            allocator_peak_scope = f"since_explicit_step_start_reset_at_global_{iteration}"
         reflection_iteration += 1
         diffuse.update_learning_rate(iteration)
         reflection.update_learning_rate(reflection_iteration)
@@ -321,6 +359,9 @@ def training_stage_b(
             return_ray_aux=True,
             return_ray_diagnostics=opt.specular_smoke_diagnostics,
         )
+        if opt.specular_smoke_diagnostics:
+            # The existing diagnostic raytrace resets allocator peaks internally.
+            allocator_peak_scope = f"since_internal_training_raytrace_reset_at_global_{iteration}"
         image = package["render"]
         gt = camera.original_image.cuda()
         l1_value = l1_loss(image, gt)
@@ -365,7 +406,13 @@ def training_stage_b(
                 None if aux is None else aux.contributing_indices,
                 None if aux is None else aux.contributing_weights,
             )
-            ema_loss = 0.4 * loss.item() + 0.6 * ema_loss
+            loss_value = float(loss.item())
+            telemetry_l_spec_value = (
+                float(specular_loss.item())
+                if telemetry is not None and opt.lambda_spec > 0 else None
+            )
+            ema_loss = 0.4 * loss_value + 0.6 * ema_loss
+            specular_smoke_record = None
             if opt.specular_smoke_diagnostics:
                 diagnostics = package.get("ray_diagnostics")
                 if diagnostics is None:
@@ -410,6 +457,7 @@ def training_stage_b(
                     raise RuntimeError("L_spec gradient support/direction contract failed")
                 _append_specular_smoke_record(scene.model_path, record)
                 print("\nSPECULAR_SMOKE " + json.dumps(record, sort_keys=True, allow_nan=False))
+                specular_smoke_record = record
             if iteration % 10 == 0:
                 progress.set_postfix({"Loss": f"{ema_loss:.7f}", "D": diffuse.get_xyz.shape[0], "R": reflection.get_xyz.shape[0]})
                 progress.update(10)
@@ -418,16 +466,31 @@ def training_stage_b(
                 writer.add_scalar("train_loss_patches/normal_depth", normal_loss.item(), iteration)
                 writer.add_scalar("train_loss_patches/monocular_normal", mono_loss.item(), iteration)
                 writer.add_scalar("train_loss_patches/perceptual", perceptual_loss.item(), iteration)
-                writer.add_scalar("train_loss_patches/specular", specular_loss.item(), iteration)
+                writer.add_scalar(
+                    "train_loss_patches/specular",
+                    telemetry_l_spec_value
+                    if telemetry_l_spec_value is not None else specular_loss.item(),
+                    iteration,
+                )
                 writer.add_scalar("scene/diffuse_count", diffuse.get_xyz.shape[0], iteration)
                 writer.add_scalar("scene/reflection_count", reflection.get_xyz.shape[0], iteration)
 
             _report(iteration, testing_iterations, scene, state, pipe, background)
             if iteration % opt.debug_interval == 0 or iteration == opt.iterations:
+                if telemetry is not None:
+                    # The existing debug raytrace resets peak counters. Save
+                    # the pre-reset segment and combine it with the final
+                    # segment below; no synchronization is introduced.
+                    allocator_peak_before_debug = cuda_allocator_snapshot(
+                        True,
+                        f"telemetry_step_start_to_pre_debug_global_{iteration}",
+                    )
                 fixed = (scene.getTestCameras() or scene.getTrainCameras())[0]
                 debug = render(
                     fixed, state, pipe, background, return_ray_diagnostics=True
                 )
+                telemetry_peak_reset = True
+                allocator_peak_scope = f"since_internal_debug_raytrace_reset_at_global_{iteration}"
                 directory = os.path.join(scene.model_path, "debug", f"iteration_{iteration:06d}")
                 save_reflection_debug_maps(
                     debug,
@@ -446,6 +509,7 @@ def training_stage_b(
                 diffuse.max_radii2D[visibility] = torch.maximum(diffuse.max_radii2D[visibility], radii[visibility])
                 diffuse.add_densification_stats(package["viewspace_points"], visibility)
                 if iteration > opt.densify_from_iter and iteration % opt.densification_interval == 0:
+                    d_densify_prune_called = True
                     threshold = 20 if iteration > opt.opacity_reset_interval else None
                     diffuse.densify_and_prune(opt.densify_grad_threshold, 0.005, scene.cameras_extent, threshold, radii)
                 if iteration % opt.opacity_reset_interval == 0:
@@ -482,4 +546,96 @@ def training_stage_b(
                     _config(dataset, opt, diffuse, mask_manifest),
                 )
                 torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
+
+            if telemetry is not None:
+                # This CPU wall boundary includes the normal loop work through
+                # debug/PLY/checkpoint and optimizer/densification, but excludes
+                # telemetry statistics and JSON serialization.  It deliberately
+                # performs no CUDA synchronize.
+                whole_step_wall_ms = float((time.perf_counter() - telemetry_wall_start) * 1000.0)
+                d_count = int(diffuse.get_xyz.shape[0])
+                r_count = int(reflection.get_xyz.shape[0])
+                r_topology_version = int(reflection.topology_version)
+                mask_stats = mask_ks_stats_from_existing_tensors(
+                    package["surface_ks"],
+                    camera.specular_mask if opt.lambda_spec > 0 else None,
+                    package["valid_surface_mask"],
+                )
+                candidate = exact = timing = None
+                if specular_smoke_record is not None:
+                    candidate = specular_smoke_record["ray"]["candidate_count"]
+                    exact = specular_smoke_record["ray"]["exact_intersection_count"]
+                    timing = specular_smoke_record["ray"]["timing_ms"]
+                unavailable = ["candidate_backward_ms"]
+                if candidate is None:
+                    unavailable.extend(("candidate_p50", "candidate_p95", "candidate_p99"))
+                if exact is None:
+                    unavailable.extend(("exact_p50", "exact_p95", "exact_p99"))
+                if timing is None:
+                    unavailable.append("raytrace_forward_ms")
+                if opt.lambda_spec <= 0:
+                    unavailable.extend(("l_spec", "mask_support_fraction", "ks_inside", "ks_outside"))
+                allocator = cuda_allocator_snapshot(telemetry_peak_reset, allocator_peak_scope)
+                if allocator_peak_before_debug is not None:
+                    for key in (
+                        "cuda_max_memory_allocated_bytes",
+                        "cuda_max_memory_reserved_bytes",
+                    ):
+                        allocator[key] = max(allocator_peak_before_debug[key], allocator[key])
+                    allocator["cuda_peak_scope"] = (
+                        f"combined telemetry_step_start_to_pre_debug and "
+                        f"internal_debug_reset_to_step_end_at_global_{iteration}; "
+                        "transient_debug_work_before_internal_reset_is_unavailable"
+                    )
+                l_spec_value = telemetry_l_spec_value
+                observed_nonfinite = int(not math.isfinite(loss_value)) + int(mask_stats["nonfinite_count"])
+                record = {
+                    "schema_version": TELEMETRY_SCHEMA_VERSION,
+                    "telemetry_step": telemetry.count + 1,
+                    "global_iteration": int(iteration),
+                    "reflection_local_iteration": int(reflection_iteration),
+                    "camera_stem": str(camera.image_name),
+                    "phase_tag": telemetry.phase_tag,
+                    "total_loss": loss_value,
+                    "l_spec": l_spec_value,
+                    "d_count": d_count,
+                    "r_count": r_count,
+                    "d_count_delta": d_count - d_count_before,
+                    "r_count_delta": r_count - r_count_before,
+                    "d_topology_event": bool(d_densify_prune_called or d_count != d_count_before),
+                    "r_topology_version": r_topology_version,
+                    "r_topology_event": bool(r_topology_version != r_topology_before),
+                    "mask_support_fraction": mask_stats["mask_support_fraction"],
+                    "ks_inside": mask_stats["ks_inside"],
+                    "ks_outside": mask_stats["ks_outside"],
+                    "ks_state_definition": (
+                        "pre_optimizer_forward_state_used_by_total_loss; no post-update rerender"
+                    ),
+                    "candidate_p50": None if candidate is None else float(candidate["p50"]),
+                    "candidate_p95": None if candidate is None else float(candidate["p95"]),
+                    "candidate_p99": None if candidate is None else float(candidate["p99"]),
+                    "exact_p50": None if exact is None else float(exact["p50"]),
+                    "exact_p95": None if exact is None else float(exact["p95"]),
+                    "exact_p99": None if exact is None else float(exact["p99"]),
+                    "raytrace_forward_ms": None if timing is None else float(timing["raytrace_wall"]),
+                    "candidate_backward_ms": None,
+                    "whole_step_wall_ms": whole_step_wall_ms,
+                    "whole_step_wall_definition": (
+                        "CPU perf_counter from loop entry through normal debug/PLY/checkpoint and "
+                        "optimizer/densification; excludes telemetry work; no added CUDA synchronize"
+                    ),
+                    **allocator,
+                    "nonfinite_count": observed_nonfinite,
+                    "nonfinite_scope": (
+                        "total_loss scalar plus finite check of existing ks samples; renderer retains "
+                        "its existing hard finite checks; model-wide scan unavailable without extra GPU work"
+                    ),
+                    "unavailable_fields": sorted(set(unavailable)),
+                }
+                # Keep the nested ks schema explicit even if future internal
+                # helpers return additional bookkeeping fields.
+                for name in ("ks_inside", "ks_outside"):
+                    if record[name] is not None:
+                        record[name] = {key: record[name][key] for key in KS_STAT_KEYS}
+                telemetry.append(record)
     progress.close()

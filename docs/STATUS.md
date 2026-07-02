@@ -36,6 +36,17 @@ trend remains an evidence gap. Stage B is neither complete nor accepted. The
 frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
 Stage C and Stage D have not started.
 
+An observability-only patch for a future matched 10k-versus-15k Tier-1 handoff
+viability pilot is now implemented and tested, but no such pilot or bootstrap
+has been run. The new JSONL mode is explicit, bounded, and independent of both
+`lambda_spec` and the smoke-only diagnostics switch. It does not request ray
+diagnostics, add a traversal, rerender, backward pass, or CUDA synchronization.
+An offline CPU-only comparison tool uses existing physical debug PNGs under one
+scale shared by both runs and reports unrecoverable sub-8-bit spatial data as
+unavailable. Full repository tests pass 102/102. This work closes the earlier
+instrumentation gap only for future explicitly instrumented runs; it does not
+retroactively add evidence to completed pilots or advance Stage B acceptance.
+
 Stage B branch point: `772c0c0e1c9fec012a10795101e874e2bc065c44`
 
 Stage B implementation commits:
@@ -332,10 +343,42 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   proposal/repair paths, missing/extra/corrupt masks, non-L images, dimension
   mismatch, unknown sources, and manifest/hash mismatch. Soft resize is
   recorded as `opencv.INTER_LINEAR`; full-image RGB reconstruction is unchanged.
-- The full Stage A/B suite is 95 passed. This includes formal archive exact-copy
+- The pre-telemetry Stage A/B suite was 95 passed. The current full suite is
+  102 passed after adding seven observability regressions. This includes formal archive exact-copy
   tests, fail-closed loading, continuous soft resize, L_spec mask-only gradient,
   whole-image RGB, debug transparent-mask/overlay, and all prior regressions.
-  This is pre-smoke implementation evidence, not Stage B acceptance.
+  This remains implementation evidence, not Stage B acceptance.
+
+## Tier-1 handoff observability readiness
+
+- `--stage_b_telemetry_jsonl`, `--stage_b_telemetry_max_steps`, and
+  `--stage_b_telemetry_phase_tag` enable a strict, append-only JSONL stream.
+  The mode is off by default, refuses a missing/nonpositive bound, refuses a
+  planned run longer than the bound, and refuses a nonempty destination.
+- Ordinary telemetry reuses the existing training render, losses, gradients,
+  counts, R topology version, CPU loop boundary, and allocator counters. It
+  resets only PyTorch peak counters at loop entry. Debug steps combine the peak
+  observed before debug begins with the post-reset peak; transient debug work
+  before the raytrace's internal reset remains explicitly unavailable.
+  Current allocated/reserved and combined scoped maxima remain distinct from
+  external `nvidia-smi` process/device memory.
+- Candidate/exact percentiles and raytrace-forward time are available only when
+  the pre-existing smoke diagnostic path already produced them. They are null
+  with explicit `unavailable_fields` in an ordinary Tier-1 step; candidate
+  backward timing is always unavailable because no such boundary currently
+  exists. Telemetry never enables diagnostics to fill these fields.
+- Phase A (`lambda_spec=0`) does not validate or load the formal mask and writes
+  null mask/ks fields. Phase B computes mask support and inside/outside ks
+  summaries on CPU from the already-rendered forward tensor. These describe the
+  state used by total loss before the optimizer step; no post-update rerender is
+  performed, and mask-outside total-loss gradients are not claimed to be zero.
+- `tools/compare_stage_b_pilots.py` imports neither training nor CUDA paths and
+  hashes the selected input debug trees before and after processing. It writes
+  common scales to metadata. If an existing physical 8-bit reflection map has
+  quantized all spatial signal to zero, reflection and delta-reflection output
+  are reported unavailable rather than reconstructed from scalar metadata.
+- This is readiness only. No 10k/15k Phase A or Phase B run, no dual-GPU launch,
+  no new checkpoint, and no Stage C/D work has occurred.
 
 ## Current boundary and next exact task
 
@@ -346,8 +389,9 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   15,006 / R-local 6 and the user accepted its transparent-mask/overlay
   alignment. The only authorized 100-step `lambda_spec=0.2` pilot stopped at
   global 15,103 / R-local 103. No further training is authorized; the next
-  action is human evaluation of the fixed-view debug evidence and the memory
-  telemetry caveat.
+  action is user authorization (or rejection) of the bounded dual-GPU Tier-1
+  10k-versus-15k handoff viability protocol. The existing pilots retain their
+  memory telemetry caveat; the new mode does not change historical artifacts.
 - Stage B solves reflection only. It must not claim transmission,
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.

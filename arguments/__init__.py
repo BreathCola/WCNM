@@ -112,6 +112,9 @@ class OptimizationParams(ParamGroup):
         self.lambda_spec = 0.2
         self.specular_k0 = 0.9
         self.specular_smoke_diagnostics = False
+        self.stage_b_telemetry_jsonl = ""
+        self.stage_b_telemetry_max_steps = 0
+        self.stage_b_telemetry_phase_tag = ""
         self.debug_interval = 1000
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
