@@ -374,7 +374,13 @@ def training_stage_d(
         torch.cuda.empty_cache()
 
     fixed_candidates = scene.getTestCameras() or scene.getTrainCameras()
-    fixed = next((camera for camera in fixed_candidates if str(camera.image_name) == "000039"), fixed_candidates[0])
+    fixed = next(
+        (
+            camera for camera in fixed_candidates
+            if Path(str(camera.image_name)).stem == "000039"
+        ),
+        fixed_candidates[0],
+    )
     with torch.no_grad():
         debug = render(
             fixed, state, pipe, background,

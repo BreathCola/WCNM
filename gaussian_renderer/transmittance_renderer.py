@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 import torch.nn.functional as F
@@ -132,7 +133,7 @@ def render(
         return_ray_diagnostics=return_ray_diagnostics,
     )
     height, width = package["alpha"].shape[:2]
-    cache = state.geometry_release.load_view(str(camera.image_name))
+    cache = state.geometry_release.load_view(Path(str(camera.image_name)).stem)
     device, dtype = package["position"].device, package["position"].dtype
     valid_cache = torch.from_numpy(cache["valid_two_hit"]).to(device=device, dtype=torch.bool)
     t_near = torch.from_numpy(cache["t_near"]).to(device=device, dtype=dtype)

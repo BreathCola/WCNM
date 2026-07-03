@@ -65,7 +65,7 @@ def test_stage_d_renderer_traces_both_bounces_and_gradients(monkeypatch):
         geometry_release=_Geometry(), scene_radius=1.0, ray_chunk_size=8,
         ray_checkpoint_chunks=False,
     )
-    camera = SimpleNamespace(camera_center=torch.zeros(3, device="cuda"), image_name="toy")
+    camera = SimpleNamespace(camera_center=torch.zeros(3, device="cuda"), image_name="toy.jpg")
     output = renderer.render(camera, state, SimpleNamespace(), torch.zeros(3, device="cuda"))
     assert output["transmittance_valid_count"] == 1
     assert output["inside_alpha"][0, 0, 0] > 0

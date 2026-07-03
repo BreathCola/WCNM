@@ -2422,3 +2422,26 @@ checkpoint/PLY/debug output, release immutability, and restore compatibility.
 Required ablation: Longer Stage D work must return to the global-40,000 L_depth
 schedule unless a separately approved experiment changes it. The smoke does not
 establish branch semantic separation.
+
+## D-002 — Canonical frozen-cache camera stems
+
+Date: 2026-07-03
+
+Question: Why did the second Stage D smoke invocation stop before its first
+backward despite a valid 111-view geometry release?
+
+Observed evidence: Scene camera identity was `000047.jpg`; release cache identity
+was `000047`. Both refer to the same source image, but exact string lookup raised
+`KeyError`. No optimizer update or checkpoint occurred.
+
+Chosen implementation: Canonicalize the runtime camera name with
+`Path(str(image_name)).stem` at the cache lookup and fixed-debug-view selection
+boundaries. Add a CUDA renderer regression using `toy.jpg` with cache stem
+`toy`.
+
+Paper fidelity: Identity normalization only; no tensor, ray, loss, geometry,
+schedule, or RNG behavior changes.
+
+Impact: Preserve v1/v2 smoke evidence and use a new v3 output identity.
+
+Required ablation: None.

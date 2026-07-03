@@ -77,6 +77,14 @@ thin-shell `(1-F)` transmission weighting; L_depth; full D/R/T composition;
 debug maps; and bounded smoke telemetry. It is awaiting the authorized minimum
 real-scene smoke and is not yet accepted.
 
+The first real invocation (`smoke_v1`) stopped at 0 steps on an operator path
+that repeated the scene prefix for the formal-mask manifest. The corrected
+`smoke_v2` passed release/mask/camera loading but stopped before its first
+backward because Scene camera names include `.jpg` while release keys are bare
+stems. Both attempts are preserved; neither performed an optimizer update or
+wrote a checkpoint. Stage D now canonicalizes camera identity with
+`Path(image_name).stem` before frozen-cache lookup.
+
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then
