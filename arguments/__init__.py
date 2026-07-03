@@ -57,6 +57,11 @@ class ModelParams(ParamGroup):
         self.reflection_init_mode = "random_bbox"
         self.reflection_init_count = 0
         self.reflection_init_seed = 0
+        self.geometry_release_manifest = ""
+        self.transmittance_init_mode = "random_bbox"
+        self.transmittance_init_count = 4096
+        self.transmittance_init_seed = 0
+        self.transmittance_compose = "alpha_over"
         self.ray_background = "scene"
         self.ray_chunk_size = 4096
         self.ray_cutoff_sigma = 3.0
@@ -153,6 +158,26 @@ class OptimizationParams(ParamGroup):
         self.reflection_densify_grad_threshold = 0.0002
         self.reflection_min_opacity = 0.005
         self.reflection_prune_unhit_after = 500
+        self.lambda_depth = 0.2
+        self.stage_d_depth_start_iteration = 40_000
+        self.stage_d_smoke = False
+        self.stage_d_smoke_max_steps = 3
+        self.stage_d_telemetry_jsonl = ""
+        self.transmittance_position_lr_init = 0.00016
+        self.transmittance_position_lr_final = 0.0000016
+        self.transmittance_position_lr_delay_mult = 0.01
+        self.transmittance_position_lr_max_steps = 20_000
+        self.transmittance_color_lr = 0.0025
+        self.transmittance_opacity_lr = 0.025
+        self.transmittance_scaling_lr = 0.005
+        self.transmittance_rotation_lr = 0.001
+        self.transmittance_percent_dense = 0.01
+        self.transmittance_densify_from_iter = 100
+        self.transmittance_densify_until_iter = 5_000
+        self.transmittance_densification_interval = 100
+        self.transmittance_densify_grad_threshold = 0.0002
+        self.transmittance_min_opacity = 0.005
+        self.transmittance_prune_unhit_after = 500
         super().__init__(parser, "Optimization Parameters")
 
 def get_combined_args(parser : ArgumentParser):

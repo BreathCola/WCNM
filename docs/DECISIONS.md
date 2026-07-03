@@ -2369,3 +2369,56 @@ object mesh extractor.
 
 Required ablation: None for release identity. Any future geometry change is a
 new release ID and cannot silently replace v1.
+
+## D-001 — First Stage D D/R/T execution semantics
+
+Date: 2026-07-03
+
+Question: How should the first independently optimized T field and two-bounce
+path consume the frozen Stage C geometry?
+
+Chosen implementation: Initialize a fresh Transmittance surfel field with an
+independent seeded generator inside the frozen mesh world AABB. Restore D/R and
+their optimizers from the accepted 3k-A/global-15,000 Stage B checkpoint. For
+each frozen-valid glass pixel, use the camera-through-glass direction; trace T
+from `D_position + eps*d_trans`, then trace a Diffuse base-color adapter from
+`back_position + eps*d_trans`. The adapter aliases D's actual geometry,
+opacity, and base-color parameters, so second-bounce gradients update D without
+copying or merging fields.
+
+Compose `Ct = Cin + (1-Ain)*Cout` and
+`At = Ain + (1-Ain)*Aout`. Use thin-shell
+`wt = mask_hard*(1-F)` and add
+`alpha*ks*wt*Ct` to the unchanged Stage B diffuse/reflection contributions.
+Reflection rays remain global valid-D-surface rays.
+
+Depth coordinates: the common raytracer returns distance relative to its ray
+origin. Convert T depth to absolute camera-ray distance by adding the D first-
+origin distance before applying `relu(Din-t_far)`. L_depth uses only
+`mask_eroded & valid_two_hit`. The master-plan default enables L_depth at global
+40,000; the explicitly bounded smoke may set its start to the first smoke step
+so the loss path is exercised and recorded. This smoke override is metadata,
+not a long-training schedule decision.
+
+Memory policy: Use checkpointed 512-ray chunks for the first smoke across R, T,
+and second-bounce D. This preserves ray/candidate/intersection definitions while
+bounding retained autograd intermediates; as in Stage B v4 it may change only
+floating-point accumulation order. The smoke is fail-closed to at most three
+new steps.
+
+Checkpoint contract: D/R/T model, optimizer, scheduler/topology state remain
+independent. Every checkpoint stores the frozen release ID and aggregate hash,
+source Stage B checkpoint hash, three local/global iterations, RNG, and camera
+deck; resume refuses any geometry mismatch.
+
+Paper fidelity: First/second bounce, alpha-over Ct, thin-shell `(1-F)` weight,
+and L_depth follow the master plan. T random-AABB initialization, smoke depth-
+start override, and chunk size are explicit engineering choices.
+
+Impact: No Stage B checkpoint or Stage C asset is modified. No long run or Stage
+E work is authorized. A real smoke must still prove finite optimization,
+checkpoint/PLY/debug output, release immutability, and restore compatibility.
+
+Required ablation: Longer Stage D work must return to the global-40,000 L_depth
+schedule unless a separately approved experiment changes it. The smoke does not
+establish branch semantic separation.

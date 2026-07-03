@@ -115,6 +115,14 @@ def training(dataset, opt, pipe, testing_iterations, saving_iterations, checkpoi
             checkpoint, diffuse_init_checkpoint, debug_from, prepare_output_and_logger,
         )
 
+    if getattr(dataset, "stage", "stage_a") == "stage_d":
+        from stage_d_training import training_stage_d
+        return training_stage_d(
+            dataset, opt, pipe, testing_iterations, saving_iterations,
+            checkpoint_iterations, checkpoint, debug_from,
+            prepare_output_and_logger,
+        )
+
     if dataset.model_type not in ("3dgs", "surfel"):
         raise ValueError("--model_type must be either '3dgs' or 'surfel'")
     is_surfel = dataset.model_type == "surfel"

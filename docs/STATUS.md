@@ -70,6 +70,13 @@ It may only read this exact release, must store its release ID and aggregate in
 every checkpoint, and may not refit, regenerate, or modify geometry. This stage
 transition does not authorize long training or Stage E.
 
+Stage D implementation now includes an independent Transmittance surfel model,
+optimizer/scheduler/topology/checkpoint/PLY namespace; validated frozen-cache
+loading; first-bounce T and second-bounce D ray tracing; alpha-over Ct/At;
+thin-shell `(1-F)` transmission weighting; L_depth; full D/R/T composition;
+debug maps; and bounded smoke telemetry. It is awaiting the authorized minimum
+real-scene smoke and is not yet accepted.
+
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then
