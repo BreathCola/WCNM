@@ -2331,3 +2331,41 @@ not entered and T training remains unauthorized.
 Required ablation: If Stage D is later authorized, preserve this fixed mesh and
 cache as immutable inputs; do not refit them during T training. Report mask-
 invalid pixels separately rather than silently expanding the cuboid.
+
+## C-003 — Immutable TiHuBird geometry release and Stage D handoff
+
+Date: 2026-07-03
+
+Question: How is the accepted cuboid mesh/cache made a reproducible Stage D
+input without putting binary caches in ordinary Git history?
+
+Chosen implementation: Freeze `stage_c_geometry_release_v1` as a copied,
+read-only asset tree under `output/` and commit its self-hashed manifest at
+`geometry_releases/stage_c_geometry_release_v1.json`. The manifest binds the
+3k-A/global-15,000 checkpoint, pre-release code commit, formal masks, DR
+provenance/calibration, six-plane parameters, optimization settings, mesh,
+metadata, all 111 camera/image/mask/cache identities, and every asset hash. Its
+ordered path-and-hash aggregate is
+`4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
+
+Why: Git LFS is not configured. Keeping large NPZ/PLY assets out of ordinary Git
+while committing a complete self-hashed manifest gives reproducibility without
+repository bloat. Copying into a dedicated release prevents Stage D from
+depending on mutable candidate paths.
+
+Validation: The CPU-only audit checks 111/111 hashes, source image/mask/camera
+identity, finite t-near/t-far/back positions, strict depth order, coverage
+metadata, asset permissions, and runtime-generation independence. It returns
+`STAGE_C_GEOMETRY_RELEASE_VALID` with the same aggregate hash.
+
+Impact: Stage C is accepted and the project advances to Stage D. Stage D loaders
+must run this validation, read only release-relative mesh/cache files, and write
+`geometry_release_id` plus aggregate hash into checkpoints. It cannot regenerate
+or overwrite geometry.
+
+Evidence boundary: The release is a data-constrained six-plane proxy for the
+approximately cuboid TiHuBird enclosure only. It is not a general transparent-
+object mesh extractor.
+
+Required ablation: None for release identity. Any future geometry change is a
+new release ID and cannot silently replace v1.

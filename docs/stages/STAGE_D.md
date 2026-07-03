@@ -1,21 +1,69 @@
 # Stage D — Transmittance Gaussian and Full RT-GS
 
-## Summary
+## Entry contract
 
-Add an independent Transmittance surfel field, first-bounce inside tracing,
-mesh-guided second-bounce Diffuse tracing, alpha-over transmittance composition,
-the delayed depth constraint, and joint D/R/T optimization/final composition.
+Stage C is accepted as immutable geometry release
+`stage_c_geometry_release_v1`, manifest
+`geometry_releases/stage_c_geometry_release_v1.json`, aggregate SHA-256
+`4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
 
-## Prerequisites
+Stage D must run the CPU-safe release validator before constructing T. It may
+only read release-relative caches. It must never regenerate, refit, chmod, or
+write the mesh/cache. Every Stage D checkpoint stores the release ID and
+aggregate hash and refuses a mismatch on resume.
 
-- Stages A–C are accepted and committed without regression.
-- Reflection tracing and full microfacet shading are stable.
-- The transparent mesh and two-hit cache are fixed, valid, and versioned.
-- `docs/STATUS.md` explicitly advances the project to Stage D.
+The geometry is a TiHuBird-specific data-constrained six-plane enclosure proxy,
+not a general solution for curved or arbitrary transparent objects.
 
-## Acceptance entry
+## Fixed branch domains
 
-Begin Stage D acceptance only after three independent fields/optimizers,
-inside/outside tracing and debug outputs, constrained first-hit depth, correct
-alpha-over transmittance, full D/R/T composition, expected branch separation,
-finite gradients, and prior-stage regression tests are verified.
+- Reflection rays remain unchanged on all valid Diffuse surfaces.
+- T first-bounce and D second-bounce rays run only on `mask_hard &
+  valid_two_hit` pixels from the frozen cache.
+- `mask_eroded & valid_two_hit` is the L_depth domain.
+- `mask_soft` remains the L_spec domain.
+- RGB reconstruction remains full-frame.
+
+## Implementation order
+
+1. Add an independent Transmittance surfel model, optimizer, scheduler,
+   densification state, PLY namespace, checkpoint namespace, and fresh seeded
+   initialization.
+2. Read frozen per-view `t_near`, `t_far`, validity, and `back_position`; never
+   query or rebuild the mesh at training time.
+3. First bounce: trace T from the D surface along camera transmission direction
+   to produce `Cin/Ain/Din`.
+4. Second bounce: trace D from frozen `back_position + eps*d_trans` to produce
+   `Cout/Aout/Dout`.
+5. Compose `Ct = Cin + (1-Ain)*Cout` and
+   `At = Ain + (1-Ain)*Aout`.
+6. Add `L_depth = mean(mask_eroded * valid * relu(Din-t_far))` under the explicit
+   schedule/weight recorded in checkpoint metadata.
+7. Compose full D/R/T output without changing Reflection behavior and export
+   all branch debug maps.
+
+## Minimum real-scene smoke gate
+
+The authorized smoke starts from the frozen 3k-A/global-15,000 D/R checkpoint,
+validates the unique geometry release, creates fresh T, and runs only the
+minimum steps needed to prove one optimizer update plus save/restore. It must:
+
+- finish without OOM, NaN, Inf, cache mismatch, or geometry mutation;
+- save independent D/R/T state, optimizer/densification namespaces, PLYs,
+  release identity/hash, telemetry, and a restorable checkpoint;
+- show finite first/second bounce and exact alpha-over Ct;
+- report `Din <= t_far`, valid-two-hit coverage, D/R/T counts, losses, step
+  time, and allocator current/scoped peaks;
+- output final/diffuse/reflection/transmittance contributions, inside/outside
+  color-alpha-depth, transmittance color-alpha, depth violation, and frozen
+  near/far/valid maps.
+
+The smoke is not a long training authorization and does not enter Stage E.
+
+## Acceptance boundary
+
+Stage D acceptance still requires longer evidence that Cin represents inside
+content, Cout represents exterior content, T does not absorb R/background,
+L_depth constrains Din, reconstruction remains stable, and novel views do not
+flicker. A passing minimum smoke only returns
+`STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`.

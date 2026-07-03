@@ -1,0 +1,1858 @@
+{
+  "aggregate_sha256": "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d",
+  "assets": [
+    {
+      "relative_path": "back_surface_points.ply",
+      "sha256": "360ff173aaa62a4b411d93e1e38404432e7b97d481716f4809f29d945f3d69d5",
+      "size_bytes": 1754532
+    },
+    {
+      "relative_path": "cache_metadata.json",
+      "sha256": "6a8a10d26b66f7f9120fbd1f74c410d00e38cca9f0f340636eac755907ff7109",
+      "size_bytes": 35523
+    },
+    {
+      "relative_path": "far_depth.png",
+      "sha256": "75429717a1444ad4d60544170a49a63f5ed2b5bfb495955330c1e38efbd0b9f7",
+      "size_bytes": 9432
+    },
+    {
+      "relative_path": "glass_mesh.ply",
+      "sha256": "f6846cc0d2e4ab87a4417f138bf674d8429c73e207103645597891b6fbab53e7",
+      "size_bytes": 422
+    },
+    {
+      "relative_path": "mesh_hits/000000.npz",
+      "sha256": "c493ed5ad430644ce913f9e40ec4428d9267a4caf504bb30e7d7ea6ed3da2475",
+      "size_bytes": 797776
+    },
+    {
+      "relative_path": "mesh_hits/000001.npz",
+      "sha256": "5cf13e2e9ad817ad6862be4ff5d586952542ddd0e2705ddf7c4bbc232310b057",
+      "size_bytes": 776725
+    },
+    {
+      "relative_path": "mesh_hits/000002.npz",
+      "sha256": "c0123266077bce52aac2c5bc4f272a687ff8d76475605dd11e9c1c3d64069405",
+      "size_bytes": 762313
+    },
+    {
+      "relative_path": "mesh_hits/000003.npz",
+      "sha256": "1d5347bfb9410b18f33d71d6f4c0c0fb9b4046a29ca92f02554762182bb1f4d6",
+      "size_bytes": 715172
+    },
+    {
+      "relative_path": "mesh_hits/000004.npz",
+      "sha256": "3dbf9a2622990bf8b90a851cb483d354a3f7abd90f8fedefb86f170ae4a92650",
+      "size_bytes": 706744
+    },
+    {
+      "relative_path": "mesh_hits/000005.npz",
+      "sha256": "5efdee49c7684a8193a5b046d3dfc81bc07598f903b0d7867124e3439afe1245",
+      "size_bytes": 708646
+    },
+    {
+      "relative_path": "mesh_hits/000006.npz",
+      "sha256": "c0806cf273f825678dad4e37730e35cb06eaf1e91c275f8a66717298636f5345",
+      "size_bytes": 717237
+    },
+    {
+      "relative_path": "mesh_hits/000007.npz",
+      "sha256": "f2cce43c351c60f7a9a7890325b8148892854d8d422d24ee8b8ffe8ca51da84c",
+      "size_bytes": 698636
+    },
+    {
+      "relative_path": "mesh_hits/000008.npz",
+      "sha256": "9447d0d8347ab09050b6e3c1b46647596fb356cd12f40e8ccaf77361eda24913",
+      "size_bytes": 670878
+    },
+    {
+      "relative_path": "mesh_hits/000009.npz",
+      "sha256": "f7013f101fcfd816b744c96bf32168c15347868abea1cf18d78b73146192fb66",
+      "size_bytes": 645593
+    },
+    {
+      "relative_path": "mesh_hits/000010.npz",
+      "sha256": "5d5cf8196eaf8c2a29be4dc16796dd83b9841bdfcc5cc645ae3cc263089f5f67",
+      "size_bytes": 655799
+    },
+    {
+      "relative_path": "mesh_hits/000011.npz",
+      "sha256": "de4ae0e713f3281485f7460d4c72092fb14eadadf014cd6e1dacec49ba4aebe7",
+      "size_bytes": 665758
+    },
+    {
+      "relative_path": "mesh_hits/000012.npz",
+      "sha256": "bdb75b8bf16d3cb42ca7942ed7064425130fae4e9117aa74bb6e1126d73912d6",
+      "size_bytes": 702719
+    },
+    {
+      "relative_path": "mesh_hits/000013.npz",
+      "sha256": "32f4d8f23628173c1dd00ad4c0a3c3c5d07a692b41100c7720629364dcc89210",
+      "size_bytes": 734341
+    },
+    {
+      "relative_path": "mesh_hits/000014.npz",
+      "sha256": "b4f6fa9ac3ca43976a6affb56d3dfb67f9463053fce377473afc60101f3996cf",
+      "size_bytes": 712724
+    },
+    {
+      "relative_path": "mesh_hits/000015.npz",
+      "sha256": "a25ac20ed75af6a62d26d8209d530c6b3ed60af6a4205eb46c71e7c6606efa34",
+      "size_bytes": 706732
+    },
+    {
+      "relative_path": "mesh_hits/000016.npz",
+      "sha256": "e3a560265ba283111ac29b04d974d8d96a40af59cb8dac640a4e0567f885a667",
+      "size_bytes": 704438
+    },
+    {
+      "relative_path": "mesh_hits/000017.npz",
+      "sha256": "1c5e6668260356c63e815c8a8f704bd828591d77770e1b9cfdb06273b1d2d6af",
+      "size_bytes": 708630
+    },
+    {
+      "relative_path": "mesh_hits/000018.npz",
+      "sha256": "168c52168bad22d19c2646dc9ed71984749a8b71677906e86c2b68a1a8f1ef77",
+      "size_bytes": 699971
+    },
+    {
+      "relative_path": "mesh_hits/000019.npz",
+      "sha256": "2ab738b608e245179117fe517a359a2c32c2ada37c4ed6d6baa350f7d86d3c3d",
+      "size_bytes": 680249
+    },
+    {
+      "relative_path": "mesh_hits/000020.npz",
+      "sha256": "d3d39c8d420c61c8c9cddaf8a6d77cd31d2bab799daf0c356c516e9e6f6b4ae9",
+      "size_bytes": 654681
+    },
+    {
+      "relative_path": "mesh_hits/000021.npz",
+      "sha256": "c8d458e272c2e8d2a8fd6d73ea3035d523ddf8a37299ca7ad84576b94fde2be1",
+      "size_bytes": 644482
+    },
+    {
+      "relative_path": "mesh_hits/000022.npz",
+      "sha256": "fa78489c9fc3410ab9500bfc26c77ff69eae101d96da39f4b17dad1595c053bd",
+      "size_bytes": 652105
+    },
+    {
+      "relative_path": "mesh_hits/000023.npz",
+      "sha256": "4319a74e3701b130ae50f5501d5efdb03bbc1fa5ce0ecd69d22f178b5b7edc51",
+      "size_bytes": 629214
+    },
+    {
+      "relative_path": "mesh_hits/000024.npz",
+      "sha256": "e2d33e7f8df7c10462431406c48a5ef83df3d28584b2dec3d144a98650ee1c40",
+      "size_bytes": 589289
+    },
+    {
+      "relative_path": "mesh_hits/000025.npz",
+      "sha256": "632d0caadd615b9e3aa4e926c1277cc560fbe933eaf10613982cbf9669dd67b1",
+      "size_bytes": 567041
+    },
+    {
+      "relative_path": "mesh_hits/000026.npz",
+      "sha256": "fec77a90cf2a47190f462ddd95ad603a3fdfb5c91c6fbe53ebdc82ea8e3135cc",
+      "size_bytes": 551428
+    },
+    {
+      "relative_path": "mesh_hits/000027.npz",
+      "sha256": "8dac75cad942eb897a1fcc3effa009ab9ab3a1b2585f60ec021b76c544ebe495",
+      "size_bytes": 530124
+    },
+    {
+      "relative_path": "mesh_hits/000028.npz",
+      "sha256": "cd1b31cb72192317381c0fbe72c2dcc8199535c99ff04184652c337310bba25d",
+      "size_bytes": 507719
+    },
+    {
+      "relative_path": "mesh_hits/000029.npz",
+      "sha256": "3101a8f0a09d60a2239495e31ce3a3260399c2c8b9228db98165f81a7c0b0c81",
+      "size_bytes": 491870
+    },
+    {
+      "relative_path": "mesh_hits/000030.npz",
+      "sha256": "10c2a93d8be3a0075e4305d7c11c4e3da451b795d44fa278b77ca06b22af8e85",
+      "size_bytes": 488980
+    },
+    {
+      "relative_path": "mesh_hits/000031.npz",
+      "sha256": "565571558599a248e10b36fe1a5991837c926f500cf3cae551d5fa548756cdc9",
+      "size_bytes": 493622
+    },
+    {
+      "relative_path": "mesh_hits/000032.npz",
+      "sha256": "b726b36cd134455a59cfa75cdc282575fd0a55fec0e8cd0f5be6ff5a89676a9b",
+      "size_bytes": 493822
+    },
+    {
+      "relative_path": "mesh_hits/000033.npz",
+      "sha256": "dba21fabd8ade1dc7dbd4760eb482a1c33e22311818e0354cadb19c6271837f9",
+      "size_bytes": 486032
+    },
+    {
+      "relative_path": "mesh_hits/000034.npz",
+      "sha256": "590ea3d9ae0b0113e73f2e7edb55cde967700fcd49abcd54cbdc942feabb02e8",
+      "size_bytes": 471778
+    },
+    {
+      "relative_path": "mesh_hits/000035.npz",
+      "sha256": "58925bf9449e9a04132b544ae278a52d1134bdc66ee975310f986107ecfa92b2",
+      "size_bytes": 459167
+    },
+    {
+      "relative_path": "mesh_hits/000036.npz",
+      "sha256": "77a27ffd992486299435be9a04a6748d746d46c919d122345e980be985a63ac8",
+      "size_bytes": 447562
+    },
+    {
+      "relative_path": "mesh_hits/000037.npz",
+      "sha256": "a5445df1dcd5f7a4f2bbbdc5a9f6445d44ef5dc7839c57b8ea0bded9bc2cdb28",
+      "size_bytes": 432477
+    },
+    {
+      "relative_path": "mesh_hits/000038.npz",
+      "sha256": "f4787da3639f7ef1799f4ed38a4a610564b1e201f69d402b6a38288562cecfd6",
+      "size_bytes": 416010
+    },
+    {
+      "relative_path": "mesh_hits/000039.npz",
+      "sha256": "81bea1d25022d3baf91cefa28867ccd0b217ec3ba9c2ea5b6f2d7356544d67db",
+      "size_bytes": 412110
+    },
+    {
+      "relative_path": "mesh_hits/000040.npz",
+      "sha256": "77b3df6f9630cd7cc1ab2cf23e87336b1e789c6dcad75d675eeba0db9bde827b",
+      "size_bytes": 425029
+    },
+    {
+      "relative_path": "mesh_hits/000041.npz",
+      "sha256": "f367b2ed61f14072b24de101bd5d52e0e8ba5185cac04cff4ed558a95058ddb4",
+      "size_bytes": 449605
+    },
+    {
+      "relative_path": "mesh_hits/000042.npz",
+      "sha256": "e50c8e930df6ba5c60562a9a7ea66cff5a64722f7c8d1aa6e948be0618c8142b",
+      "size_bytes": 461187
+    },
+    {
+      "relative_path": "mesh_hits/000043.npz",
+      "sha256": "a3a5321b4fec2833779737b465b53506fc85ec4e6861b122de55cd7666204af1",
+      "size_bytes": 464274
+    },
+    {
+      "relative_path": "mesh_hits/000044.npz",
+      "sha256": "983c1ab20ecf709cc9c28eebd1b7176643718f0820f94decf5730d952cea7663",
+      "size_bytes": 462452
+    },
+    {
+      "relative_path": "mesh_hits/000045.npz",
+      "sha256": "1267d0da53721dc928421e30eadc8c6fc270368d96827ddd2d06657501a0252d",
+      "size_bytes": 460609
+    },
+    {
+      "relative_path": "mesh_hits/000046.npz",
+      "sha256": "35729b700d471ddbcf6ae4133e98f456c1564f5abbc424a581a191722fde6467",
+      "size_bytes": 466111
+    },
+    {
+      "relative_path": "mesh_hits/000047.npz",
+      "sha256": "43fc8994bbd14800629846d101fcff693c4ba80659205704464655733ff2db32",
+      "size_bytes": 484241
+    },
+    {
+      "relative_path": "mesh_hits/000048.npz",
+      "sha256": "5a23fce9b5054ae4922ff988e58e6082269700e1ff43c5381371c8d2fef8bf26",
+      "size_bytes": 437137
+    },
+    {
+      "relative_path": "mesh_hits/000049.npz",
+      "sha256": "0737123ae9b52d40016e4a5862900c9e7661bfb84618fe632800f0e439863a00",
+      "size_bytes": 407276
+    },
+    {
+      "relative_path": "mesh_hits/000050.npz",
+      "sha256": "ac500cf17a2e415494f18808670b2e8b37e7d0c3a0a9a2cd509d9323d339a92e",
+      "size_bytes": 390520
+    },
+    {
+      "relative_path": "mesh_hits/000051.npz",
+      "sha256": "c290e4a2dfb84b2f53acf643efcc913e35aa27446d24aaf97e429db3665bbee7",
+      "size_bytes": 382588
+    },
+    {
+      "relative_path": "mesh_hits/000052.npz",
+      "sha256": "5179095a8d911bf47f5bdd11de0de61885533b7bf01847f99737c2e6c2108b50",
+      "size_bytes": 370069
+    },
+    {
+      "relative_path": "mesh_hits/000053.npz",
+      "sha256": "a873df471caedea85a97f2bafc24d1b0bde76b8fccf1b3a7915a3523a7c5b864",
+      "size_bytes": 363406
+    },
+    {
+      "relative_path": "mesh_hits/000054.npz",
+      "sha256": "6e9bdd34f0c1c706857f0419770ccc05ee9a6c1d8d661cea1d3c40e87d4ddb1f",
+      "size_bytes": 391840
+    },
+    {
+      "relative_path": "mesh_hits/000055.npz",
+      "sha256": "fdb2224ff95899de2e1e07a239d689a62a1a46c8f7a6a3d2a855fafcadac6a93",
+      "size_bytes": 379892
+    },
+    {
+      "relative_path": "mesh_hits/000056.npz",
+      "sha256": "c7adebb94309e9ea3876918d9560d57302b294a0da7b5059bce3082402368dff",
+      "size_bytes": 380655
+    },
+    {
+      "relative_path": "mesh_hits/000057.npz",
+      "sha256": "82e04f69059e838ec2880dd09819032ddcce80735dc79342924a998ea97a4438",
+      "size_bytes": 382100
+    },
+    {
+      "relative_path": "mesh_hits/000058.npz",
+      "sha256": "d9ebf91a9fc1ea64a3164d711fa6a78485fd2d41965715a286695f1becf2e122",
+      "size_bytes": 392288
+    },
+    {
+      "relative_path": "mesh_hits/000059.npz",
+      "sha256": "1a66014d7c13dc95bd8cac2fa46f32a2e49cec6b350f34f315239705d9297a52",
+      "size_bytes": 395061
+    },
+    {
+      "relative_path": "mesh_hits/000060.npz",
+      "sha256": "d2ab1dee28ff77a324a34c0ec3c6747999b2775b6b34c23b49d44e948910b94b",
+      "size_bytes": 399850
+    },
+    {
+      "relative_path": "mesh_hits/000061.npz",
+      "sha256": "9882016b0fff1500ee871929e81c237cf6858de5552853f19c2ed8bb2cf538a3",
+      "size_bytes": 374254
+    },
+    {
+      "relative_path": "mesh_hits/000062.npz",
+      "sha256": "5dcc04f93eccb95a198334c6d4730211e345896628b1ec617fece598684b74ea",
+      "size_bytes": 367871
+    },
+    {
+      "relative_path": "mesh_hits/000063.npz",
+      "sha256": "885c2ceea8149e44b98fea1f38355a10eac97ad30be42acc5d4c710baa589686",
+      "size_bytes": 370085
+    },
+    {
+      "relative_path": "mesh_hits/000064.npz",
+      "sha256": "680900c0d74367ec69f5d70e0defcad3f4a68e10593fe0a28ae81d1e5509110d",
+      "size_bytes": 375079
+    },
+    {
+      "relative_path": "mesh_hits/000065.npz",
+      "sha256": "d12dc27e38e374b3f7f0b8d2fa6a2afe86b042a7ab5959e8a9879b6c72796725",
+      "size_bytes": 373286
+    },
+    {
+      "relative_path": "mesh_hits/000066.npz",
+      "sha256": "982aeb9aca6cc72fede54d7adab1f3911860cd1c42f4cb545e9a38ab8f70a979",
+      "size_bytes": 356480
+    },
+    {
+      "relative_path": "mesh_hits/000067.npz",
+      "sha256": "64365b694cabeb4a22d20dc6b4f015796b19c7180e56a6dfe95181aa36e9caac",
+      "size_bytes": 337708
+    },
+    {
+      "relative_path": "mesh_hits/000068.npz",
+      "sha256": "c8e88ef81dc538e20c8b3472fe030bd973ddca021ebbed1c63b24b1f3e3a6ce5",
+      "size_bytes": 325614
+    },
+    {
+      "relative_path": "mesh_hits/000069.npz",
+      "sha256": "5b0e80ca72aab2f8b1f57105c7b472357aa947cf5917df5ed1044f8c5413f4ca",
+      "size_bytes": 314797
+    },
+    {
+      "relative_path": "mesh_hits/000070.npz",
+      "sha256": "eb350408d5fd7481535487a0ee073539cc09111cdfcfd45f2c29081faf6351c2",
+      "size_bytes": 317871
+    },
+    {
+      "relative_path": "mesh_hits/000071.npz",
+      "sha256": "955275a0dad905aef52f6ce8235655f94e7ebe8cdf9fca8070f5cb8efca92eeb",
+      "size_bytes": 319362
+    },
+    {
+      "relative_path": "mesh_hits/000072.npz",
+      "sha256": "139bb53aafaa1448aba7747388760cb35278886e87dc2b3141c8a2b3f4f0c914",
+      "size_bytes": 322244
+    },
+    {
+      "relative_path": "mesh_hits/000073.npz",
+      "sha256": "d45f10b8e44fdf8defa0511dd5603c40fc4ee29200f2e8a067839bda73a0c072",
+      "size_bytes": 334941
+    },
+    {
+      "relative_path": "mesh_hits/000074.npz",
+      "sha256": "adba3c908bda5b55b83480848e475ba0aebfc9563f6b5c14ffa22f836dff9a62",
+      "size_bytes": 362440
+    },
+    {
+      "relative_path": "mesh_hits/000075.npz",
+      "sha256": "06478981d24348634b4d0bb566a5ea7b1e15f6e1e6ef076d056cc0efff4ff1f8",
+      "size_bytes": 389509
+    },
+    {
+      "relative_path": "mesh_hits/000076.npz",
+      "sha256": "a96da765333f1afe8587a90bc30523695351e7e12b7742df706c3cadb6594cf8",
+      "size_bytes": 408772
+    },
+    {
+      "relative_path": "mesh_hits/000077.npz",
+      "sha256": "84b7e9b5031fbecbd3124df9487d226c7caa2fa8b4222904be49c39078f75b5d",
+      "size_bytes": 419358
+    },
+    {
+      "relative_path": "mesh_hits/000078.npz",
+      "sha256": "f0eba1cf29e690822630f8580862f7d13c3ad15afd81e89b27aade9c9c263f2b",
+      "size_bytes": 424734
+    },
+    {
+      "relative_path": "mesh_hits/000079.npz",
+      "sha256": "6de048f1e7c629d04c9fd27f3225d8cf4aed06de21decca81217e6144d464ec9",
+      "size_bytes": 441118
+    },
+    {
+      "relative_path": "mesh_hits/000080.npz",
+      "sha256": "79c92f84b0e0bedfad625cf210044b015fac06f636b441076b8212edd8b5851e",
+      "size_bytes": 470150
+    },
+    {
+      "relative_path": "mesh_hits/000081.npz",
+      "sha256": "3d4d5ef0fed7784f5c97327923ab7dddb79c4fc459e4d0b6be562c05357af4c9",
+      "size_bytes": 496087
+    },
+    {
+      "relative_path": "mesh_hits/000082.npz",
+      "sha256": "3adc7bb8f5652424d2dc62c5074e350dafc354e77c62c1f3d70a1d706c9aca29",
+      "size_bytes": 506076
+    },
+    {
+      "relative_path": "mesh_hits/000083.npz",
+      "sha256": "8cf2dc03a3002fc0bc81da7ee67a925b6acc895b568c1446ee340014bac45a15",
+      "size_bytes": 502421
+    },
+    {
+      "relative_path": "mesh_hits/000084.npz",
+      "sha256": "4c4285bd64b9b1725f5812017319dd2c7ae061769c8f9205df320fa4457d676f",
+      "size_bytes": 489822
+    },
+    {
+      "relative_path": "mesh_hits/000085.npz",
+      "sha256": "d83f298e0d7d5da1ea539ff5aa817fbd49eed66fcc16997226079f22473977e2",
+      "size_bytes": 498459
+    },
+    {
+      "relative_path": "mesh_hits/000086.npz",
+      "sha256": "23cbc1b54663ad5fb0e1dc13d13cbdfe2b32161cb57ca43d153b252cfc9938fe",
+      "size_bytes": 541305
+    },
+    {
+      "relative_path": "mesh_hits/000087.npz",
+      "sha256": "3641b54846547814398a6764d925c9daa85024a29fd4ea33a07850846cec1ca3",
+      "size_bytes": 584658
+    },
+    {
+      "relative_path": "mesh_hits/000088.npz",
+      "sha256": "025ed6e86e5bc08662deb45e7650524af23cec6f00e2807cc01a8425c0a54602",
+      "size_bytes": 598638
+    },
+    {
+      "relative_path": "mesh_hits/000089.npz",
+      "sha256": "8522225dbaf733155538fd0af7caaf7a235b18da84e86af75e4c362b3482989a",
+      "size_bytes": 583062
+    },
+    {
+      "relative_path": "mesh_hits/000090.npz",
+      "sha256": "d6596abed9b01266690bfa1764ea6390bf9892b7eb837a966b5cca075065d418",
+      "size_bytes": 545150
+    },
+    {
+      "relative_path": "mesh_hits/000091.npz",
+      "sha256": "65dc9ae0de3f8d65db966b7a78f8b5c90b52c7ecd665ca8dafc1d4d71b3e37c1",
+      "size_bytes": 525318
+    },
+    {
+      "relative_path": "mesh_hits/000092.npz",
+      "sha256": "58ca5a62543a25bf26870524530e3a0b8da4729e94f407f931e3bb0583d306ff",
+      "size_bytes": 526289
+    },
+    {
+      "relative_path": "mesh_hits/000093.npz",
+      "sha256": "01f2c6033f7d0cfc08cc164f4e8faec63359725141e990bc0fc7995e498649f1",
+      "size_bytes": 533894
+    },
+    {
+      "relative_path": "mesh_hits/000094.npz",
+      "sha256": "9466964bb30ad3fe51b4fd720b2c9afce0745e83c062389737ee6b6599dc5c7d",
+      "size_bytes": 505048
+    },
+    {
+      "relative_path": "mesh_hits/000095.npz",
+      "sha256": "5af4320ce5c78f0ea4bf6832bbda4bc1fcfec7f593703343647481a5fafa7f5b",
+      "size_bytes": 441245
+    },
+    {
+      "relative_path": "mesh_hits/000096.npz",
+      "sha256": "e5c6e4797413b44efd38e7b96831943cecc82838838fba349201e2e969d5792b",
+      "size_bytes": 410884
+    },
+    {
+      "relative_path": "mesh_hits/000097.npz",
+      "sha256": "2a09c15e95af9fe1f07b6de0803053c8810e189203d7bce690bfcb20a4d07da7",
+      "size_bytes": 385276
+    },
+    {
+      "relative_path": "mesh_hits/000098.npz",
+      "sha256": "f53a394e79c3f2fb816e080ee300ebc0ec700dbc32be4a321de806dce06a1e2c",
+      "size_bytes": 361867
+    },
+    {
+      "relative_path": "mesh_hits/000099.npz",
+      "sha256": "ca940a520896b2bdc61e6609b144cf4cdeb37517a877972d20a8060596e4c150",
+      "size_bytes": 351576
+    },
+    {
+      "relative_path": "mesh_hits/000100.npz",
+      "sha256": "7ccaf21bd5205b638a5f8357525a9ed910d32be427e0119fad5e62fa5b149ecf",
+      "size_bytes": 343775
+    },
+    {
+      "relative_path": "mesh_hits/000101.npz",
+      "sha256": "caa45b48778e730cbcf2d24b75f7e20ba84a8cbf402224ada3aa1e5b4cde99c2",
+      "size_bytes": 341523
+    },
+    {
+      "relative_path": "mesh_hits/000102.npz",
+      "sha256": "72216761ffec1b0a760988c0e0e1d5ab80bccc7c9239367b84138ff19596e7a5",
+      "size_bytes": 352033
+    },
+    {
+      "relative_path": "mesh_hits/000103.npz",
+      "sha256": "a1cd8fd5f3037bb07247ab08a13f66b81a0b11ecc1033ff2f5ccdd48563f5bd8",
+      "size_bytes": 373354
+    },
+    {
+      "relative_path": "mesh_hits/000104.npz",
+      "sha256": "0ce711bf9652be1ef5ade3d97f44674dce80089cb74c73ae284d1b1660a6e464",
+      "size_bytes": 408245
+    },
+    {
+      "relative_path": "mesh_hits/000105.npz",
+      "sha256": "34280e70e2ea4a73af1a23ceee768adfdf5445dab10bd50fc0e2952f9d58deb4",
+      "size_bytes": 426878
+    },
+    {
+      "relative_path": "mesh_hits/000106.npz",
+      "sha256": "abed0de48c442ef55c4738b4799b7a48fa56598173a2f5f128495edb475e0580",
+      "size_bytes": 457053
+    },
+    {
+      "relative_path": "mesh_hits/000107.npz",
+      "sha256": "42ad0cb3aa8b1ebf47aa2fdf99a34c5504fb16145bbe3f8cba8f22c26402f1cc",
+      "size_bytes": 490809
+    },
+    {
+      "relative_path": "mesh_hits/000108.npz",
+      "sha256": "7a11b3aad42872d8a9006f02ff90d1a5e375b891d0c29c3a1e6c4637efc0e62a",
+      "size_bytes": 489664
+    },
+    {
+      "relative_path": "mesh_hits/000109.npz",
+      "sha256": "b7b96b011e6782eae864d5e4fbd111e47ee6dafae2981310c7fe6d8e92d5666e",
+      "size_bytes": 482890
+    },
+    {
+      "relative_path": "mesh_hits/000110.npz",
+      "sha256": "84c447c6f79b3872c44abae1c5b9e4e4af0917e3ba62374e7bea8988a9dccaf8",
+      "size_bytes": 492827
+    },
+    {
+      "relative_path": "mesh_metadata.json",
+      "sha256": "7124c70f2446d86ef4a40297fd653fa299f8ad329a5b0e626bac59bd18d3a428",
+      "size_bytes": 82728
+    },
+    {
+      "relative_path": "near_depth.png",
+      "sha256": "4b86b6b37247cf0883da96cdd5de87a4feb4dce8e89d3a9a7d1b06c404032b60",
+      "size_bytes": 7732
+    },
+    {
+      "relative_path": "two_hit_valid.png",
+      "sha256": "b589de874682615a82455278f245357a407353a8e7732894c55554728db8f5bb",
+      "size_bytes": 889
+    }
+  ],
+  "cache_count": 111,
+  "cache_entries": [
+    {
+      "camera_identity_sha256": "442fe866718f0cd1e92ddc82e4fb1cab207d952217a51076617bcc935629a338",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000000.png",
+      "mask_sha256": "f01633559237b4197235514e1c78713f36ae67c4f3723c8b1721f895de46086a",
+      "relative_path": "mesh_hits/000000.npz",
+      "sha256": "c493ed5ad430644ce913f9e40ec4428d9267a4caf504bb30e7d7ea6ed3da2475",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000000.jpg",
+      "source_image_sha256": "c971bfa3ed119aba871e0045c15c52f0f6415ef32aadc5a1b24a09b483d3fb97",
+      "stem": "000000"
+    },
+    {
+      "camera_identity_sha256": "f8c249a2078fbf00acff797f52486089d51cdc5303c84565deb46b94a09d6206",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000001.png",
+      "mask_sha256": "aa4d1df3a5c6eb04728dbf64c602cef9fe29705ee919ce9859533f9e48b088d6",
+      "relative_path": "mesh_hits/000001.npz",
+      "sha256": "5cf13e2e9ad817ad6862be4ff5d586952542ddd0e2705ddf7c4bbc232310b057",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000001.jpg",
+      "source_image_sha256": "e339f47b09fbc2fe67ae0603f961d6922636cf18a57737ee5a68c2c20cc3cc6b",
+      "stem": "000001"
+    },
+    {
+      "camera_identity_sha256": "9b749f412598d98dadec230eddf0dd61dddedb0d4544718ee0a8fdd19017faa7",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000002.png",
+      "mask_sha256": "24db9468b02c3d896846932d81a865b477207559bcbebb99bdee884f8a2dba85",
+      "relative_path": "mesh_hits/000002.npz",
+      "sha256": "c0123266077bce52aac2c5bc4f272a687ff8d76475605dd11e9c1c3d64069405",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000002.jpg",
+      "source_image_sha256": "cdf47d76a0e35c4ae40ea28b09f46b96fb507a6ffdc2f2cf70e1e885bcb8f025",
+      "stem": "000002"
+    },
+    {
+      "camera_identity_sha256": "8496a1fbf35b0e4269e1cbf031eac6b929a6e408fc584cc7c8669dffc53cdcb6",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000003.png",
+      "mask_sha256": "bfb4bab5fbe0b1ff47b92075c254992d888ac5649197e57ad31a0f75bdc533e5",
+      "relative_path": "mesh_hits/000003.npz",
+      "sha256": "1d5347bfb9410b18f33d71d6f4c0c0fb9b4046a29ca92f02554762182bb1f4d6",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000003.jpg",
+      "source_image_sha256": "25f1c079434651196abdfbc68f429929396d64d66e12ab3f26c75e1dc5d2cb55",
+      "stem": "000003"
+    },
+    {
+      "camera_identity_sha256": "e6b0e201786b9228e5478a153671f1106d3908e9d413e0ef6871e7b6d7081818",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000004.png",
+      "mask_sha256": "aa28139d9b28f25a0352f37ad092dcb5a0060c09c7d39ac86ff4e4205fd8cba8",
+      "relative_path": "mesh_hits/000004.npz",
+      "sha256": "3dbf9a2622990bf8b90a851cb483d354a3f7abd90f8fedefb86f170ae4a92650",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000004.jpg",
+      "source_image_sha256": "976737c925f7037c12b63534c8556c7cf477ae47d362fdc8121540c9146bfcdf",
+      "stem": "000004"
+    },
+    {
+      "camera_identity_sha256": "ae922f7b1c79239a1966b8732da87457052f8ce9c9d8f622dc5709150a08f114",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000005.png",
+      "mask_sha256": "d0b9a79966e1e1e46802ac9adb4b93c799b44182b3724a4cdce524310107d85a",
+      "relative_path": "mesh_hits/000005.npz",
+      "sha256": "5efdee49c7684a8193a5b046d3dfc81bc07598f903b0d7867124e3439afe1245",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000005.jpg",
+      "source_image_sha256": "765fa130358b984ee7b6c2bcf0f38b7d591f7a473a8bb7f214ba0e3364328e09",
+      "stem": "000005"
+    },
+    {
+      "camera_identity_sha256": "745277a952953a2b3684c7e749593281ddc238754ea638d56089b8c980a3b85d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000006.png",
+      "mask_sha256": "3ff50617cea5c54523a7f24bc85e6ae9f56c416a6c6258c96c4d3e5483d764f1",
+      "relative_path": "mesh_hits/000006.npz",
+      "sha256": "c0806cf273f825678dad4e37730e35cb06eaf1e91c275f8a66717298636f5345",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000006.jpg",
+      "source_image_sha256": "db9ae4226a8fe85a21ac9d768746f05b212e876ce261fdc27bda6d3cde9ef57b",
+      "stem": "000006"
+    },
+    {
+      "camera_identity_sha256": "1972b14d81b2392beda521d7ca8467b314846e424700a02565ab994ca41775db",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000007.png",
+      "mask_sha256": "1179d54ce17afa197be3b5bd1b0662454e6ae7ffb5acab5739c62cab0960ceb3",
+      "relative_path": "mesh_hits/000007.npz",
+      "sha256": "f2cce43c351c60f7a9a7890325b8148892854d8d422d24ee8b8ffe8ca51da84c",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000007.jpg",
+      "source_image_sha256": "c4b50c8eb3c8ff8fdef70be684854455c92516773f4f1497ba988d3f8750a68d",
+      "stem": "000007"
+    },
+    {
+      "camera_identity_sha256": "0891140e95850a09a57b165bf1fe9cb2e2adabb517945bb343800d0e90e92ce1",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000008.png",
+      "mask_sha256": "93bcd14176fc0644d84f132e5241e58396269e9e765c545f45bcc837a725879d",
+      "relative_path": "mesh_hits/000008.npz",
+      "sha256": "9447d0d8347ab09050b6e3c1b46647596fb356cd12f40e8ccaf77361eda24913",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000008.jpg",
+      "source_image_sha256": "56d43dc1207a26da2cfa928ea7c9d847b0713d07990a2a3fdcd807a065f2a459",
+      "stem": "000008"
+    },
+    {
+      "camera_identity_sha256": "a8810a9ea60ed39bf5674d3e74e4c5be6a4ea70ed8f1354f509a71b0b386d339",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000009.png",
+      "mask_sha256": "43241ae767ad2eefc00c46e6b1a61b43672a1c44bde444ab14e2f4aae028735a",
+      "relative_path": "mesh_hits/000009.npz",
+      "sha256": "f7013f101fcfd816b744c96bf32168c15347868abea1cf18d78b73146192fb66",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000009.jpg",
+      "source_image_sha256": "9cb90c3601f5fa2993a5ab3cea47a6e0bc7024af961db91776f225572fb29f4d",
+      "stem": "000009"
+    },
+    {
+      "camera_identity_sha256": "cd8bd28c741d039e2f1c4d97128e57fa4341a3a6a09d603a32487c9bbb83ea35",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000010.png",
+      "mask_sha256": "453cb51d29f4317116bf03e53f5a4e7e500b2d0637fbfe67c0d5922b9d51f3bc",
+      "relative_path": "mesh_hits/000010.npz",
+      "sha256": "5d5cf8196eaf8c2a29be4dc16796dd83b9841bdfcc5cc645ae3cc263089f5f67",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000010.jpg",
+      "source_image_sha256": "d2a294289a74232d108ba7745d84fb9a30efa09d81014cdc91ea15075b5b68f0",
+      "stem": "000010"
+    },
+    {
+      "camera_identity_sha256": "d7a8be06138f0e69ec7f54eb0dd2a4bf7f02ab667587ffc4e7f919cdd90e3058",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000011.png",
+      "mask_sha256": "83b9b45ed9ec7c52bf668ff34545530c67c5e2240e7197ac7c4c0ecfe9845f1d",
+      "relative_path": "mesh_hits/000011.npz",
+      "sha256": "de4ae0e713f3281485f7460d4c72092fb14eadadf014cd6e1dacec49ba4aebe7",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000011.jpg",
+      "source_image_sha256": "c8fb86ef3d51d8256f3c4c22693a3aefa0b167598486cf0a4894acf3e6c5f602",
+      "stem": "000011"
+    },
+    {
+      "camera_identity_sha256": "d02b893e45ebcbd193036d8a613378ccfdc71400cc95fcee2ce6ed4919dbaf9b",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000012.png",
+      "mask_sha256": "90bed090f5644ab8ca12b7a283826948473c611f640d550a1a2bd5311c868c21",
+      "relative_path": "mesh_hits/000012.npz",
+      "sha256": "bdb75b8bf16d3cb42ca7942ed7064425130fae4e9117aa74bb6e1126d73912d6",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000012.jpg",
+      "source_image_sha256": "97d17599f9e455eaa8a084fe21eeb698b66b37088449ce8f9a2b8b4b67ea796c",
+      "stem": "000012"
+    },
+    {
+      "camera_identity_sha256": "c29dbd83cb8abff4d90b80f97172aa3cc92d8f6c890a2e95f46f47e3aaf4d968",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000013.png",
+      "mask_sha256": "9e07f081d9c1d1cc93f7827cb33317d317f8226d7857baf50de7eb39d9f42204",
+      "relative_path": "mesh_hits/000013.npz",
+      "sha256": "32f4d8f23628173c1dd00ad4c0a3c3c5d07a692b41100c7720629364dcc89210",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000013.jpg",
+      "source_image_sha256": "287470a7c37ae1d425892430a8d26e33d107afa9e8236fad1c046892c8192866",
+      "stem": "000013"
+    },
+    {
+      "camera_identity_sha256": "4c9d9e2f81ee232f2eeda90a616aa071b0e9af42094c5f2d36b695ac14ad4190",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000014.png",
+      "mask_sha256": "d59b994208df0798f8889b4ee7870999980cd9d0e5c9ee51526b761a1785166a",
+      "relative_path": "mesh_hits/000014.npz",
+      "sha256": "b4f6fa9ac3ca43976a6affb56d3dfb67f9463053fce377473afc60101f3996cf",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000014.jpg",
+      "source_image_sha256": "ef3e9012c87150f0adcab9a857a8d794874d5e7680364a6979080a323a4d90cb",
+      "stem": "000014"
+    },
+    {
+      "camera_identity_sha256": "93b9eba1b667985a2f79d44a6fd2e5abaed7da6be51950209ecfd2912b3cd0d1",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000015.png",
+      "mask_sha256": "0428ea0ee90da6e30619934d1e931ca629d6ab9ccb30ab3de122eccd2bc6796a",
+      "relative_path": "mesh_hits/000015.npz",
+      "sha256": "a25ac20ed75af6a62d26d8209d530c6b3ed60af6a4205eb46c71e7c6606efa34",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000015.jpg",
+      "source_image_sha256": "dcb04fc56f717e05332123fee46a40ff8c6870eaadfc9772305522d636fe5d7b",
+      "stem": "000015"
+    },
+    {
+      "camera_identity_sha256": "bc0a5a06957d0cdeb89899fadd711e15fefdbb608e96efc96b0fb5255b1f66bf",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000016.png",
+      "mask_sha256": "3f238d7b7455f22c3abbb46516b4816a6814a5ee930a216bb470fb9f9d29001e",
+      "relative_path": "mesh_hits/000016.npz",
+      "sha256": "e3a560265ba283111ac29b04d974d8d96a40af59cb8dac640a4e0567f885a667",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000016.jpg",
+      "source_image_sha256": "9302e860eb73721d1309f0ea58fc9c2e13b8e0659210d94e66a522c8c0920c6a",
+      "stem": "000016"
+    },
+    {
+      "camera_identity_sha256": "b6853093b89c06954db0dcb20894489424c182751a701cda7985e0deea666df6",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000017.png",
+      "mask_sha256": "e21b9c5f4c253f5fcc5ab9c111c93a3048f58e0c45d46786863fc18817e1c0d0",
+      "relative_path": "mesh_hits/000017.npz",
+      "sha256": "1c5e6668260356c63e815c8a8f704bd828591d77770e1b9cfdb06273b1d2d6af",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000017.jpg",
+      "source_image_sha256": "a444c3ce6d3fb24dffbba2905f0a620069597d442ab1a4c3c8692f226f426f28",
+      "stem": "000017"
+    },
+    {
+      "camera_identity_sha256": "7116c37d94d764cc84e6013841e8bac7322caa6e45b7e2086088878c67cfdf49",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000018.png",
+      "mask_sha256": "7f09816322574f52487410c4d1f969d15a7a01dec9a4ecfe6f7549905eafc581",
+      "relative_path": "mesh_hits/000018.npz",
+      "sha256": "168c52168bad22d19c2646dc9ed71984749a8b71677906e86c2b68a1a8f1ef77",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000018.jpg",
+      "source_image_sha256": "a9c5b1b5ae7a443f5b7113346f3c55d53f6c5eed6dbbba672c70c4a566b556bb",
+      "stem": "000018"
+    },
+    {
+      "camera_identity_sha256": "802f95c96d1fd362cc87d860fe2bdeaad1f396f899fe9f6db6b35e88caea6a1d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000019.png",
+      "mask_sha256": "6726d08e787c9138668fa2c059972655e137e269405053606a96c0c9569b0c22",
+      "relative_path": "mesh_hits/000019.npz",
+      "sha256": "2ab738b608e245179117fe517a359a2c32c2ada37c4ed6d6baa350f7d86d3c3d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000019.jpg",
+      "source_image_sha256": "8ef0742fd2ce01f3374dca74aac6e79492bccc1a63bb96364200bc7cd6115ad2",
+      "stem": "000019"
+    },
+    {
+      "camera_identity_sha256": "6e6a6e5050307a12d3f195bfa2def10d00c96e85c80755abbad11c0ea424f545",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000020.png",
+      "mask_sha256": "2e833ec16ede98c50a507475aab81522a211d62ca7f82873c4494d88e44d1585",
+      "relative_path": "mesh_hits/000020.npz",
+      "sha256": "d3d39c8d420c61c8c9cddaf8a6d77cd31d2bab799daf0c356c516e9e6f6b4ae9",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000020.jpg",
+      "source_image_sha256": "fc9ddafe2aa9571a9004edad47673aba7405b5b6faec54274a9073b13571b2c7",
+      "stem": "000020"
+    },
+    {
+      "camera_identity_sha256": "f5e38fbf9af47bdc13203bc8773b6b67d1008102ec3f33dc339271feb11e24c1",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000021.png",
+      "mask_sha256": "813371a48ff70dfad4322cd5aaf70153f0fed51cd541838fff722212f94e08b6",
+      "relative_path": "mesh_hits/000021.npz",
+      "sha256": "c8d458e272c2e8d2a8fd6d73ea3035d523ddf8a37299ca7ad84576b94fde2be1",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000021.jpg",
+      "source_image_sha256": "81030491a97accf07b7677595d711dd96db6047a2b526f529d69ba57918241c4",
+      "stem": "000021"
+    },
+    {
+      "camera_identity_sha256": "853059ab422576f83452b8681d56c45d140fc96de8cda25b71eb7fab87adaded",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000022.png",
+      "mask_sha256": "8353ddd58584abde7cc172afa3159b1d5c2d46aa9eec68c27cbeaf4c105cb38d",
+      "relative_path": "mesh_hits/000022.npz",
+      "sha256": "fa78489c9fc3410ab9500bfc26c77ff69eae101d96da39f4b17dad1595c053bd",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000022.jpg",
+      "source_image_sha256": "f0fd8340653d135c42ff0757978bd1d9c640aa4a39ca7f2811903ecf4bca5044",
+      "stem": "000022"
+    },
+    {
+      "camera_identity_sha256": "1c0a53feed347567adad40bf9e2d111894769bc67980ea03c63f986d69b36400",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000023.png",
+      "mask_sha256": "42da45dc33231da6a1ec4d43fe21967df7d72b1a378e6168bcded0d63bc3e33d",
+      "relative_path": "mesh_hits/000023.npz",
+      "sha256": "4319a74e3701b130ae50f5501d5efdb03bbc1fa5ce0ecd69d22f178b5b7edc51",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000023.jpg",
+      "source_image_sha256": "985456b51c7c3c10c3c406c2485d22ee7b4d4b27854a5469ad26c9633b579452",
+      "stem": "000023"
+    },
+    {
+      "camera_identity_sha256": "46adfd4a9fcafae68238f828b0817dfaeb6d5e7809920f546c81294f6697604c",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000024.png",
+      "mask_sha256": "1f6f57a0ca54ce66899d0b3b9628ca7f9b06977b2a2770e7d6edcc7293a7d6a2",
+      "relative_path": "mesh_hits/000024.npz",
+      "sha256": "e2d33e7f8df7c10462431406c48a5ef83df3d28584b2dec3d144a98650ee1c40",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000024.jpg",
+      "source_image_sha256": "6c099554d0e26006e4a38739373b9e111dfb536533b545ffbad52afb9eb120b5",
+      "stem": "000024"
+    },
+    {
+      "camera_identity_sha256": "e27b0c07450b1ace502a8461aea353df66f3b3baa64a62e61a55313dc2a6e491",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000025.png",
+      "mask_sha256": "a875e90dadc2bd60884265abbb9395b5a43fe092c1d4109af1a25b74ce7d11c4",
+      "relative_path": "mesh_hits/000025.npz",
+      "sha256": "632d0caadd615b9e3aa4e926c1277cc560fbe933eaf10613982cbf9669dd67b1",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000025.jpg",
+      "source_image_sha256": "ed74e9616b487a9c5e702765d4ec70e796e3fcdff46df3acee8010a38413fb12",
+      "stem": "000025"
+    },
+    {
+      "camera_identity_sha256": "82d71eec0c2bc8dd0279e7aa742213aea2c0b3e2cbc3b62d0030a46e8a674856",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000026.png",
+      "mask_sha256": "034c52b57a76afe764b26bfba4ed8340b4ec660b72d3e2ed23105f19b51e2cd3",
+      "relative_path": "mesh_hits/000026.npz",
+      "sha256": "fec77a90cf2a47190f462ddd95ad603a3fdfb5c91c6fbe53ebdc82ea8e3135cc",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000026.jpg",
+      "source_image_sha256": "ed5e15c31b3e33358ca56f555757d2267a8a0a6eecdd9c44412d88633d84de4b",
+      "stem": "000026"
+    },
+    {
+      "camera_identity_sha256": "42feede84828ac75a6df0cec3111d0076a18c96e500479eecea7f2a2ea3b9813",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000027.png",
+      "mask_sha256": "13e9310aa5370a30350dd2f498e7b5a019c60e433ff5d9565fa97107de3c248c",
+      "relative_path": "mesh_hits/000027.npz",
+      "sha256": "8dac75cad942eb897a1fcc3effa009ab9ab3a1b2585f60ec021b76c544ebe495",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000027.jpg",
+      "source_image_sha256": "3a6760ea7efd25828c10452ab5b9840f1ae12d710cb63252211a2b9ca4bd3483",
+      "stem": "000027"
+    },
+    {
+      "camera_identity_sha256": "569338fc331571c0a1a5fb73840dc50aaa53d1166f2680f0c8c5c7be732da8be",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000028.png",
+      "mask_sha256": "7e097bc849655790acea3329bf2d8ffc78a2cb556ae6107fdde0f543e5acaac2",
+      "relative_path": "mesh_hits/000028.npz",
+      "sha256": "cd1b31cb72192317381c0fbe72c2dcc8199535c99ff04184652c337310bba25d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000028.jpg",
+      "source_image_sha256": "2c7903d19c477dcc1d600df3ee4c054aa4c24a165a6ce981bb0f68fed39453dc",
+      "stem": "000028"
+    },
+    {
+      "camera_identity_sha256": "5939c13eea69e624c96a93e04539aca1b101ced50a481a366eb099e36f05600e",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000029.png",
+      "mask_sha256": "7cad873902cd015e7c53aff69c5018d700dd0028edc974ff6a339e9d2a474012",
+      "relative_path": "mesh_hits/000029.npz",
+      "sha256": "3101a8f0a09d60a2239495e31ce3a3260399c2c8b9228db98165f81a7c0b0c81",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000029.jpg",
+      "source_image_sha256": "b3c1f7a5e0091afe5e39dcba3046cdcba29e39f5762a2746a3c8318dac6e2508",
+      "stem": "000029"
+    },
+    {
+      "camera_identity_sha256": "b9ca44bbab0c97f7fe211fd46db875796082972cb40ce8183c6af0676fbb75e9",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000030.png",
+      "mask_sha256": "4b068b5a4d79d0f878166a471f3e9ad960b981704ca7e7c936b7acfe2a9928ff",
+      "relative_path": "mesh_hits/000030.npz",
+      "sha256": "10c2a93d8be3a0075e4305d7c11c4e3da451b795d44fa278b77ca06b22af8e85",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000030.jpg",
+      "source_image_sha256": "30b8474decc3b2e3759f34b0651634f48b0c947007d9b1a4896701270d036fbc",
+      "stem": "000030"
+    },
+    {
+      "camera_identity_sha256": "8f87d2e6072227a177a8a93d3b69b36828d98ac04468b65ea849af2d6cfe99fe",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000031.png",
+      "mask_sha256": "ab9338302da2df23c5552b5ef9563bfadf6a08f1b5f650f3442938ac8aa5cecd",
+      "relative_path": "mesh_hits/000031.npz",
+      "sha256": "565571558599a248e10b36fe1a5991837c926f500cf3cae551d5fa548756cdc9",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000031.jpg",
+      "source_image_sha256": "a5e6b6666e47fbc6bfc69174a67190d7335dda2b5f951b27b816eabafa8a2b44",
+      "stem": "000031"
+    },
+    {
+      "camera_identity_sha256": "cb7680e371ad3a786361cf2cb143539acdb755e4724e674c97a7457b3d55170d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000032.png",
+      "mask_sha256": "0c31cec7c15d17ee1cff51b5047c0061ef4482b2afe6b44933c134a62d2b3b9e",
+      "relative_path": "mesh_hits/000032.npz",
+      "sha256": "b726b36cd134455a59cfa75cdc282575fd0a55fec0e8cd0f5be6ff5a89676a9b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000032.jpg",
+      "source_image_sha256": "7374633243ab12523e8fc54a7e2c33eb7d50d9654b426db8941b2926c24627af",
+      "stem": "000032"
+    },
+    {
+      "camera_identity_sha256": "d8ff4b040b4df5c81757196745df9f32a05e5a642cec6ade502dfa7f717a240b",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000033.png",
+      "mask_sha256": "ab7d3d3f762db8df1231cb49d175d1de60cc8f18d574b678f8aecd3b85228489",
+      "relative_path": "mesh_hits/000033.npz",
+      "sha256": "dba21fabd8ade1dc7dbd4760eb482a1c33e22311818e0354cadb19c6271837f9",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000033.jpg",
+      "source_image_sha256": "b96fef490187bd2ef025193fa6690c0769baa8443a2bbd5fb42b44caacfdad98",
+      "stem": "000033"
+    },
+    {
+      "camera_identity_sha256": "6d1d631dcd15e3ed731cebea23aa43a34ab5411807efbdbb7bcee38d4ada4281",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000034.png",
+      "mask_sha256": "81be9841e6e65e5535959204a103998082db14369c2841da62a09e6c398bc884",
+      "relative_path": "mesh_hits/000034.npz",
+      "sha256": "590ea3d9ae0b0113e73f2e7edb55cde967700fcd49abcd54cbdc942feabb02e8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000034.jpg",
+      "source_image_sha256": "7a45897cf68692cbedd076769e19f220d5df5edca89368d770dcb7150a0fc456",
+      "stem": "000034"
+    },
+    {
+      "camera_identity_sha256": "eadca515080567857bd37687345d52e581922e8e0597849bdc16cfdfd4d71c51",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000035.png",
+      "mask_sha256": "ae91736aa218a2d7cca62d5da0318314c07c19f2c79ecb9a7843ee430ca58072",
+      "relative_path": "mesh_hits/000035.npz",
+      "sha256": "58925bf9449e9a04132b544ae278a52d1134bdc66ee975310f986107ecfa92b2",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000035.jpg",
+      "source_image_sha256": "dbdbdbbed21f8689462386dd2a12516be2864e10cb9865b5918f24286644d231",
+      "stem": "000035"
+    },
+    {
+      "camera_identity_sha256": "0fac3c5def02192c21fcfc6e0a458cc8f01910812adbfe12f3dbb7c385fd247e",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000036.png",
+      "mask_sha256": "6cff6ad4b19db8a685ff3f0516539cd6a936ef61abed062850d6f38667c68baa",
+      "relative_path": "mesh_hits/000036.npz",
+      "sha256": "77a27ffd992486299435be9a04a6748d746d46c919d122345e980be985a63ac8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000036.jpg",
+      "source_image_sha256": "a6828a51f767d11f958450d1f785d36287274c4bf14f04749f990d135be42dcd",
+      "stem": "000036"
+    },
+    {
+      "camera_identity_sha256": "ad595f2abcfdd4d5b9d763ab0dba03c1dafe5392af019351f1eae20bed5d6821",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000037.png",
+      "mask_sha256": "f7fa466f31c8291e37c2df7c344f8afa2b7d45c7002c2933f6f6ba67de0a92e1",
+      "relative_path": "mesh_hits/000037.npz",
+      "sha256": "a5445df1dcd5f7a4f2bbbdc5a9f6445d44ef5dc7839c57b8ea0bded9bc2cdb28",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000037.jpg",
+      "source_image_sha256": "ed7b6f27e3ab66d9c2c21b50c6ba88b70ba7551851b685e7c213822b74332026",
+      "stem": "000037"
+    },
+    {
+      "camera_identity_sha256": "037a2a2c58c3f53c51cf919ec733e190da5e64224d0b2bec87728d4008da3528",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000038.png",
+      "mask_sha256": "ab9d41bf9e768b5fd56622fe5b7f9b2fa01c1a699db0c8eec44288bcf3dd80d4",
+      "relative_path": "mesh_hits/000038.npz",
+      "sha256": "f4787da3639f7ef1799f4ed38a4a610564b1e201f69d402b6a38288562cecfd6",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000038.jpg",
+      "source_image_sha256": "7511d65f905a38c758b472540a1077b818eabd33af7afc041556f0cd1fad888b",
+      "stem": "000038"
+    },
+    {
+      "camera_identity_sha256": "a74faceee400b12d75735e6008c46919f710691a145da4360478ff773bd1beb8",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000039.png",
+      "mask_sha256": "8f3ab81b34b91cac2f9a34a48b4f240b662499459535937f99af71d00bade56d",
+      "relative_path": "mesh_hits/000039.npz",
+      "sha256": "81bea1d25022d3baf91cefa28867ccd0b217ec3ba9c2ea5b6f2d7356544d67db",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000039.jpg",
+      "source_image_sha256": "27f480554bce30ce0572011161f76fbe17b3dba6fd4da5a6e05e40400ac76943",
+      "stem": "000039"
+    },
+    {
+      "camera_identity_sha256": "da612380fa2beed5cf9449641d4e383c654814aceb395607945b629a2d6c2643",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000040.png",
+      "mask_sha256": "ddd5bd7901f3a0b922ca5f7439e2752a3ab93093c69a56c8afb8173611fcd60b",
+      "relative_path": "mesh_hits/000040.npz",
+      "sha256": "77b3df6f9630cd7cc1ab2cf23e87336b1e789c6dcad75d675eeba0db9bde827b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000040.jpg",
+      "source_image_sha256": "9e736be151f8f012cb8b47ed3e88af7a8fca2ef1ae04aecb50026fd070e78d3f",
+      "stem": "000040"
+    },
+    {
+      "camera_identity_sha256": "ca8847122ba3c8d482256006d0edca04c23b326d9924a967caf5bfa7d43bcd47",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000041.png",
+      "mask_sha256": "4fca0c30726ba8143389004784f6791884843df5da55b12a13fe184894c03ca3",
+      "relative_path": "mesh_hits/000041.npz",
+      "sha256": "f367b2ed61f14072b24de101bd5d52e0e8ba5185cac04cff4ed558a95058ddb4",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000041.jpg",
+      "source_image_sha256": "f6f163749edf1947594cd31f6e5bc0491724b6f7ac0964c3819ee894f74ed217",
+      "stem": "000041"
+    },
+    {
+      "camera_identity_sha256": "bf13aab1a39f6eee2647a8d855f6cf6f09a9f9b67822b5597cedb4503705a531",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000042.png",
+      "mask_sha256": "d58c0ed2efcfeaf7683d72a67fe985de4d3dbae4c2f29cc9f677159efed30ddd",
+      "relative_path": "mesh_hits/000042.npz",
+      "sha256": "e50c8e930df6ba5c60562a9a7ea66cff5a64722f7c8d1aa6e948be0618c8142b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000042.jpg",
+      "source_image_sha256": "53928f821758dc889e669966c16193e5fddad0ca7252cd28599faa5ee76132d1",
+      "stem": "000042"
+    },
+    {
+      "camera_identity_sha256": "c52b2476ac4d7287117e8adaeb9cfff69b0ab1deef15fad1e60fcde8d82c1eb4",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000043.png",
+      "mask_sha256": "8e0b7755ba56fbdea9a09e0df525b518273b2a61cb520af891280e8be728c1b8",
+      "relative_path": "mesh_hits/000043.npz",
+      "sha256": "a3a5321b4fec2833779737b465b53506fc85ec4e6861b122de55cd7666204af1",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000043.jpg",
+      "source_image_sha256": "0cf3823281021807a5e5075d9412102c9b581f811816332f0ee2f22f52634c0f",
+      "stem": "000043"
+    },
+    {
+      "camera_identity_sha256": "640512c2b812366398db08fa8af7321ed7bd1d8a00826bdcebff45710195e111",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000044.png",
+      "mask_sha256": "0cd1a957adb04d6b34af61c24f8ce1dfdbcbdf2810e6a1aab040ffecc20fbdf9",
+      "relative_path": "mesh_hits/000044.npz",
+      "sha256": "983c1ab20ecf709cc9c28eebd1b7176643718f0820f94decf5730d952cea7663",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000044.jpg",
+      "source_image_sha256": "cdd815cb92ddfd31cd1b72e64dc1d21e77b1a71819c6e8b4fb8a77ead47c0dcc",
+      "stem": "000044"
+    },
+    {
+      "camera_identity_sha256": "78b1103ec39687219ee31b271119fdb634dbf747f89dfbef4f3d5626c625b33e",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000045.png",
+      "mask_sha256": "dbec69528b3178fde8a5de863d5739714f298fc7c2ce706abdef388897a877a5",
+      "relative_path": "mesh_hits/000045.npz",
+      "sha256": "1267d0da53721dc928421e30eadc8c6fc270368d96827ddd2d06657501a0252d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000045.jpg",
+      "source_image_sha256": "fa13d3e08148e6c373779cd523fce1ab85b07e7be0d327f69fa69c23a54c6b88",
+      "stem": "000045"
+    },
+    {
+      "camera_identity_sha256": "8c286812be3e5b303a2d53af6e3bc37847e8ebb9d94fc153b6de6b9e4bacf3e7",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000046.png",
+      "mask_sha256": "8612507d499f7de18c47dde7885e8d9e705184d67af299edce0576ed4edaf87c",
+      "relative_path": "mesh_hits/000046.npz",
+      "sha256": "35729b700d471ddbcf6ae4133e98f456c1564f5abbc424a581a191722fde6467",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000046.jpg",
+      "source_image_sha256": "d61854e812d22820a14654e7b33e40f9895ded6383c262f7dd667a5505b55b5e",
+      "stem": "000046"
+    },
+    {
+      "camera_identity_sha256": "e28b09c0f460df2af96a4666d8662e56deab27da3a7359101594fc72cfd81ae3",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000047.png",
+      "mask_sha256": "29018800e0037ec7b46bd0b108afbd99efb1f8690cf79b44339f9eb9699443b3",
+      "relative_path": "mesh_hits/000047.npz",
+      "sha256": "43fc8994bbd14800629846d101fcff693c4ba80659205704464655733ff2db32",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000047.jpg",
+      "source_image_sha256": "946a88fe0c8354c56ff1d185d97ccd1787698cc0765d9b1852c99b72f2fe86e3",
+      "stem": "000047"
+    },
+    {
+      "camera_identity_sha256": "28e025e19e82caa468205fd7bc0a21b161a116fa4bb42361b770d247eea212fc",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000048.png",
+      "mask_sha256": "4a99f06d0ea99effbb87fdaf2130cf88d1c898319fe4a5c38b8ef9186d004f68",
+      "relative_path": "mesh_hits/000048.npz",
+      "sha256": "5a23fce9b5054ae4922ff988e58e6082269700e1ff43c5381371c8d2fef8bf26",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000048.jpg",
+      "source_image_sha256": "3950a258cbfb6683f954195f664fa2ebb1dae41a473df66eba1e643ee45959f8",
+      "stem": "000048"
+    },
+    {
+      "camera_identity_sha256": "96e4a5797e673b8cf2ff1babdc37b6fb2ef9431a38fe26389a55a83d1f06a96b",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000049.png",
+      "mask_sha256": "5671bc5e122ad929c95de73646985df416e25ec5ef58dee5e6dcb49a42d6034c",
+      "relative_path": "mesh_hits/000049.npz",
+      "sha256": "0737123ae9b52d40016e4a5862900c9e7661bfb84618fe632800f0e439863a00",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000049.jpg",
+      "source_image_sha256": "024454b4a16099d71a923b871a370bf29cfaa2ac3df2a34f475d8373c2a11f7b",
+      "stem": "000049"
+    },
+    {
+      "camera_identity_sha256": "202fc1f9c158fb829fb4b408bbdc5e75c12bbbb680c1527c3e1ce2c2e9a55906",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000050.png",
+      "mask_sha256": "a0e1d3fe97cc8f6a558025cdfffb2f0a26cb08ad998fa3833fe84afbbfc2e276",
+      "relative_path": "mesh_hits/000050.npz",
+      "sha256": "ac500cf17a2e415494f18808670b2e8b37e7d0c3a0a9a2cd509d9323d339a92e",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000050.jpg",
+      "source_image_sha256": "88940135c41aa4a2620802d58f7090cf11948af20548ad1e523277e5b93b47e0",
+      "stem": "000050"
+    },
+    {
+      "camera_identity_sha256": "29cac383dc69fee483e7a99eb68e36e94f6c5b286c3c16b767d68fd6eb4e4412",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000051.png",
+      "mask_sha256": "7249219468649fa1ec44a42127d8bdd4777dd42f83481695acd75605ea74322a",
+      "relative_path": "mesh_hits/000051.npz",
+      "sha256": "c290e4a2dfb84b2f53acf643efcc913e35aa27446d24aaf97e429db3665bbee7",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000051.jpg",
+      "source_image_sha256": "6778db2fff0de07c77147a93db4cfb91d0c349613fd25be46c0180959b1bf714",
+      "stem": "000051"
+    },
+    {
+      "camera_identity_sha256": "844433f67604af31869a1c3746457ea8e37f133e485228878e769e523e3fb2e5",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000052.png",
+      "mask_sha256": "88541e3139730e2819c63400cf712bf376386801b1c4a136948ca1b9ef5e3b6b",
+      "relative_path": "mesh_hits/000052.npz",
+      "sha256": "5179095a8d911bf47f5bdd11de0de61885533b7bf01847f99737c2e6c2108b50",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000052.jpg",
+      "source_image_sha256": "3ef9d004c587457c6d860e1848985d7b4d3446276f3db58f480f41a00d327913",
+      "stem": "000052"
+    },
+    {
+      "camera_identity_sha256": "346f4424c88a5e26feeaf3b90336528ec95d0d16ab35c5c5f6d8b737f70ccfdd",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000053.png",
+      "mask_sha256": "1d14cea60d8a8b4dc2288985febebe1e89ce42b5624b37280e46def18e08f865",
+      "relative_path": "mesh_hits/000053.npz",
+      "sha256": "a873df471caedea85a97f2bafc24d1b0bde76b8fccf1b3a7915a3523a7c5b864",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000053.jpg",
+      "source_image_sha256": "b2cb3152746ad7b0561beca5817f9a2910c517e8e398bdda6319e6f9d6bc4a48",
+      "stem": "000053"
+    },
+    {
+      "camera_identity_sha256": "1a936368c7969ef99851572c02a2fd64642a6c6b3c0dd5c77bf05ce39334902d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000054.png",
+      "mask_sha256": "57d885adc0abbfceac3735808dd3552885537d6bf5ab0453efa3dbca662d7162",
+      "relative_path": "mesh_hits/000054.npz",
+      "sha256": "6e9bdd34f0c1c706857f0419770ccc05ee9a6c1d8d661cea1d3c40e87d4ddb1f",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000054.jpg",
+      "source_image_sha256": "64fae0dbede3285cd2bff062bedfa7a79a1cb578c4924b394344778185819952",
+      "stem": "000054"
+    },
+    {
+      "camera_identity_sha256": "7c3fb0a4c1ff1e6f06be5e7ab1c82d9a77214c0ff7a0186b81d4b72b42c8c7aa",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000055.png",
+      "mask_sha256": "07d8a3669751c2af74a78f1d60b1e59ea823e34a1f58e2f6f4e6822b72f6d0e4",
+      "relative_path": "mesh_hits/000055.npz",
+      "sha256": "fdb2224ff95899de2e1e07a239d689a62a1a46c8f7a6a3d2a855fafcadac6a93",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000055.jpg",
+      "source_image_sha256": "0c363074e2bce6fe4724ef3434be3d528e76d71c60040c4263ba0cadb11b874c",
+      "stem": "000055"
+    },
+    {
+      "camera_identity_sha256": "f857b78cde360e6f7355f9b1153fde5c4f79fd786c710ae354e71725d1e592ee",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000056.png",
+      "mask_sha256": "9961a930361b24a6e3ce7fbeeabb97681c30349e7bee063331a6ff621066e60d",
+      "relative_path": "mesh_hits/000056.npz",
+      "sha256": "c7adebb94309e9ea3876918d9560d57302b294a0da7b5059bce3082402368dff",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000056.jpg",
+      "source_image_sha256": "c775e0c25ca536109d6d93e7e96dde50a1ebdea273631da1e1c6da39b5203923",
+      "stem": "000056"
+    },
+    {
+      "camera_identity_sha256": "e873ca5cd741738a9e7c8bd0480cbdaaa3f2cbc73d0cf1b575c120160190260c",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000057.png",
+      "mask_sha256": "fd4fe2df7e2deefbf7e108ddf6d1be4c779e61739ec65fe169543d83ffea93e9",
+      "relative_path": "mesh_hits/000057.npz",
+      "sha256": "82e04f69059e838ec2880dd09819032ddcce80735dc79342924a998ea97a4438",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000057.jpg",
+      "source_image_sha256": "62738a648371cd325d189fe08621647f4d077fc677b81b8de4c905c88a6b09f4",
+      "stem": "000057"
+    },
+    {
+      "camera_identity_sha256": "c4be1447071bbbf307dc6b0f482308432b9a9be085af8ad22dec1b22bf6d8375",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000058.png",
+      "mask_sha256": "2aa65c1dde27686ffe3e5dd2c0b56ccf5eadcafb63ea3d2f6a097f3c44444076",
+      "relative_path": "mesh_hits/000058.npz",
+      "sha256": "d9ebf91a9fc1ea64a3164d711fa6a78485fd2d41965715a286695f1becf2e122",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000058.jpg",
+      "source_image_sha256": "e3d2e538feb1c771f842d2146f2ad2e2c298269d0c50ed7167a32ecf23837b1a",
+      "stem": "000058"
+    },
+    {
+      "camera_identity_sha256": "d0762c90e63c34e547fd51e23781901f2ace20e7e0566480fc2e776ef447b64b",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000059.png",
+      "mask_sha256": "8347c28b93646e757053fbcb5ad2d7dcc9bf2fe1383366ad18576c77920229e3",
+      "relative_path": "mesh_hits/000059.npz",
+      "sha256": "1a66014d7c13dc95bd8cac2fa46f32a2e49cec6b350f34f315239705d9297a52",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000059.jpg",
+      "source_image_sha256": "278cbb1346653b39068118e6f05fda08243adfe6eb2cc0b3de8f537db5e747b7",
+      "stem": "000059"
+    },
+    {
+      "camera_identity_sha256": "9356a9767f0b8c4c8886ca02cb17bf5e245da0d14534ed464995367c00efbfdf",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000060.png",
+      "mask_sha256": "83b5f76964f5261c953061f51b24dd1c3b4741642f31cae2e848bb32059acdf2",
+      "relative_path": "mesh_hits/000060.npz",
+      "sha256": "d2ab1dee28ff77a324a34c0ec3c6747999b2775b6b34c23b49d44e948910b94b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000060.jpg",
+      "source_image_sha256": "ebd3a7623fbd148e02729df28c6f312e2a38e29823e83f1405c6a4d2b45f539c",
+      "stem": "000060"
+    },
+    {
+      "camera_identity_sha256": "de917f8d286d90d062966b99ba5cde986e19b06105223a34e7650b0f6deb9962",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000061.png",
+      "mask_sha256": "b70ef543d32b1c0c2879401e6801c777ad5d9a377eba67415b218ebdb400198e",
+      "relative_path": "mesh_hits/000061.npz",
+      "sha256": "9882016b0fff1500ee871929e81c237cf6858de5552853f19c2ed8bb2cf538a3",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000061.jpg",
+      "source_image_sha256": "e90de0e0dc3ca635de822db857c361c7a9a7cfbf48f9b1689aef117fb6ad6fd5",
+      "stem": "000061"
+    },
+    {
+      "camera_identity_sha256": "8382a4b631ae21b0e1be7b2742b5cc11d2196af323ebd1fad71915cefe83b5e8",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000062.png",
+      "mask_sha256": "f4ff4c9518cc1e96224640453fe91a23c12dfb2153a54838d9033eb632da1543",
+      "relative_path": "mesh_hits/000062.npz",
+      "sha256": "5dcc04f93eccb95a198334c6d4730211e345896628b1ec617fece598684b74ea",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000062.jpg",
+      "source_image_sha256": "062ddca3904ba5554445a3e82ef9d7aa427e48d3b4fad4088308f807023bf8d3",
+      "stem": "000062"
+    },
+    {
+      "camera_identity_sha256": "0c079be979645a6eaddb598331a4cd7b71f2f441184fd3564da1e06949873c6f",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000063.png",
+      "mask_sha256": "a6f8cc0a151cbf71d1ec61013b107aa927329afc437f8ae251524c8ba5ca6665",
+      "relative_path": "mesh_hits/000063.npz",
+      "sha256": "885c2ceea8149e44b98fea1f38355a10eac97ad30be42acc5d4c710baa589686",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000063.jpg",
+      "source_image_sha256": "29c35dc6925bdf544053b5f3e6e165d99b9010e4419a06b851f8f7ba15f6051f",
+      "stem": "000063"
+    },
+    {
+      "camera_identity_sha256": "27b6abf90544e4274036385ad71b56f1bdced7f3db73cfa318653c2b6de9faab",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000064.png",
+      "mask_sha256": "b6996147a955f83f536601ecc1a691346b924c06b70d478cf09edf7e220a0558",
+      "relative_path": "mesh_hits/000064.npz",
+      "sha256": "680900c0d74367ec69f5d70e0defcad3f4a68e10593fe0a28ae81d1e5509110d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000064.jpg",
+      "source_image_sha256": "1ef4b9b3fdc70a456067498a4d7e235de6ee4f0a6f4352f349815e8802f7f6bf",
+      "stem": "000064"
+    },
+    {
+      "camera_identity_sha256": "b49d74f779d5e8e72d75668de9466547288356a27adb8312901b03eda000c970",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000065.png",
+      "mask_sha256": "9adc4ac02b534ca5fd71ac8aef39de768fdff5bb3570565c3094f2f5f2aa043b",
+      "relative_path": "mesh_hits/000065.npz",
+      "sha256": "d12dc27e38e374b3f7f0b8d2fa6a2afe86b042a7ab5959e8a9879b6c72796725",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000065.jpg",
+      "source_image_sha256": "5e8c52044201674aee56e8c54f5436e329f91682f459acd3f3439d0223038859",
+      "stem": "000065"
+    },
+    {
+      "camera_identity_sha256": "a416094cf645da74f16dbbc4cfc143f49ab377848020dd709c54f9dfd42f6ae9",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000066.png",
+      "mask_sha256": "a71dbe3a4d61e3b2f6c331975d12b7c37d50255fdb919a70b71d0e4fb4c85297",
+      "relative_path": "mesh_hits/000066.npz",
+      "sha256": "982aeb9aca6cc72fede54d7adab1f3911860cd1c42f4cb545e9a38ab8f70a979",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000066.jpg",
+      "source_image_sha256": "e2379742c9465602f73bc1f2d4954b12b58cefe81aa21d4caa6fd92ae84ab542",
+      "stem": "000066"
+    },
+    {
+      "camera_identity_sha256": "1f5f4cd76e335801b1eb01bffcd00174a174a4995452575bc0958f0779a1cf12",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000067.png",
+      "mask_sha256": "e194d1128d71198a816882251734c53bf84a0363736fe2ff345fbbc1cb6aa055",
+      "relative_path": "mesh_hits/000067.npz",
+      "sha256": "64365b694cabeb4a22d20dc6b4f015796b19c7180e56a6dfe95181aa36e9caac",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000067.jpg",
+      "source_image_sha256": "b3c682387b8ed6a86120117e39464c7bc37c83ae4d91ccd090abdd14f15fd3db",
+      "stem": "000067"
+    },
+    {
+      "camera_identity_sha256": "d321d11fecad8ae0e57f3477b6dc94ee41946cb14306b60837f29c0896769ae8",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000068.png",
+      "mask_sha256": "5b4447ac2c7df9445b5ac45a10219036e732255bf591b677266e3e38da124125",
+      "relative_path": "mesh_hits/000068.npz",
+      "sha256": "c8e88ef81dc538e20c8b3472fe030bd973ddca021ebbed1c63b24b1f3e3a6ce5",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000068.jpg",
+      "source_image_sha256": "e3b8d8d328750d7c558b4cf9e1b0023fa4daac238ddb09d072966e9e919de0be",
+      "stem": "000068"
+    },
+    {
+      "camera_identity_sha256": "4f9d1996e04b05252e8212fbc5c1939d44faf3160dbd31d23a86f4787d469e99",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000069.png",
+      "mask_sha256": "3e145a2c86b6e52db3c5a97f1faee659ede723d3e46c5e1eace37f50ca66513d",
+      "relative_path": "mesh_hits/000069.npz",
+      "sha256": "5b0e80ca72aab2f8b1f57105c7b472357aa947cf5917df5ed1044f8c5413f4ca",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000069.jpg",
+      "source_image_sha256": "a22361dc6be9caa3407c046564b3a5826c4c4051b63412016e5ba56a21612691",
+      "stem": "000069"
+    },
+    {
+      "camera_identity_sha256": "7206e89983ecb5c8f9de6e32981c1db380a64abdab46164a1a1ceb9aaf0a7850",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000070.png",
+      "mask_sha256": "4290fb479cf177fd54849ca7707680b356c664a5aa3695e88dc4d872660f146a",
+      "relative_path": "mesh_hits/000070.npz",
+      "sha256": "eb350408d5fd7481535487a0ee073539cc09111cdfcfd45f2c29081faf6351c2",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000070.jpg",
+      "source_image_sha256": "4bb3ec4b86f446cd19ad21ce990d25d601d21bfa6dd3b2003e5eaabdb9043f5c",
+      "stem": "000070"
+    },
+    {
+      "camera_identity_sha256": "6d19094fba2c75975c65b06539cc2d6338f4efc8542cac9c2d2eefacc5aad909",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000071.png",
+      "mask_sha256": "a0ea4b657d1e97f10d6bb6a2c98a3e476002ebdd50d0d1b977ad0ad97f39300d",
+      "relative_path": "mesh_hits/000071.npz",
+      "sha256": "955275a0dad905aef52f6ce8235655f94e7ebe8cdf9fca8070f5cb8efca92eeb",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000071.jpg",
+      "source_image_sha256": "e81bdd2e254367bc9593a7ca8c5b79d390976d08176d767f973a7804ed5af38c",
+      "stem": "000071"
+    },
+    {
+      "camera_identity_sha256": "c6075b96e0b9c98666f8aa7016cf4923e9c66063fe3c90e039f05c75bc63e83e",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000072.png",
+      "mask_sha256": "1474d75d1f0e70ab840eb1b48d7594213e6d2a8382ce5e1503b7dac1f2d7d3b4",
+      "relative_path": "mesh_hits/000072.npz",
+      "sha256": "139bb53aafaa1448aba7747388760cb35278886e87dc2b3141c8a2b3f4f0c914",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000072.jpg",
+      "source_image_sha256": "280b71b2b417fcc007d28d2734f455880a8ee230a3bf9328d14ebdf62d8adaf5",
+      "stem": "000072"
+    },
+    {
+      "camera_identity_sha256": "d4c09f3aedaaada9bb309b91e8187faef063615ecafdda24fdcf093c227ec403",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000073.png",
+      "mask_sha256": "d4a53414b1fafa129ebbb6d4d7e28ea1906b86eda06d0c17c0002bb82d11d7a9",
+      "relative_path": "mesh_hits/000073.npz",
+      "sha256": "d45f10b8e44fdf8defa0511dd5603c40fc4ee29200f2e8a067839bda73a0c072",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000073.jpg",
+      "source_image_sha256": "f5aa49166854a9fb8d3f9dbab302a60a43928b6472f7a91a46a98a27a74c36ba",
+      "stem": "000073"
+    },
+    {
+      "camera_identity_sha256": "b2acc87525911690a9433870e45c6a6d2a5a8692784cca7f8819d1bea20e13d5",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000074.png",
+      "mask_sha256": "7996287da2ceb21d68d38ce657b322983b4608bc63cdc2cfd139837aef73122a",
+      "relative_path": "mesh_hits/000074.npz",
+      "sha256": "adba3c908bda5b55b83480848e475ba0aebfc9563f6b5c14ffa22f836dff9a62",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000074.jpg",
+      "source_image_sha256": "f4ab37126c0080b178b4e2c9d4ecd615149207c0e3f19a81359940aba5eed683",
+      "stem": "000074"
+    },
+    {
+      "camera_identity_sha256": "0b1d79d61f384f5924c856a64c9376de6af089487471eb45750718120644308d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000075.png",
+      "mask_sha256": "cf072f11dab5a7d9b480524574ac843f697d2e4160b957656f7fdf95d5f4c851",
+      "relative_path": "mesh_hits/000075.npz",
+      "sha256": "06478981d24348634b4d0bb566a5ea7b1e15f6e1e6ef076d056cc0efff4ff1f8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000075.jpg",
+      "source_image_sha256": "b799589b52fd598a96d0372ef88d6d8a9979ac8aa373132c5c5210d142342141",
+      "stem": "000075"
+    },
+    {
+      "camera_identity_sha256": "d6130a60e2c0803b48c2f632dfd5bda3b38a505a81b1c4781bb5079bc395be00",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000076.png",
+      "mask_sha256": "269e7fff7b09b58b7be7a47bbadd3fea73007f31c9b830f1084cb27f85931f63",
+      "relative_path": "mesh_hits/000076.npz",
+      "sha256": "a96da765333f1afe8587a90bc30523695351e7e12b7742df706c3cadb6594cf8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000076.jpg",
+      "source_image_sha256": "7e96fab9910cb1e9772d0b455ba1204310d717345dd759f6ee891129f8a71e71",
+      "stem": "000076"
+    },
+    {
+      "camera_identity_sha256": "45c2cffe510abf8c3dd4101c7327401d186598009fc9d777585220a90cb1f15e",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000077.png",
+      "mask_sha256": "ff0f0a89e463964fef0e57e62a835d499c78839bc86ff512f117b55a5dbefade",
+      "relative_path": "mesh_hits/000077.npz",
+      "sha256": "84b7e9b5031fbecbd3124df9487d226c7caa2fa8b4222904be49c39078f75b5d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000077.jpg",
+      "source_image_sha256": "8c213481eab66abc781a22dfdb28539a9f261132a44ccc6072b0eb4f16e57c43",
+      "stem": "000077"
+    },
+    {
+      "camera_identity_sha256": "d945505b234212fd99b845c92c4d1d35094b5cfd937a040ab579cebe9185926c",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000078.png",
+      "mask_sha256": "608d2531d37def6befa92df45a2de99293e4dd2836e0cb79dc180809e6c14c06",
+      "relative_path": "mesh_hits/000078.npz",
+      "sha256": "f0eba1cf29e690822630f8580862f7d13c3ad15afd81e89b27aade9c9c263f2b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000078.jpg",
+      "source_image_sha256": "f1e08f3a0eab9967fc0bf492292155d3b6550421f6a219bdcd4e619066da4d96",
+      "stem": "000078"
+    },
+    {
+      "camera_identity_sha256": "bdf49578cf3b4b18110003e8cc659eda5116380814721a0065db9227e0a4406f",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000079.png",
+      "mask_sha256": "2ce056a466815e3388b16f132a06e4164a02eabc31b1c8041d78e530bfcb0702",
+      "relative_path": "mesh_hits/000079.npz",
+      "sha256": "6de048f1e7c629d04c9fd27f3225d8cf4aed06de21decca81217e6144d464ec9",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000079.jpg",
+      "source_image_sha256": "6503d76dd97e5814925623377365016c32d87cd2364b02e3ae22d9bdb6034d62",
+      "stem": "000079"
+    },
+    {
+      "camera_identity_sha256": "f4ec94e99a636f1d96fdef8709195b17c1901afdb7522e55a10e35605ad4871d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000080.png",
+      "mask_sha256": "a6242d601c42483f2be00c348d7cf60be2c44cd56d9142ebb7792e8ad3c82450",
+      "relative_path": "mesh_hits/000080.npz",
+      "sha256": "79c92f84b0e0bedfad625cf210044b015fac06f636b441076b8212edd8b5851e",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000080.jpg",
+      "source_image_sha256": "cd85daa3e8147f6b5c74250fccb1a383d5700b4b3f17d8708b5f69c508c6d4e6",
+      "stem": "000080"
+    },
+    {
+      "camera_identity_sha256": "4cfd4bb9a152737e9cdfa8a64915df52e3a02047b53d2c16b816999dd31c2127",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000081.png",
+      "mask_sha256": "a42bb2414ebb94a362676e34b36b8c6f7c5500011cebaf4f29caefa3f03af9f0",
+      "relative_path": "mesh_hits/000081.npz",
+      "sha256": "3d4d5ef0fed7784f5c97327923ab7dddb79c4fc459e4d0b6be562c05357af4c9",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000081.jpg",
+      "source_image_sha256": "294c1b60aca39d4ebe72174ebc69a0eef8656ca74934700eac4b86f4974dc296",
+      "stem": "000081"
+    },
+    {
+      "camera_identity_sha256": "a92261a728c7237f278c95656750bedadb129f5034edc3fcbbafec2ed60d7d00",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000082.png",
+      "mask_sha256": "d037c7d21a1edb7840fc898ce2868d08112237c2b984b45fbfb44ed9f5234440",
+      "relative_path": "mesh_hits/000082.npz",
+      "sha256": "3adc7bb8f5652424d2dc62c5074e350dafc354e77c62c1f3d70a1d706c9aca29",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000082.jpg",
+      "source_image_sha256": "36b8487697568b1571356c0150cb1abba79ba444fd27e917209f54833df4e736",
+      "stem": "000082"
+    },
+    {
+      "camera_identity_sha256": "8121bf0e8c44fb0d24e60b033c8b7a08014eadaffa80d9b8fb4b9eef139c0a11",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000083.png",
+      "mask_sha256": "4cf653deffed79f3ef054f6b7bd1002c77f11ee1aa964756c6a9b15d85884855",
+      "relative_path": "mesh_hits/000083.npz",
+      "sha256": "8cf2dc03a3002fc0bc81da7ee67a925b6acc895b568c1446ee340014bac45a15",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000083.jpg",
+      "source_image_sha256": "3ed23fcdace426aa0fc982456d6caac29ca72331892b80ae40d05c3aa16bdeab",
+      "stem": "000083"
+    },
+    {
+      "camera_identity_sha256": "0c734d8bce948be9e46f7d3e2fe61f249fc031091dfb758ad6b10f786e9907b0",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000084.png",
+      "mask_sha256": "8eeb63ae562c5fce13c4bae29c98e38bdbfd6998fe49835cf875e7bb82b65539",
+      "relative_path": "mesh_hits/000084.npz",
+      "sha256": "4c4285bd64b9b1725f5812017319dd2c7ae061769c8f9205df320fa4457d676f",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000084.jpg",
+      "source_image_sha256": "df7fe039330b6b9f70e4dec65a263c2072a1c83b7959eae7f91aa8a68c1e002f",
+      "stem": "000084"
+    },
+    {
+      "camera_identity_sha256": "ef3377187f9d72b0cd179d8da4e2fa29e4fcd78ef7d516d9baf43f84a0ce0b7a",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000085.png",
+      "mask_sha256": "e9549a66bca843e6848d4e2bca9151fccbce434cf73d164e986df27c820f2b61",
+      "relative_path": "mesh_hits/000085.npz",
+      "sha256": "d83f298e0d7d5da1ea539ff5aa817fbd49eed66fcc16997226079f22473977e2",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000085.jpg",
+      "source_image_sha256": "5797c38af0e072f17683a5579f18d714460bdf0e65a2f7ffae4247539552cfb5",
+      "stem": "000085"
+    },
+    {
+      "camera_identity_sha256": "cbf220561ee41d6045da952acc940e463f9d2c4579aade684ece2763bffb9862",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000086.png",
+      "mask_sha256": "5768a4020df27df28f5f0cbc56060ac48f3a11a7cd94e03502677a72099a9dd7",
+      "relative_path": "mesh_hits/000086.npz",
+      "sha256": "23cbc1b54663ad5fb0e1dc13d13cbdfe2b32161cb57ca43d153b252cfc9938fe",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000086.jpg",
+      "source_image_sha256": "7f617a2ad5f3ffc7868af900e36aa1cd0743d45431784b6bc46a2aa75e72feb0",
+      "stem": "000086"
+    },
+    {
+      "camera_identity_sha256": "4fc9ab2ba7b8ebeec3e8896bee082fdbf9dc55836795f7295a3712af538b8923",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000087.png",
+      "mask_sha256": "f02ea406ac1acfbd6fa203b7ca7ce525108410233cba368a849223ffea92761e",
+      "relative_path": "mesh_hits/000087.npz",
+      "sha256": "3641b54846547814398a6764d925c9daa85024a29fd4ea33a07850846cec1ca3",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000087.jpg",
+      "source_image_sha256": "dc9f9c5570991de68a3bb92c0ca1914b003ac44f16dc568405da6b077c610407",
+      "stem": "000087"
+    },
+    {
+      "camera_identity_sha256": "0fb61330d121708f444b337f8a4bcaa46458cb9380c2ba7ad269544cc48d3063",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000088.png",
+      "mask_sha256": "0c7a64af024355de50bbaeef038038a83cb02524ff1ad06ebeb27313d955121f",
+      "relative_path": "mesh_hits/000088.npz",
+      "sha256": "025ed6e86e5bc08662deb45e7650524af23cec6f00e2807cc01a8425c0a54602",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000088.jpg",
+      "source_image_sha256": "d7f05f432c5bb1e6c705319ea81cc0585c4dda157f09995cb30b5ae17b64d6dd",
+      "stem": "000088"
+    },
+    {
+      "camera_identity_sha256": "ac9aeb65c8d0567e097c992b64c01f2043d926012a5518fbe2be3032557c5fd5",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000089.png",
+      "mask_sha256": "14e6ac06ed3762402700e702acf774675b873d5f7879e1ea6616d719e5571c4b",
+      "relative_path": "mesh_hits/000089.npz",
+      "sha256": "8522225dbaf733155538fd0af7caaf7a235b18da84e86af75e4c362b3482989a",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000089.jpg",
+      "source_image_sha256": "68abf3dbf1cf92e19912d65f378dd136712d5e1e8b06325c4746ccb06e9c9006",
+      "stem": "000089"
+    },
+    {
+      "camera_identity_sha256": "00543c21b800b74c037cf48d79a3fba871463409d4f965857ded771d084e6e28",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000090.png",
+      "mask_sha256": "7c61bb860f52483f41f61ddc1c1c90cc16325bddb823f68a59531bb115744a7d",
+      "relative_path": "mesh_hits/000090.npz",
+      "sha256": "d6596abed9b01266690bfa1764ea6390bf9892b7eb837a966b5cca075065d418",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000090.jpg",
+      "source_image_sha256": "17c5a8fd435344e6839a21d0027a8fefdf898696deb37cdc3dc9c68c17f0e278",
+      "stem": "000090"
+    },
+    {
+      "camera_identity_sha256": "d4b8532cd2883352a03ff5a9ba0f341c4a336e38bd578ab388834453a7471cd7",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000091.png",
+      "mask_sha256": "38bfe0fa5e3ceb60e5b9300c6f6b69b6cc556140742c718d667e8f259e876110",
+      "relative_path": "mesh_hits/000091.npz",
+      "sha256": "65dc9ae0de3f8d65db966b7a78f8b5c90b52c7ecd665ca8dafc1d4d71b3e37c1",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000091.jpg",
+      "source_image_sha256": "a4e4aabf19b42deba93238ea0bef22ceb38668b9f22eb52c710786543ea7c865",
+      "stem": "000091"
+    },
+    {
+      "camera_identity_sha256": "a38bbe773091cefec65495be2c263684293a41c65b8fcd4f5a80bbb8a9c11614",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000092.png",
+      "mask_sha256": "e31c12f318140e57cc9491d2ef6174d327ba6a8c6b23a995c79168f70ca39069",
+      "relative_path": "mesh_hits/000092.npz",
+      "sha256": "58ca5a62543a25bf26870524530e3a0b8da4729e94f407f931e3bb0583d306ff",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000092.jpg",
+      "source_image_sha256": "41b23e6d089092d694abbf979065be6425bf1894170a22b951f1ab8d86d9cd84",
+      "stem": "000092"
+    },
+    {
+      "camera_identity_sha256": "f999f2db0c3da5596f89a7a4495c012c864b09c6073effffcbfda39918cb70dd",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000093.png",
+      "mask_sha256": "0fe00b8f0beda5468cf7e0ac50730b414d0af68e90340039c746b69ede59faa9",
+      "relative_path": "mesh_hits/000093.npz",
+      "sha256": "01f2c6033f7d0cfc08cc164f4e8faec63359725141e990bc0fc7995e498649f1",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000093.jpg",
+      "source_image_sha256": "d119bf425a95ee9e1a078c7d6f31768c3fb2937f260a1d824b8383066d3f7ff5",
+      "stem": "000093"
+    },
+    {
+      "camera_identity_sha256": "2cbd7b1b5f17c7b6150a6a082ffa6d3f9b1496501e17a8f473975de3ce59acb5",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000094.png",
+      "mask_sha256": "6b64ef049dd6e5da85544c7a7368aedcd3bb5531cd15e1d1d9bdb878df24a441",
+      "relative_path": "mesh_hits/000094.npz",
+      "sha256": "9466964bb30ad3fe51b4fd720b2c9afce0745e83c062389737ee6b6599dc5c7d",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000094.jpg",
+      "source_image_sha256": "db10660c8b65a0c2bbc57db6ffc2cc0becb69eb2163cb20a78a83d78638f53f3",
+      "stem": "000094"
+    },
+    {
+      "camera_identity_sha256": "2524ae500ee74806d198585a14a06b64289cd66d0e797cf9bd1f19f968477f95",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000095.png",
+      "mask_sha256": "80dfd299d4a523ad404cb583ae0ad0ecf7f1697747f1c180d7424244c338c674",
+      "relative_path": "mesh_hits/000095.npz",
+      "sha256": "5af4320ce5c78f0ea4bf6832bbda4bc1fcfec7f593703343647481a5fafa7f5b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000095.jpg",
+      "source_image_sha256": "0e4284d5557c65fbf0e0c06fa61f537279450aba3699dc36c1ee16948028d924",
+      "stem": "000095"
+    },
+    {
+      "camera_identity_sha256": "2ebd0c38df04c4dad5fae9087eb4989e28439575b822858a07ed2f521dd834e0",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000096.png",
+      "mask_sha256": "d6d7f93576e5d8ec56875a64cd114a6462abfe2ce0a90dcf5f78c4fb079f9272",
+      "relative_path": "mesh_hits/000096.npz",
+      "sha256": "e5c6e4797413b44efd38e7b96831943cecc82838838fba349201e2e969d5792b",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000096.jpg",
+      "source_image_sha256": "f4075f70e53b7be8114ddaaf32ec5a43134b36d6549a360532fdb3f84318492f",
+      "stem": "000096"
+    },
+    {
+      "camera_identity_sha256": "1e7386c19f1fdc328f8c9dd8042a64ba8d8cb5776059fe5380f7e4962dbbcd94",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000097.png",
+      "mask_sha256": "1767fb94dd8e962c1b1082c4aa686d6bdee5c5b4fd4c1e008c8c7a5e68dc3929",
+      "relative_path": "mesh_hits/000097.npz",
+      "sha256": "2a09c15e95af9fe1f07b6de0803053c8810e189203d7bce690bfcb20a4d07da7",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000097.jpg",
+      "source_image_sha256": "a298bb3df9fb8f68c8fb95d0e358b9863288b45f0ee322829e1ac95d2935fd1a",
+      "stem": "000097"
+    },
+    {
+      "camera_identity_sha256": "91adb2f7169b8b923328e6dbd18559b3ee623be818b059561fbee8d9490c473f",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000098.png",
+      "mask_sha256": "519001bceafb639943491af938956ec74303fdfb294e9d7d0268504f88dd4fb9",
+      "relative_path": "mesh_hits/000098.npz",
+      "sha256": "f53a394e79c3f2fb816e080ee300ebc0ec700dbc32be4a321de806dce06a1e2c",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000098.jpg",
+      "source_image_sha256": "180ba1c197552faa1695fdd0260ee58b8dda56a4284f791703919e68128a836a",
+      "stem": "000098"
+    },
+    {
+      "camera_identity_sha256": "5b62053da193d21d43c3c59032fbcb7a541096f2a42145c7dca72c774e6b033d",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000099.png",
+      "mask_sha256": "9a65c17a8fc4fa87b5526615a92e33f6c37a0d3073ffca7e34f9a202f1dc1d38",
+      "relative_path": "mesh_hits/000099.npz",
+      "sha256": "ca940a520896b2bdc61e6609b144cf4cdeb37517a877972d20a8060596e4c150",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000099.jpg",
+      "source_image_sha256": "20fec725f42024fcbb2e4a0028ea2708ca5ebf106ae23f55c0868f7f9884fdbc",
+      "stem": "000099"
+    },
+    {
+      "camera_identity_sha256": "2d54aaa392603b5da398a86be3dcc52552d61e3cfdd55e646730859224665cba",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000100.png",
+      "mask_sha256": "89a6d219ba3fac35162033f7daa2bbb771ff1b67ac41e1233226352ae69a105c",
+      "relative_path": "mesh_hits/000100.npz",
+      "sha256": "7ccaf21bd5205b638a5f8357525a9ed910d32be427e0119fad5e62fa5b149ecf",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000100.jpg",
+      "source_image_sha256": "431ee2c51d64c4c2f8c77b0536eebd7b6a8f8e308604aabbe796d42f1b1b226d",
+      "stem": "000100"
+    },
+    {
+      "camera_identity_sha256": "f63afe8ee5cd1d7201ff04cab064bdfd2e5025c64ac4d9d3df60b54326f63e0a",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000101.png",
+      "mask_sha256": "7305789c3589c523c3bb234f6c705b3c047357fc75383fb3b4869f33c2975444",
+      "relative_path": "mesh_hits/000101.npz",
+      "sha256": "caa45b48778e730cbcf2d24b75f7e20ba84a8cbf402224ada3aa1e5b4cde99c2",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000101.jpg",
+      "source_image_sha256": "5a7c4c6f56beddc9c19f26a87173f161368d1642f3b84a268e5fdab4bfc2a32a",
+      "stem": "000101"
+    },
+    {
+      "camera_identity_sha256": "87c5105e8cb0b94cb026a645182608b3069b44473d77d4f485137b98d329afc4",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000102.png",
+      "mask_sha256": "0a642b03bd143a62ebddec49ae4dee0a21143a3fea46aa73b9471a50ed3bc9ac",
+      "relative_path": "mesh_hits/000102.npz",
+      "sha256": "72216761ffec1b0a760988c0e0e1d5ab80bccc7c9239367b84138ff19596e7a5",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000102.jpg",
+      "source_image_sha256": "f9fa19498bde58b0cdfe736e3e6baf5a30ce068cc804aafef94518ab6317eb7d",
+      "stem": "000102"
+    },
+    {
+      "camera_identity_sha256": "d91a7f3299df0d74644ec243b37a2f0be9085c01e706270d21165ce9cb28df28",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000103.png",
+      "mask_sha256": "91b91d8c13bf320b8ff69a67cdc4e6a60cb3d9ae2d1801125e8f57b143fe3f05",
+      "relative_path": "mesh_hits/000103.npz",
+      "sha256": "a1cd8fd5f3037bb07247ab08a13f66b81a0b11ecc1033ff2f5ccdd48563f5bd8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000103.jpg",
+      "source_image_sha256": "f5a8398caf36498a200173ede490a550fed1e16c2f6629b0a28753a02f6d619a",
+      "stem": "000103"
+    },
+    {
+      "camera_identity_sha256": "34d5972b5a03cb0ffb39c3348b88ad578d72fd39222e2ed48a90275c14724ff6",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000104.png",
+      "mask_sha256": "afd53f57354f561667f33f506a0317ae1b2a5af14b7600194e6cf602756fecf4",
+      "relative_path": "mesh_hits/000104.npz",
+      "sha256": "0ce711bf9652be1ef5ade3d97f44674dce80089cb74c73ae284d1b1660a6e464",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000104.jpg",
+      "source_image_sha256": "cfe4f28324d05cc0e1d3513c54d0b0bbbadfe8949ba38ce214a0db2e248dcaf1",
+      "stem": "000104"
+    },
+    {
+      "camera_identity_sha256": "e9a3f36a6cf5b75d5b3d6259fe62156f990b853e20ecc3f39dcd6f77f0558ee9",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000105.png",
+      "mask_sha256": "442fd55258c968a781873e5ccea26d5a57a9f7059e1146decff69a177385ecd1",
+      "relative_path": "mesh_hits/000105.npz",
+      "sha256": "34280e70e2ea4a73af1a23ceee768adfdf5445dab10bd50fc0e2952f9d58deb4",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000105.jpg",
+      "source_image_sha256": "e7eaa68b7d978a08cae189fcbed0a3850900709d4a790c2c9d1ba0d3d64c36b9",
+      "stem": "000105"
+    },
+    {
+      "camera_identity_sha256": "6fe76e63af1fd4c40085e9b0dae66d24e963f949d324bf58ccf11174e285ff39",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000106.png",
+      "mask_sha256": "33ead2751a7a6db03f2b4e2e75481fd0d387499bbecf088989a52e8e25c47c72",
+      "relative_path": "mesh_hits/000106.npz",
+      "sha256": "abed0de48c442ef55c4738b4799b7a48fa56598173a2f5f128495edb475e0580",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000106.jpg",
+      "source_image_sha256": "71812d38e75c824f2d59ed98485c0ebb1b2b2b5dbec2a15b06c1838c220bac60",
+      "stem": "000106"
+    },
+    {
+      "camera_identity_sha256": "7f2d05bb62259dfcb95320c9561411ceeeceb509989a4b2738c66ef9a3b8b218",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000107.png",
+      "mask_sha256": "bc26978eb45f6350bac121fafa2f40e09d0fd47e0f14e6b59d871f7df1c778c7",
+      "relative_path": "mesh_hits/000107.npz",
+      "sha256": "42ad0cb3aa8b1ebf47aa2fdf99a34c5504fb16145bbe3f8cba8f22c26402f1cc",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000107.jpg",
+      "source_image_sha256": "cadb4963e4f70764f90badd457545a1a64d0753b27d30850a936a0c2d742c31e",
+      "stem": "000107"
+    },
+    {
+      "camera_identity_sha256": "cc030f13b5cf993902cbc1e5ae71786a642842c5fb2222777936d4837dae96d6",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000108.png",
+      "mask_sha256": "930c764b0b4266491316cee9324a70c2212a74bd123dde947e9186eba5cafe28",
+      "relative_path": "mesh_hits/000108.npz",
+      "sha256": "7a11b3aad42872d8a9006f02ff90d1a5e375b891d0c29c3a1e6c4637efc0e62a",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000108.jpg",
+      "source_image_sha256": "9d463cd29b418c3ac55029fed021779f1f82934a2e3f156092f910f3872cbec9",
+      "stem": "000108"
+    },
+    {
+      "camera_identity_sha256": "089e9c6056e59defb1337c9461ba5c9a84edd4b8e69419d94550902dd6c4614c",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000109.png",
+      "mask_sha256": "d3cc3fb8ea9366db788890b25fb4398d3f4c05c6afd6d7c2538103a45e769900",
+      "relative_path": "mesh_hits/000109.npz",
+      "sha256": "b7b96b011e6782eae864d5e4fbd111e47ee6dafae2981310c7fe6d8e92d5666e",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000109.jpg",
+      "source_image_sha256": "6fbd5955a1aaacf8f45fe371dc2833df77ea99f51b19d907c89a8b9c16edb92c",
+      "stem": "000109"
+    },
+    {
+      "camera_identity_sha256": "48920fc3adb05308a7455be2af02618908e04fb03fadc12325bafbcff2b86dab",
+      "mask_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/000110.png",
+      "mask_sha256": "4c4220524c97a53c190f6160a1cef99209113d9e9879c55109082cd78d35602f",
+      "relative_path": "mesh_hits/000110.npz",
+      "sha256": "84c447c6f79b3872c44abae1c5b9e4e4af0917e3ba62374e7bea8988a9dccaf8",
+      "source_image_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/images/000110.jpg",
+      "source_image_sha256": "27acd7f071027d5dea4dae38b935be1619bba6c5583bea9e3c653c8a08e5ec4e",
+      "stem": "000110"
+    }
+  ],
+  "cache_schema": "rtgs_stage_c_mesh_hit_cache_v1",
+  "camera_identity_root": "/home/hanglee/\u684c\u9762/RT-GS/output/stage_c_tihubird_c03r8_g15000_mesh_audit_ks090_v2/raw_views",
+  "code_commit_before_release": "5cbb6a8951d1060dca89cc1f2308c0554429f634",
+  "creation_time_utc": "2026-07-03T03:05:24.491980+00:00",
+  "cuboid_six_plane_prior": {
+    "assumption": "data-constrained six-plane glass-enclosure proxy for TiHuBird only",
+    "axes_columns": [
+      [
+        0.5599469370141394,
+        -0.8265440962902788,
+        0.05730867836698211
+      ],
+      [
+        0.05199574785911759,
+        0.1040891718900534,
+        0.9932078767809961
+      ],
+      [
+        -0.8268953198156674,
+        -0.5531639008313266,
+        0.10126119140132517
+      ]
+    ],
+    "fitted_lower": [
+      -1.9538378769722744,
+      -2.6100786653300645,
+      -0.3923135103318939
+    ],
+    "fitted_upper": [
+      0.39844085606915947,
+      -0.29571388321101466,
+      2.141711462676573
+    ]
+  },
+  "dr_provenance": {
+    "depth_metric_alignment": {
+      "calibration_r2": {
+        "maximum": 0.9021602891421013,
+        "mean": 0.7096075507651879,
+        "median": 0.7316327657398187,
+        "minimum": 0.38935205125230843
+      },
+      "cuboid_vs_calibrated_dr_depth_abs_p50": {
+        "maximum": 1.4883805118876288,
+        "mean": 0.44227210267957023,
+        "median": 0.37916156404487755,
+        "minimum": 0.06822133778549899
+      },
+      "cuboid_vs_calibrated_dr_depth_rel_p50": {
+        "maximum": 0.4251189328836116,
+        "mean": 0.13281304248635944,
+        "median": 0.12279678117641538,
+        "minimum": 0.02609625687958311
+      },
+      "direct_depth_calibration_views": 45,
+      "inverse_depth_calibration_views": 66
+    },
+    "manifest": "/home/hanglee/\u684c\u9762/RT-GS/output/stage_a_tihubird_dr_raw_111/manifest.json",
+    "manifest_sha256": "c5ec996141cba7430246fb54da9d5e8e2ba10056034c7281d9acce25a56abd5c",
+    "normal_axis_fit": {
+      "alignment_p10": 0.9735251678037826,
+      "alignment_p50": 0.989771772222538,
+      "alignment_p90": 0.9987486258243969,
+      "objective": 0.028018452356183082,
+      "sample_count": 100000
+    }
+  },
+  "experiment_identity": "C03-r8 Tier 2 onset study",
+  "formal_mask_aggregate_sha256": "54dbb7661efbb2a334d86cef1cfec1d15ff812e71856c0d88930754013abc2e6",
+  "formal_mask_manifest_path": "/home/hanglee/\u684c\u9762/RT-GS/data/TiHuBird/specular_masks_reviewed_v1/manifest.json",
+  "formal_mask_manifest_sha256": "056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551",
+  "geometry_release_id": "stage_c_geometry_release_v1",
+  "geometry_source_branch": "3k-A",
+  "geometry_source_checkpoint_path": "/home/hanglee/\u684c\u9762/RT-GS/output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15000.pth",
+  "geometry_source_checkpoint_sha256": "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84",
+  "geometry_source_global": 15000,
+  "glass_mesh_relative_path": "glass_mesh.ply",
+  "glass_mesh_sha256": "f6846cc0d2e4ab87a4417f138bf674d8429c73e207103645597891b6fbab53e7",
+  "limitations": [
+    "This mesh is a data-constrained six-plane glass-enclosure proxy.",
+    "It applies only to the current approximately cuboid TiHuBird scene.",
+    "It is not a general transparent-object mesh extraction method.",
+    "Raw DiffusionRenderer depth is relative and is used only after metric alignment."
+  ],
+  "mesh_generation_and_cleanup": {
+    "face_count": 12,
+    "source_mesh": "/home/hanglee/\u684c\u9762/RT-GS/output/stage_c_tihubird_c03r8_g15000_mesh_v3/glass_mesh.ply",
+    "source_mesh_sha256": "86fe0d85c29cb789399a3ae5accddb2359e876fed9054211ea409d89dec208e2",
+    "vertex_count": 8,
+    "watertight": true
+  },
+  "mesh_metadata_sha256": "7124c70f2446d86ef4a40297fd653fa299f8ad329a5b0e626bac59bd18d3a428",
+  "plane_fitting_and_mask_optimization": {
+    "initial_lower": [
+      -1.9222333981365793,
+      -2.6507523125896633,
+      -0.4131607975998063
+    ],
+    "initial_upper": [
+      0.34247504170276516,
+      -0.280244135369777,
+      2.08331633759329
+    ],
+    "method": "DR-normal axes + D/TSDF metric initialization + formal-mask fit + calibrated DR-depth audit",
+    "optimization": {
+      "function_evaluations": 447,
+      "iterations": 5,
+      "objective": 0.05380733127856332,
+      "parameters": [
+        0.010756941203622424,
+        0.010632276935623046,
+        0.031741693618622224,
+        0.03793850544434238,
+        -0.023969095217496534,
+        0.014928344851837897
+      ],
+      "success": true
+    },
+    "source_resolution_summary": {
+      "iou": {
+        "maximum": 0.9814200154322877,
+        "mean": 0.951283713518141,
+        "median": 0.9566860608625127,
+        "minimum": 0.8828829567161743
+      },
+      "precision": {
+        "maximum": 0.9961787780927266,
+        "mean": 0.978201531063732,
+        "median": 0.9860650166150303,
+        "minimum": 0.9054978461107415
+      },
+      "recall": {
+        "maximum": 0.9949224601416063,
+        "mean": 0.9719967308555699,
+        "median": 0.9742802501195287,
+        "minimum": 0.9124016164119453
+      }
+    }
+  },
+  "release_root": "/home/hanglee/\u684c\u9762/RT-GS/output/stage_c_geometry_release_v1",
+  "schema": "rtgs_stage_c_geometry_release_v1",
+  "stage_d_contract": {
+    "checkpoint_fields": [
+      "geometry_release_id",
+      "geometry_release_aggregate_sha256"
+    ],
+    "read_only": true,
+    "runtime_cache_generation": false,
+    "runtime_mesh_generation": false
+  }
+}

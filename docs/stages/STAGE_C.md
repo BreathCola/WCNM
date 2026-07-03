@@ -86,10 +86,11 @@ The independent DR-guided repair is retained at
 `output/stage_c_tihubird_c03r8_g15000_mesh_dr_cuboid_v2/`. Its
 `glass_mesh.ply` SHA-256 is
 `f6846cc0d2e4ab87a4417f138bf674d8429c73e207103645597891b6fbab53e7`.
-It is an automatic six-plane fit, not a hand-authored box: DR normals determine the orthogonal
-directions, D/TSDF supplies metric initialization, source-resolution masks fit
-the plane offsets, and calibrated DR depth supplies a separate front-depth
-check. Raw DR depth is not treated as metric without calibration. Its per-view
+It is an automatic six-plane fit, not a hand-authored box: DR normals determine
+the orthogonal directions, D/TSDF supplies metric initialization,
+source-resolution masks fit the plane offsets, and calibrated DR depth supplies
+a separate front-depth check. Raw DR depth is not treated as metric without
+calibration. Its per-view
 calibration R² is 0.38935 minimum / 0.73163 median; its median per-view front
 depth relative residual has a 0.12280 median across views.
 
@@ -114,8 +115,32 @@ assumption that the TiHuBird glass enclosure is a six-plane cuboid. It does not
 prove that DR depth is metrically calibrated by the model itself, nor authorize
 using this method unchanged on curved glass.
 
-Stage D now has its geometric prerequisite, but has not been entered. No T
-model, T training, second bounce, or Stage D work is authorized by this commit.
+This completed the candidate geometry gate. The formal immutable release and
+stage transition are recorded below.
+
+## Formal closeout
+
+- [x] Formal mask loading and dimension/hash validation are stable.
+- [x] The transparent enclosure mesh is exported without unrelated background.
+- [x] Two-hit is valid across the transparent region at the recorded coverage.
+- [x] Every valid pixel satisfies `t_far > t_near`.
+- [x] `back_position` is finite and lies on the cuboid's far intersection.
+- [x] All 111 caches pass schema, version, source, hash, shape, finite, and
+  depth-order reload validation.
+- [x] Stage A/B full regression remains passing.
+- [x] CPU-only release audit returns `STAGE_C_GEOMETRY_RELEASE_VALID`.
+
+The formal immutable release is `stage_c_geometry_release_v1`:
+
+- manifest: `geometry_releases/stage_c_geometry_release_v1.json`;
+- assets: `output/stage_c_geometry_release_v1/`;
+- aggregate SHA-256:
+  `4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`;
+- geometry source: 3k-A/global-15,000 checkpoint SHA-256
+  `050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`.
+
+Stage C contains no Transmittance Gaussian and no T training. It is accepted and
+closed; the project advances to Stage D under the release's cuboid limitation.
 
 ## Reproduction commands
 

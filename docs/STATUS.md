@@ -1,6 +1,6 @@
 # RT-GS Status
 
-Current stage: Stage C — Transparent Mesh and Two-Hit Geometry
+Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `feature/stage-c-transparent-mesh`
 
@@ -51,10 +51,24 @@ crossings. Source-resolution worst-view overlays and fixed-view near/far/valid
 maps show a coherent front/back cuboid without the former holes or folds.
 
 This establishes the Stage D geometric prerequisite under an explicit
-TiHuBird-glass-is-a-six-plane-enclosure assumption. It does not start Stage D:
-Reflection rays remain enabled on every valid D surface and RGB remains
-full-frame. No Transmittance Gaussian, T training, second bounce, or Stage D
-work has been performed or authorized.
+TiHuBird-glass-is-a-six-plane-enclosure assumption. Reflection rays remain
+enabled on every valid D surface and RGB remains full-frame; the Stage C
+geometry work itself created no Transmittance Gaussian, T training, or second
+bounce.
+
+Stage C is formally accepted and frozen as `stage_c_geometry_release_v1`.
+The Git-tracked manifest is
+`geometry_releases/stage_c_geometry_release_v1.json`; immutable assets are at
+`output/stage_c_geometry_release_v1/`; aggregate SHA-256 is
+`4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
+The independent CPU-only audit returns `STAGE_C_GEOMETRY_RELEASE_VALID` for
+111/111 caches and records that no runtime mesh/cache generation is required.
+The release directory and its mesh/cache source directories have no write bits.
+
+Stage D is now authorized for implementation and one minimum real-scene smoke.
+It may only read this exact release, must store its release ID and aggregate in
+every checkpoint, and may not refit, regenerate, or modify geometry. This stage
+transition does not authorize long training or Stage E.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
