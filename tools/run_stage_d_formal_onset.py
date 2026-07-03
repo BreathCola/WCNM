@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import torch
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -24,6 +26,8 @@ SOURCE = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15
 MANIFEST = ROOT / "geometry_releases/stage_c_geometry_release_v1.json"
 OUTPUT = ROOT / "output" / FORMAL_OUTPUT_NAME
 ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
+ZERO_STEP_ATTEMPT_COMMIT = "405cfca5a311c0013e5eab2f360efa26b9c890eb"
+ZERO_STEP_ARCHIVE = "preflight_attempt_cuda_rng_cardinality"
 
 
 def git(*args):
@@ -53,6 +57,46 @@ def classify_compute_processes(text):
     return observed, conflicts
 
 
+def preserve_known_zero_step_attempt(output, log_path):
+    """Preserve, never delete, the one audited pre-update v1 launch footprint."""
+    if not output.exists() and not log_path.exists():
+        output.mkdir(parents=True)
+        return None
+    if not output.is_dir() or not log_path.is_file():
+        raise FileExistsError("formal output/log collision is not the known zero-step attempt")
+    archive = output / ZERO_STEP_ARCHIVE
+    if archive.exists():
+        raise FileExistsError(f"zero-step archive already exists: {archive}")
+    entries = list(output.iterdir())
+    event_files = [path for path in entries if path.name.startswith("events.out.tfevents.")]
+    expected_names = {"cameras.json", "cfg_args", "formal_operator_record.json", "input.ply"}
+    if len(event_files) != 1 or {path.name for path in entries if path not in event_files} != expected_names:
+        raise FileExistsError("formal partial output has unexpected files and cannot be reused")
+    record = json.loads((output / "formal_operator_record.json").read_text(encoding="utf-8"))
+    if not (
+        record.get("schema") == "rtgs_stage_d_formal_operator_v1"
+        and record.get("git_commit") == ZERO_STEP_ATTEMPT_COMMIT
+        and record.get("status") == "BLOCKED"
+        and record.get("training_exit_code") == 1
+        and record.get("source_sha256_before") == FORMAL_SOURCE_SHA256
+        and record.get("source_sha256_after") == FORMAL_SOURCE_SHA256
+        and record.get("release_aggregate_before") == FORMAL_RELEASE_SHA256
+        and record.get("release_aggregate_after") == FORMAL_RELEASE_SHA256
+    ):
+        raise ValueError("formal partial output record is not the audited zero-step attempt")
+    log_text = log_path.read_text(encoding="utf-8")
+    if (
+        "checkpoint CUDA RNG cardinality does not match visible CUDA devices" not in log_text
+        or "Stage D training progress" in log_text
+    ):
+        raise ValueError("formal partial log does not prove a pre-update RNG-cardinality stop")
+    archive.mkdir()
+    for path in entries:
+        os.replace(path, archive / path.name)
+    os.replace(log_path, archive / "operator.log")
+    return str(archive)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="required explicit execution flag")
@@ -61,12 +105,13 @@ def main():
         raise SystemExit("refusing to run without --execute")
     if git("status", "--porcelain"):
         raise RuntimeError("formal training requires a clean committed worktree")
-    if OUTPUT.exists():
-        raise FileExistsError(f"refusing to overwrite formal output: {OUTPUT}")
-    if OUTPUT.with_suffix(".log").exists():
-        raise FileExistsError(f"refusing to overwrite formal log: {OUTPUT.with_suffix('.log')}")
     if sha256_file(SOURCE) != FORMAL_SOURCE_SHA256:
         raise ValueError("formal source checkpoint SHA-256 mismatch")
+    source_header = torch.load(SOURCE, map_location="cpu")
+    source_cuda_rng_count = len(source_header.get("rng_state", {}).get("cuda") or [])
+    del source_header
+    if source_cuda_rng_count != 1:
+        raise ValueError(f"formal source must contain exactly one CUDA RNG state, found {source_cuda_rng_count}")
     release = validate_geometry_release(MANIFEST)
     if release["aggregate_sha256"] != FORMAL_RELEASE_SHA256:
         raise ValueError("formal geometry release aggregate mismatch")
@@ -102,7 +147,8 @@ def main():
         "--save_iterations", *[str(node) for node in FORMAL_NODES],
         "--checkpoint_iterations", *[str(node) for node in FORMAL_NODES],
     ]
-    OUTPUT.mkdir(parents=True)
+    log_path = OUTPUT.with_suffix(".log")
+    preserved_attempt = preserve_known_zero_step_attempt(OUTPUT, log_path)
     record_path = OUTPUT / "formal_operator_record.json"
     record = {
         "schema": "rtgs_stage_d_formal_operator_v1", "git_commit": git("rev-parse", "HEAD"),
@@ -111,15 +157,16 @@ def main():
         "geometry_manifest": str(MANIFEST), "release_aggregate_before": FORMAL_RELEASE_SHA256,
         "training_command": command, "output": str(OUTPUT), "status": "RUNNING",
         "preexisting_display_compute_processes": observed_compute,
+        "source_cuda_rng_state_count": source_cuda_rng_count,
+        "preserved_zero_step_attempt": preserved_attempt,
     }
     atomic_json(record_path, record)
     environment = os.environ.copy()
     environment.update({
-        "CUDA_VISIBLE_DEVICES": "0,1", "PYTHONHASHSEED": "0",
+        "CUDA_VISIBLE_DEVICES": "0", "PYTHONHASHSEED": "0",
         "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:128,garbage_collection_threshold:0.8",
         "RTGS_BVH_JIT_ROOT": "/tmp/rtgs-stage-d-formal-v1-jit",
     })
-    log_path = OUTPUT.with_suffix(".log")
     with log_path.open("x", encoding="utf-8") as log:
         process = subprocess.Popen(
             command, cwd=ROOT, env=environment, stdout=subprocess.PIPE,

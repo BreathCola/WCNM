@@ -10,7 +10,10 @@ from stage_d_training import (
 )
 from utils.transmittance_debug import make_stage_d_contact_sheet
 from tools.audit_stage_d_formal import plot_curves
-from tools.run_stage_d_formal_onset import classify_compute_processes
+from tools.run_stage_d_formal_onset import (
+    ZERO_STEP_ATTEMPT_COMMIT, classify_compute_processes,
+    preserve_known_zero_step_attempt,
+)
 
 
 def formal_inputs(tmp_path):
@@ -112,3 +115,32 @@ def test_gpu_preflight_allows_only_bounded_remote_desktop_process():
     assert len(observed) == 1 and conflicts == []
     _, conflicts = classify_compute_processes("999, python, 1024\n")
     assert conflicts[0]["process_name"] == "python"
+
+
+def test_known_zero_step_attempt_is_preserved_without_deletion(tmp_path):
+    output = tmp_path / "formal"
+    output.mkdir()
+    log = tmp_path / "formal.log"
+    for name in ("cameras.json", "cfg_args", "input.ply", "events.out.tfevents.test"):
+        (output / name).write_text(name, encoding="utf-8")
+    record = {
+        "schema": "rtgs_stage_d_formal_operator_v1", "git_commit": ZERO_STEP_ATTEMPT_COMMIT,
+        "status": "BLOCKED", "training_exit_code": 1,
+        "source_sha256_before": FORMAL_SOURCE_SHA256,
+        "source_sha256_after": FORMAL_SOURCE_SHA256,
+        "release_aggregate_before": FORMAL_RELEASE_SHA256,
+        "release_aggregate_after": FORMAL_RELEASE_SHA256,
+    }
+    (output / "formal_operator_record.json").write_text(
+        __import__("json").dumps(record), encoding="utf-8"
+    )
+    log.write_text(
+        "checkpoint CUDA RNG cardinality does not match visible CUDA devices",
+        encoding="utf-8",
+    )
+    archive = Path(preserve_known_zero_step_attempt(output, log))
+    assert not log.exists()
+    assert {path.name for path in archive.iterdir()} == {
+        "cameras.json", "cfg_args", "input.ply", "events.out.tfevents.test",
+        "formal_operator_record.json", "operator.log",
+    }
