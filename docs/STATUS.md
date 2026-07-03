@@ -139,6 +139,30 @@ returns to the original global-15,000 source and fresh T, uses checkpointed
 2,048 with same-camera pre-commit OOM fallbacks at 1,024/512, and releases cache
 only under 2 GiB device-free pressure. No rendering/loss/data formula changes.
 
+The user subsequently stopped v2 after global 15,065 because its roughly
+3.19-second steady steps still projected about 4.4 hours. It has no authorized
+resume checkpoint and remains preserved as aborted evidence. A no-update
+profile localized the remaining time to repeated frozen D/R work, candidate
+gradient reduction, checkpoint recomputation, and many small CUDA launches;
+unused memory capacity was not the limiting resource.
+
+The currently authorized replacement is the new cached-T-warm-up then exact-
+joint operator. It always restarts from the original Stage-B global-15,000
+source with the same fresh T and immutable Stage-C release. Phase A is global
+15,001--18,000: D/R model, optimizer, scheduler, densification, topology, and
+R-local state are frozen at R-local 12,000 while a source/release/mask/renderer/
+camera-bound FP32 cache removes repeated D/R computations. Phase B is global
+18,001--20,000: the cache is disabled and exact D/R/T joint training resumes,
+ending at R-local 14,000 and T-local 5,000. This R-local meaning differs from
+the abandoned all-joint plan, and Phase A is not full joint training.
+
+The implementation includes a fail-closed 10-view output/loss/T-gradient
+parity gate, D/R full-state hashes, a no-update performance benchmark, eight
+complete checkpoint/PLY/nine-view nodes, continuous phase-aware telemetry, and
+a CPU-only final audit. No cache, benchmark, training, render, or formal output
+has been run or created by the implementation agent. `L_depth` remains off
+through global 20,000 with future activation recorded at global 40,000.
+
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import torch
 import torch.nn.functional as F
+from torch.autograd.profiler import record_function
 
 from gaussian_renderer.reflection_renderer import StageBRenderState, render as render_stage_b
 from raytracer.acceleration_structure import CudaLBVH
@@ -80,12 +81,23 @@ class StageDRenderState:
         self.transmittance_acceleration.mark_parameters_updated()
         self.diffuse_acceleration.mark_parameters_updated()
 
+    def mark_transmittance_updated(self):
+        self.transmittance_acceleration.mark_parameters_updated()
+
 
 def _scatter(values, indices, height, width, channels, fill=0.0):
     output = values.new_full((height * width, channels), float(fill))
     if indices.numel():
         output = output.index_copy(0, indices, values)
     return output.reshape(height, width, channels)
+
+
+def _assert_finite_outputs(output, names):
+    checks = torch.stack([torch.isfinite(output[name]).all() for name in names])
+    if not bool(checks.all()):
+        values = checks.detach().cpu().tolist()
+        failed = [name for name, finite in zip(names, values) if not finite]
+        raise FloatingPointError(f"Stage D outputs contain NaN or Inf: {failed}")
 
 
 def alpha_over_transmittance(inside_color, inside_alpha, outside_color, outside_alpha):
@@ -115,23 +127,21 @@ def _trace(model, origins, directions, acceleration, state, return_aux, diagnost
     return outputs, aux, diagnostic
 
 
-def render(
-    camera,
-    state: StageDRenderState,
-    pipe,
-    background: torch.Tensor,
-    return_ray_aux: bool = False,
-    return_ray_diagnostics: bool = False,
+def build_static_dr_inputs(
+    camera, state, pipe, background,
+    return_ray_aux=False, return_ray_diagnostics=False,
 ):
+    """Compute the D/R and frozen-geometry values that do not depend on T."""
     state.stage_b.ray_chunk_size = state.ray_chunk_size
     state.stage_b.ray_checkpoint_chunks = bool(
         state.ray_checkpoint_chunks and not return_ray_diagnostics
     )
-    package = render_stage_b(
-        camera, state.stage_b, pipe, background,
-        return_ray_aux=return_ray_aux,
-        return_ray_diagnostics=return_ray_diagnostics,
-    )
+    with record_function("stage_d.stage_b_forward"):
+        package = render_stage_b(
+            camera, state.stage_b, pipe, background,
+            return_ray_aux=return_ray_aux,
+            return_ray_diagnostics=return_ray_diagnostics,
+        )
     height, width = package["alpha"].shape[:2]
     cache = state.geometry_release.load_view(Path(str(camera.image_name)).stem)
     device, dtype = package["position"].device, package["position"].dtype
@@ -156,27 +166,58 @@ def render(
     first_origin = flat_position + epsilon * direction
     second_origin = flat_back + epsilon * direction
 
-    inside_outputs, inside_aux, inside_diagnostics = _trace(
-        state.transmittance, first_origin, direction,
-        state.transmittance_acceleration, state, return_ray_aux,
-        return_ray_diagnostics,
-    )
-    outside_outputs, outside_aux, outside_diagnostics = _trace(
-        state.diffuse_raytrace, second_origin, direction,
-        state.diffuse_acceleration, state, return_ray_aux,
-        return_ray_diagnostics,
-    )
-    inside_raw, inside_alpha, inside_relative_depth, inside_hit = inside_outputs
+    with record_function("stage_d.outside_d_forward"):
+        outside_outputs, outside_aux, outside_diagnostics = _trace(
+            state.diffuse_raytrace, second_origin, direction,
+            state.diffuse_acceleration, state, return_ray_aux,
+            return_ray_diagnostics,
+        )
     outside_raw, outside_alpha, outside_relative_depth, outside_hit = outside_outputs
+    return {
+        "package": package,
+        "height": int(height), "width": int(width), "indices": indices,
+        "first_origin": first_origin, "direction": direction,
+        "first_distance": torch.linalg.vector_norm(flat_position - center, dim=-1, keepdim=True),
+        "far": t_far.reshape(-1, 1)[indices],
+        "outside_raw": outside_raw, "outside_alpha": outside_alpha,
+        "outside_relative_depth": outside_relative_depth,
+        "outside_hit": outside_hit,
+        "near_depth": t_near[..., None], "far_depth": t_far[..., None],
+        "two_hit_valid": valid_cache[..., None].to(dtype),
+        "transmittance_valid": valid[..., None].to(dtype),
+        "outside_ray_aux": outside_aux,
+        "outside_ray_diagnostics": outside_diagnostics,
+    }
+
+
+def render_from_static_dr(
+    state, background, static_inputs,
+    return_ray_aux=False, return_ray_diagnostics=False,
+):
+    """Trace T and apply the unchanged Stage D composition to static D/R inputs."""
+    package = dict(static_inputs["package"])
+    height, width = int(static_inputs["height"]), int(static_inputs["width"])
+    indices = static_inputs["indices"]
+    with record_function("stage_d.inside_t_forward"):
+        inside_outputs, inside_aux, inside_diagnostics = _trace(
+            state.transmittance, static_inputs["first_origin"], static_inputs["direction"],
+            state.transmittance_acceleration, state, return_ray_aux,
+            return_ray_diagnostics,
+        )
+    inside_raw, inside_alpha, inside_relative_depth, inside_hit = inside_outputs
+    outside_raw = static_inputs["outside_raw"]
+    outside_alpha = static_inputs["outside_alpha"]
+    outside_relative_depth = static_inputs["outside_relative_depth"]
+    outside_hit = static_inputs["outside_hit"]
+    dtype = package["position"].dtype
     ray_background = background.reshape(1, 3).to(outside_raw)
     outside_color = outside_raw + (1.0 - outside_alpha) * ray_background
     transmittance_color, transmittance_alpha = alpha_over_transmittance(
         inside_raw, inside_alpha, outside_color, outside_alpha
     )
 
-    first_distance = torch.linalg.vector_norm(flat_position - center, dim=-1, keepdim=True)
-    inside_depth = first_distance + inside_relative_depth
-    far = t_far.reshape(-1, 1)[indices]
+    inside_depth = static_inputs["first_distance"] + inside_relative_depth
+    far = static_inputs["far"]
     outside_depth = far + outside_relative_depth
     violation = torch.relu(inside_depth - far)
 
@@ -207,20 +248,40 @@ def render(
         "transmittance_color": _scatter(transmittance_color, indices, height, width, 3),
         "transmittance_alpha": _scatter(transmittance_alpha, indices, height, width, 1),
         "depth_violation": _scatter(violation, indices, height, width, 1),
-        "near_depth": t_near[..., None], "far_depth": t_far[..., None],
-        "two_hit_valid": valid_cache[..., None].to(dtype),
-        "transmittance_valid": valid[..., None].to(dtype),
+        "near_depth": static_inputs["near_depth"],
+        "far_depth": static_inputs["far_depth"],
+        "two_hit_valid": static_inputs["two_hit_valid"],
+        "transmittance_valid": static_inputs["transmittance_valid"],
         "transmittance_valid_count": int(indices.numel()),
-        "inside_ray_aux": inside_aux, "outside_ray_aux": outside_aux,
+        "inside_ray_aux": inside_aux,
+        "outside_ray_aux": static_inputs.get("outside_ray_aux"),
         "inside_ray_diagnostics": inside_diagnostics,
-        "outside_ray_diagnostics": outside_diagnostics,
+        "outside_ray_diagnostics": static_inputs.get("outside_ray_diagnostics"),
     })
-    for name in (
+    _assert_finite_outputs(package, (
         "final", "transmittance_contribution", "inside_color", "inside_alpha",
         "inside_depth", "outside_color", "outside_alpha", "outside_depth",
         "transmittance_color", "transmittance_alpha", "depth_violation",
         "near_depth", "far_depth",
-    ):
-        if not torch.isfinite(package[name]).all():
-            raise FloatingPointError(f"Stage D {name} contains NaN or Inf")
+    ))
     return package
+
+
+def render(
+    camera,
+    state: StageDRenderState,
+    pipe,
+    background: torch.Tensor,
+    return_ray_aux: bool = False,
+    return_ray_diagnostics: bool = False,
+):
+    static_inputs = build_static_dr_inputs(
+        camera, state, pipe, background,
+        return_ray_aux=return_ray_aux,
+        return_ray_diagnostics=return_ray_diagnostics,
+    )
+    return render_from_static_dr(
+        state, background, static_inputs,
+        return_ray_aux=return_ray_aux,
+        return_ray_diagnostics=return_ray_diagnostics,
+    )

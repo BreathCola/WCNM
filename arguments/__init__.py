@@ -163,6 +163,10 @@ class OptimizationParams(ParamGroup):
         self.stage_d_smoke = False
         self.stage_d_smoke_max_steps = 3
         self.stage_d_formal_onset = False
+        self.stage_d_cached_twarmup = False
+        self.stage_d_phase_a_end_iteration = 18_000
+        self.stage_d_cache_parity_atol = 2e-5
+        self.stage_d_cache_parity_mean_atol = 2e-6
         self.stage_d_telemetry_jsonl = ""
         self.transmittance_position_lr_init = 0.00016
         self.transmittance_position_lr_final = 0.0000016

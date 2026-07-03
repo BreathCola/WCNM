@@ -115,3 +115,30 @@ telemetry, nine-view debug, and contact-sheet nodes are exactly 15,100, 15,500,
 16,000, 17,500, and 20,000. A CPU-only final audit must stop at
 `HOLD_FOR_SEMANTIC_REVIEW` or `BLOCKED`; it cannot enter Stage E or continue
 beyond global 20,000.
+
+## Authorized cached T warm-up then exact joint trajectory
+
+The user stopped the uncompleted all-joint v2 path and replaced it with one new
+trajectory at
+`output/stage_d_tihubird_c03r8_cached_twarmup_then_joint_g15000_g20000_v1`.
+It still starts exclusively from the original Stage-B global-15,000 checkpoint
+and uses the immutable Stage-C v1 release and fresh-T initialization above.
+
+- Phase A, global 15,001--18,000: D/R and all D/R training state are frozen;
+  R-local remains 12,000. A fail-closed per-view FP32 cache replaces only
+  D/R/geometry computations independent of T. Full-frame RGB and exact T
+  gradients remain active.
+- Phase B, global 18,001--20,000: the cache is disabled and the complete exact
+  D/R/T renderer and joint backward resume. R-local reaches 14,000 and T-local
+  reaches 5,000.
+- Cached/uncached parity is required on nine fixed plus one deterministic
+  random view for outputs, losses, and all T parameter gradients. D/R
+  full-state hashes must match before and after Phase A.
+- Complete checkpoint/PLY/nine-view nodes are 15,025, 15,100, 15,500, 16,000,
+  17,500, 18,000, 19,000, and 20,000.
+- `L_depth` is disabled for both phases; global 40,000 with
+  `lambda_depth=0.2` remains only a future schedule marker.
+
+The operator may return only `CACHED_T_WARMUP_AND_JOINT_ONSET_PASS`,
+`HOLD_FOR_SEMANTIC_REVIEW`, or `CACHED_T_WARMUP_BLOCKED`. It must not infer
+bird/background separation from falling loss and must not continue into Stage E.

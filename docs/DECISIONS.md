@@ -2605,3 +2605,61 @@ and runs the same checkpoint/debug/audit nodes. V1 remains aborted evidence.
 
 Required ablation: None. Runtime equivalence is covered by the existing
 checkpointed ray output/gradient tests plus Stage-D same-camera retry tests.
+
+## D-006 — Cached T-only warm-up followed by exact uncached joint fine-tuning
+
+Date: 2026-07-03
+
+Question: How should fresh T receive a useful onset trajectory without paying
+for unchanged D rasterization, global R tracing, and second-bounce D tracing on
+every early update?
+
+Chosen implementation: Supersede the uncompleted all-joint v2 trajectory with
+a new, non-resuming formal output. It starts from the same immutable Stage-B
+global-15,000 checkpoint and `stage_c_geometry_release_v1`, creates the same
+fresh T (`random_bbox`, 4,096, seed 20260703), and ends at global 20,000.
+
+Phase A is global 15,001--18,000. D/R parameters, optimizers, learning-rate
+schedulers, densification statistics, pruning state, topology, and R-local
+iteration remain frozen. Per-view FP32 caches contain only D/R/geometry values
+that are mathematically independent of T; they contain no GT/target RGB. T
+ray tracing, alpha-over, full-frame RGB loss, backward, optimizer, scheduler,
+densification, and topology remain live. Cache identity binds the source
+checkpoint, geometry release, reviewed mask manifest, renderer/ray/BRDF
+configuration, camera identity, and schema. Any mismatch fails closed.
+
+Before Phase A, nine fixed views plus one deterministic random view compare the
+frozen uncached path against the cached path for final RGB, Cin/Ain/Din, Ct/At,
+every loss term, and T xyz/rotation/scale/opacity/color gradients. Maximum and
+mean absolute tolerances are `2e-5` and `2e-6`. D/R full-state hashes before and
+after preflight and Phase A must be identical.
+
+Phase B is global 18,001--20,000. It makes D/R trainable, disables the static
+cache completely, and invokes the existing exact D-raster → global-R →
+first-bounce-T → second-bounce-D → alpha-over composition and joint backward.
+R-local stays 12,000 through Phase A and reaches 14,000 after Phase B; Phase A
+must never be described as full joint training.
+
+Alternatives: Continue the slow all-joint v2 attempt; change resolution, ray
+sampling, candidate/intersection definitions, BRDF/BTDF, alpha-over, masks, or
+geometry; or train T against cropped/partial RGB.
+
+Why: D/R and their derived rays/contributions are invariant while those fields
+are frozen, so caching removes repeated work without approximating T or the
+final renderer. The explicit exact Phase B restores all cross-branch gradients
+before the onset endpoint.
+
+Paper fidelity: No rendering, ray, candidate, intersection, BRDF/BTDF,
+alpha-over, mask, resolution, or data definition changes. This is a training
+schedule and execution-layout decision. `L_depth` remains disabled through
+global 20,000 and retains its future global-40,000 activation with
+`lambda_depth=0.2`.
+
+Impact: The unique output is
+`output/stage_d_tihubird_c03r8_cached_twarmup_then_joint_g15000_g20000_v1`.
+The single operator performs preflight, cache build, parity, no-update
+performance benchmark, both phases, CPU-only audit, and final report. It never
+continues beyond global 20,000 or enters Stage E.
+
+Required ablation: None in Stage D. The cached and uncached parity gate is an
+equivalence test, not a quality ablation.

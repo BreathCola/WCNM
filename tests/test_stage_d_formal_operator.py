@@ -178,8 +178,8 @@ def test_formal_memory_retry_keeps_camera_and_clears_all_gradients(monkeypatch):
     )
     assert result is payload and used == 512 and len(retries) == 2
     assert attempts == [
-        ("000039.jpg", 2048, True), ("000039.jpg", 1024, True),
-        ("000039.jpg", 512, True),
+        ("000039.jpg", 2048, True),
+        ("000039.jpg", 1024, True), ("000039.jpg", 512, True),
     ]
     assert exposure.zero_calls == dopt.zero_calls == ropt.zero_calls == topt.zero_calls == 2
     assert len(cache_releases) == 2
