@@ -6,6 +6,7 @@ import json
 import math
 import os
 import time
+import gc
 from pathlib import Path
 from random import randint
 
@@ -46,9 +47,11 @@ except ImportError:
 FORMAL_SOURCE_SHA256 = "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84"
 FORMAL_RELEASE_ID = "stage_c_geometry_release_v1"
 FORMAL_RELEASE_SHA256 = "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d"
-FORMAL_OUTPUT_NAME = "stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1"
+FORMAL_OUTPUT_NAME = "stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v2"
 FORMAL_NODES = (15100, 15500, 16000, 17500, 20000)
 FORMAL_STEMS = ("000000", "000012", "000039", "000040", "000041", "000053", "000063", "000083", "000110")
+FORMAL_RAY_CHUNKS = (2048, 1024, 512)
+FORMAL_PRESSURE_FREE_BYTES = 2 * 1024**3
 
 
 def _mesh_bounds(path: Path, device):
@@ -106,6 +109,16 @@ def _config(dataset, opt, release, source):
             "count": int(dataset.transmittance_init_count),
             "seed": int(dataset.transmittance_init_seed),
         },
+        "formal_memory_policy": (
+            {
+                "name": "checkpointed_2048_oom_fallback_pressure_cache_v1",
+                "checkpoint_chunks": True,
+                "attempt_chunk_sizes": list(FORMAL_RAY_CHUNKS),
+                "pressure_release_free_bytes": FORMAL_PRESSURE_FREE_BYTES,
+                "retry_boundary": "before optimizer topology checkpoint telemetry commit",
+            }
+            if opt.stage_d_formal_onset else None
+        ),
         "source_stage_b_contract": {
             "lambda_spec": source["stage_b_config"].get("lambda_spec"),
             "specular_k0": source["stage_b_config"].get("specular_k0"),
@@ -174,7 +187,7 @@ def _validate_formal_contract(dataset, opt, release, source, fresh_from_stage_b,
         "lambda_spec": float(opt.lambda_spec) == 0.2,
         "specular_k0": float(opt.specular_k0) == 0.9,
         "resolution": int(dataset.resolution) == 8,
-        "ray_chunk_size": int(dataset.ray_chunk_size) == 512,
+        "ray_chunk_size": int(dataset.ray_chunk_size) == FORMAL_RAY_CHUNKS[0],
         "t_init": (
             dataset.transmittance_init_mode == "random_bbox"
             and int(dataset.transmittance_init_count) == 4096
@@ -214,7 +227,9 @@ def _render_formal_review_node(scene, state, pipe, background, release, iteratio
         raise ValueError(f"formal review cameras are missing: {missing}")
     iteration_directory = os.path.join(scene.model_path, "debug", f"iteration_{iteration:06d}")
     prior_checkpoint_mode = state.ray_checkpoint_chunks
+    prior_chunk_size = state.ray_chunk_size
     state.ray_checkpoint_chunks = False
+    state.ray_chunk_size = 512
     try:
         for stem in FORMAL_STEMS:
             camera = cameras[stem]
@@ -233,7 +248,102 @@ def _render_formal_review_node(scene, state, pipe, background, release, iteratio
         make_stage_d_contact_sheet(iteration_directory, FORMAL_STEMS)
     finally:
         state.ray_checkpoint_chunks = prior_checkpoint_mode
+        state.ray_chunk_size = prior_chunk_size
     return iteration_directory
+
+
+def _forward_backward_stage_d(camera, state, pipe, background, opt, perceptual, iteration):
+    package = render(camera, state, pipe, background, return_ray_aux=True)
+    image, gt = package["render"], camera.original_image.cuda()
+    l1_value = l1_loss(image, gt)
+    ssim_value = (
+        fused_ssim(image.unsqueeze(0), gt.unsqueeze(0))
+        if FUSED_SSIM_AVAILABLE else ssim(image, gt)
+    )
+    rgb_loss = (1.0 - opt.lambda_dssim) * l1_value + opt.lambda_dssim * (1.0 - ssim_value)
+    normal_loss = normal_depth_consistency_loss(
+        package["normal"], package["position"], package["alpha"]
+    )
+    mono_loss = image.new_zeros(())
+    if camera.normal_prior is not None:
+        target = camera.normal_prior.permute(1, 2, 0)
+        if camera.normal_prior_space == "camera":
+            target = camera_normals_to_world(camera, target)
+        target = face_forward(target, package["position"], camera.camera_center)
+        mono_loss = monocular_normal_loss(
+            package["normal"], target, package["alpha"],
+            camera.normal_prior_valid.permute(1, 2, 0),
+        )
+    perceptual_loss = image.new_zeros(()) if perceptual is None else perceptual(image, gt)
+    specular_loss = specular_constraint_loss(
+        package["surface_ks"], camera.specular_mask, opt.specular_k0
+    )
+    eroded = _erode_hard_mask(camera.specular_mask)
+    depth_domain = eroded * package["two_hit_valid"]
+    depth_loss = (
+        (package["depth_violation"] * depth_domain).sum()
+        / depth_domain.sum().clamp_min(1.0)
+    )
+    depth_enabled = int(iteration) >= opt.stage_d_depth_start_iteration
+    loss = (
+        rgb_loss + opt.lambda_norm * normal_loss + opt.lambda_mono * mono_loss
+        + opt.lambda_perc * perceptual_loss + opt.lambda_spec * specular_loss
+        + (opt.lambda_depth * depth_loss if depth_enabled else 0.0)
+    )
+    if not torch.isfinite(loss):
+        raise FloatingPointError("Stage D total loss is NaN/Inf")
+    loss.backward()
+    return {
+        "package": package, "image": image, "gt": gt, "loss": loss,
+        "l1": l1_value, "ssim": ssim_value, "rgb": rgb_loss,
+        "normal": normal_loss, "mono": mono_loss, "perceptual": perceptual_loss,
+        "specular": specular_loss, "depth": depth_loss,
+        "depth_enabled": bool(depth_enabled),
+    }
+
+
+def _zero_stage_d_gradients(diffuse, reflection, transmittance):
+    diffuse.exposure_optimizer.zero_grad(set_to_none=True)
+    diffuse.optimizer.zero_grad(set_to_none=True)
+    reflection.optimizer.zero_grad(set_to_none=True)
+    transmittance.optimizer.zero_grad(set_to_none=True)
+
+
+def _allocator_cache_under_pressure(device_free_bytes):
+    return int(device_free_bytes) < FORMAL_PRESSURE_FREE_BYTES
+
+
+def _forward_backward_with_memory_retry(
+    camera, state, pipe, background, opt, perceptual,
+    diffuse, reflection, transmittance, iteration,
+):
+    chunks = FORMAL_RAY_CHUNKS if opt.stage_d_formal_onset else (state.ray_chunk_size,)
+    retry_records = []
+    for attempt_index, chunk_size in enumerate(chunks):
+        state.ray_chunk_size = int(chunk_size)
+        state.ray_checkpoint_chunks = True
+        try:
+            payload = _forward_backward_stage_d(
+                camera, state, pipe, background, opt, perceptual, iteration
+            )
+            return payload, retry_records, int(chunk_size)
+        except torch.cuda.OutOfMemoryError:
+            retry_records.append({
+                "attempt": attempt_index + 1, "chunk_size": int(chunk_size),
+                "checkpoint_chunks": True,
+                "peak_allocated_bytes": int(torch.cuda.max_memory_allocated()),
+                "peak_reserved_bytes": int(torch.cuda.max_memory_reserved()),
+            })
+            _zero_stage_d_gradients(diffuse, reflection, transmittance)
+            gc.collect()
+            torch.cuda.empty_cache()
+            if attempt_index + 1 == len(chunks):
+                raise
+            print("STAGE_D_MEMORY_RETRY " + json.dumps({
+                "camera": str(camera.image_name), **retry_records[-1],
+                "next_chunk_size": int(chunks[attempt_index + 1]),
+            }, sort_keys=True))
+    raise AssertionError("unreachable Stage D memory retry state")
 
 
 def _write_jsonl(path: Path, record: dict):
@@ -311,7 +421,7 @@ def training_stage_d(
     )
     if opt.stage_d_formal_onset:
         metadata = {
-            "schema": "rtgs_stage_d_formal_onset_run_v1",
+            "schema": "rtgs_stage_d_formal_onset_run_v2",
             "source": source,
             "config": config,
             "actual_transmittance_initialization": dict(transmittance.initialization),
@@ -379,46 +489,17 @@ def training_stage_d(
         camera = viewpoints.pop(selected)
         camera_indices.pop(selected)
 
-        package = render(camera, state, pipe, background, return_ray_aux=True)
-        image, gt = package["render"], camera.original_image.cuda()
-        l1_value = l1_loss(image, gt)
-        ssim_value = (
-            fused_ssim(image.unsqueeze(0), gt.unsqueeze(0))
-            if FUSED_SSIM_AVAILABLE else ssim(image, gt)
+        payload, memory_retries, used_chunk_size = _forward_backward_with_memory_retry(
+            camera, state, pipe, background, opt, perceptual,
+            diffuse, reflection, transmittance, iteration,
         )
-        rgb_loss = (1.0 - opt.lambda_dssim) * l1_value + opt.lambda_dssim * (1.0 - ssim_value)
-        normal_loss = normal_depth_consistency_loss(
-            package["normal"], package["position"], package["alpha"]
+        package, image, gt, loss = (
+            payload["package"], payload["image"], payload["gt"], payload["loss"]
         )
-        mono_loss = image.new_zeros(())
-        if camera.normal_prior is not None:
-            target = camera.normal_prior.permute(1, 2, 0)
-            if camera.normal_prior_space == "camera":
-                target = camera_normals_to_world(camera, target)
-            target = face_forward(target, package["position"], camera.camera_center)
-            mono_loss = monocular_normal_loss(
-                package["normal"], target, package["alpha"],
-                camera.normal_prior_valid.permute(1, 2, 0),
-            )
-        perceptual_loss = image.new_zeros(()) if perceptual is None else perceptual(image, gt)
-        specular_loss = specular_constraint_loss(
-            package["surface_ks"], camera.specular_mask, opt.specular_k0
-        )
-        eroded = _erode_hard_mask(camera.specular_mask)
-        depth_domain = eroded * package["two_hit_valid"]
-        depth_loss = (
-            (package["depth_violation"] * depth_domain).sum()
-            / depth_domain.sum().clamp_min(1.0)
-        )
-        depth_enabled = iteration >= opt.stage_d_depth_start_iteration
-        loss = (
-            rgb_loss + opt.lambda_norm * normal_loss + opt.lambda_mono * mono_loss
-            + opt.lambda_perc * perceptual_loss + opt.lambda_spec * specular_loss
-            + (opt.lambda_depth * depth_loss if depth_enabled else 0.0)
-        )
-        if not torch.isfinite(loss):
-            raise FloatingPointError("Stage D total loss is NaN/Inf")
-        loss.backward()
+        l1_value, ssim_value, rgb_loss = payload["l1"], payload["ssim"], payload["rgb"]
+        normal_loss, mono_loss = payload["normal"], payload["mono"]
+        perceptual_loss, specular_loss = payload["perceptual"], payload["specular"]
+        depth_loss, depth_enabled = payload["depth"], payload["depth_enabled"]
 
         with torch.no_grad():
             reflection_aux = package["ray_aux"]
@@ -462,7 +543,7 @@ def training_stage_d(
             wall_ms = float((time.perf_counter() - wall_start) * 1000.0)
             last_record = {
                 "schema": (
-                    "rtgs_stage_d_formal_telemetry_v1" if opt.stage_d_formal_onset
+                    "rtgs_stage_d_formal_telemetry_v2" if opt.stage_d_formal_onset
                     else "rtgs_stage_d_smoke_telemetry_v1"
                 ),
                 "global_iteration": int(iteration),
@@ -482,6 +563,12 @@ def training_stage_d(
                     "diffuse_delta": int(diffuse.get_xyz.shape[0]) - counts_before["diffuse"],
                     "reflection_delta": int(reflection.get_xyz.shape[0]) - counts_before["reflection"],
                     "transmittance_delta": int(transmittance.get_xyz.shape[0]) - counts_before["transmittance"],
+                },
+                "ray_memory_policy": {
+                    "used_chunk_size": used_chunk_size,
+                    "checkpoint_chunks": True,
+                    "oom_retry_count": len(memory_retries),
+                    "oom_retries": memory_retries,
                 },
                 "loss": {
                     "rgb": float(rgb_loss), "l1": float(l1_value),
@@ -512,6 +599,7 @@ def training_stage_d(
                     make_camera_runtime_state(camera_indices, len(cameras)),
                 )
                 torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
+                del checkpoint
             if iteration in saving_iterations or iteration == opt.iterations:
                 scene.save(iteration)
             if opt.stage_d_formal_onset and iteration in FORMAL_NODES:
@@ -521,14 +609,23 @@ def training_stage_d(
                 last_record["formal_review_node"] = True
             else:
                 last_record["formal_review_node"] = False
-            _write_jsonl(telemetry_path, last_record)
             if writer:
                 writer.add_scalar("stage_d/loss", float(loss), iteration)
                 writer.add_scalar("stage_d/l_depth", float(depth_loss), iteration)
                 writer.add_scalar("scene/transmittance_count", transmittance.get_xyz.shape[0], iteration)
         progress.update(1)
-        del package, image, gt, loss
-        torch.cuda.empty_cache()
+        del package, image, gt, loss, payload
+        del l1_value, ssim_value, rgb_loss, normal_loss, mono_loss
+        del perceptual_loss, specular_loss, depth_loss
+        del reflection_aux, trans_aux, valid, depth_order
+        device_free_before_release, _ = torch.cuda.mem_get_info()
+        cache_released = _allocator_cache_under_pressure(device_free_before_release)
+        if cache_released:
+            torch.cuda.empty_cache()
+        last_record["allocator_cache_released"] = bool(cache_released)
+        last_record["device_free_before_cache_release_bytes"] = int(device_free_before_release)
+        last_record["whole_step_wall_ms"] = float((time.perf_counter() - wall_start) * 1000.0)
+        _write_jsonl(telemetry_path, last_record)
 
     if opt.stage_d_formal_onset:
         directory = os.path.join(scene.model_path, "debug", f"iteration_{opt.iterations:06d}")

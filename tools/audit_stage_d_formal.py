@@ -142,6 +142,8 @@ def main():
         errors.append("geometry release aggregate mismatch")
 
     operator = json.loads((output / "formal_operator_record.json").read_text(encoding="utf-8"))
+    if operator.get("schema") != "rtgs_stage_d_formal_operator_v2":
+        errors.append("formal operator schema mismatch")
     if operator.get("source_sha256_before") != FORMAL_SOURCE_SHA256:
         errors.append("operator source preflight hash mismatch")
     if operator.get("source_sha256_after") != FORMAL_SOURCE_SHA256:
@@ -175,6 +177,9 @@ def main():
             errors.append(f"checkpoint {node} source mismatch")
         if config.get("stage_d_depth_start_iteration") != 40000 or config.get("lambda_depth") != 0.2:
             errors.append(f"checkpoint {node} L_depth schedule mismatch")
+        policy = config.get("formal_memory_policy", {})
+        if config.get("ray_chunk_size") != 2048 or policy.get("attempt_chunk_sizes") != [2048, 1024, 512]:
+            errors.append(f"checkpoint {node} formal memory policy mismatch")
         try:
             tensors, elements = scan_finite(checkpoint)
         except Exception as exc:
@@ -206,7 +211,7 @@ def main():
     if [row.get("global_iteration") for row in rows] != expected_steps:
         errors.append("telemetry is not exactly continuous from 15001 through 20000")
     for row in rows:
-        if row.get("schema") != "rtgs_stage_d_formal_telemetry_v1":
+        if row.get("schema") != "rtgs_stage_d_formal_telemetry_v2":
             errors.append("telemetry schema mismatch"); break
         if row.get("nonfinite_count") != 0 or not finite_scalars(row):
             errors.append(f"non-finite telemetry at {row.get('global_iteration')}"); break
@@ -214,6 +219,11 @@ def main():
             errors.append(f"L_depth enabled early at {row.get('global_iteration')}"); break
         if row.get("geometry_release_aggregate_sha256") != FORMAL_RELEASE_SHA256:
             errors.append(f"telemetry release mismatch at {row.get('global_iteration')}"); break
+        memory = row.get("ray_memory_policy", {})
+        if memory.get("used_chunk_size") not in (2048, 1024, 512):
+            errors.append(f"invalid ray chunk at {row.get('global_iteration')}"); break
+        if memory.get("checkpoint_chunks") is not True:
+            errors.append(f"non-checkpointed formal ray path at {row.get('global_iteration')}"); break
 
     node_metrics = {}
     for node in FORMAL_NODES:
@@ -278,6 +288,21 @@ def main():
         errors.append("insufficient complete data for key curves")
 
     verdict = "BLOCKED" if errors else "HOLD_FOR_SEMANTIC_REVIEW"
+    memory_summary = {
+        "oom_retry_count": sum(
+            row.get("ray_memory_policy", {}).get("oom_retry_count", 0) for row in rows
+        ),
+        "fallback_step_count": sum(
+            row.get("ray_memory_policy", {}).get("used_chunk_size") != 2048 for row in rows
+        ),
+        "cache_release_step_count": sum(bool(row.get("allocator_cache_released")) for row in rows),
+        "max_peak_allocated_bytes": max(
+            (row.get("cuda_max_memory_allocated_bytes", 0) for row in rows), default=0
+        ),
+        "max_peak_reserved_bytes": max(
+            (row.get("cuda_max_memory_reserved_bytes", 0) for row in rows), default=0
+        ),
+    }
     result = {
         "verdict": verdict, "technical_run_complete": not errors,
         "semantic_separation_claimed": False,
@@ -290,6 +315,7 @@ def main():
         "telemetry_rows": len(rows), "telemetry_range": [15001, 20000],
         "release": release, "t_health": t_health, "node_metrics": node_metrics,
         "cross_node_evolution": evolution,
+        "formal_memory_policy": memory_summary,
         "contact_sheet": str(output / "debug" / "iteration_020000" / "contact_sheet.png"),
         "key_curves": str(curves), "node_semantic_curves": str(node_curve),
     }

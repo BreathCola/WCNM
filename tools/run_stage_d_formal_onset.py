@@ -25,6 +25,8 @@ from stage_d_training import (
 SOURCE = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15000.pth"
 MANIFEST = ROOT / "geometry_releases/stage_c_geometry_release_v1.json"
 OUTPUT = ROOT / "output" / FORMAL_OUTPUT_NAME
+ABORTED_V1 = ROOT / "output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1"
+ABORTED_V1_TELEMETRY_SHA256 = "6c12101c4c46e8c7ed149cb93e3e802c89d75f79b0bf10bcb6d1c1a155206f27"
 ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
 ZERO_STEP_ATTEMPT_COMMIT = "405cfca5a311c0013e5eab2f360efa26b9c890eb"
 ZERO_STEP_ARCHIVE = "preflight_attempt_cuda_rng_cardinality"
@@ -97,6 +99,24 @@ def preserve_known_zero_step_attempt(output, log_path):
     return str(archive)
 
 
+def audit_excluded_aborted_v1():
+    pause = json.loads((ABORTED_V1 / "user_pause_record.json").read_text(encoding="utf-8"))
+    telemetry = ABORTED_V1 / "stage_d_telemetry.jsonl"
+    if not (
+        pause.get("status") == "ABORTED_BY_USER_FOR_RUNTIME_DIAGNOSIS"
+        and pause.get("last_complete_global_iteration") == 15018
+        and pause.get("checkpoint_count") == 0
+        and pause.get("resume_allowed") is False
+        and sha256_file(telemetry) == ABORTED_V1_TELEMETRY_SHA256
+        and not list(ABORTED_V1.glob("chkpnt*.pth"))
+    ):
+        raise ValueError("aborted formal v1 exclusion audit failed")
+    return {
+        "path": str(ABORTED_V1), "last_complete_global_iteration": 15018,
+        "telemetry_sha256": ABORTED_V1_TELEMETRY_SHA256, "resume_allowed": False,
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true", help="required explicit execution flag")
@@ -105,6 +125,7 @@ def main():
         raise SystemExit("refusing to run without --execute")
     if git("status", "--porcelain"):
         raise RuntimeError("formal training requires a clean committed worktree")
+    excluded_v1 = audit_excluded_aborted_v1()
     if sha256_file(SOURCE) != FORMAL_SOURCE_SHA256:
         raise ValueError("formal source checkpoint SHA-256 mismatch")
     source_header = torch.load(SOURCE, map_location="cpu")
@@ -129,7 +150,7 @@ def main():
         sys.executable, str(ROOT / "train.py"),
         "-s", str(ROOT / "data/TiHuBird"), "-m", str(OUTPUT),
         "--images", "images", "--model_type", "surfel", "--stage", "stage_d",
-        "--experiment", "TiHuBird C03-r8 Stage D formal T-onset v1",
+        "--experiment", "TiHuBird C03-r8 Stage D formal T-onset v2",
         "--resolution", "8",
         "--normal_priors", "diffrender_priors_candidates/axis_smoke/C03/normal",
         "--normal_prior_space", "camera",
@@ -139,7 +160,7 @@ def main():
         "--transmittance_init_count", "4096",
         "--transmittance_init_seed", "20260703",
         "--transmittance_compose", "alpha_over",
-        "--ray_background", "scene", "--ray_chunk_size", "512",
+        "--ray_background", "scene", "--ray_chunk_size", "2048",
         "--iterations", "20000", "--start_checkpoint", str(SOURCE),
         "--lambda_spec", "0.2", "--specular_k0", "0.9",
         "--lambda_depth", "0.2", "--stage_d_depth_start_iteration", "40000",
@@ -151,7 +172,7 @@ def main():
     preserved_attempt = preserve_known_zero_step_attempt(OUTPUT, log_path)
     record_path = OUTPUT / "formal_operator_record.json"
     record = {
-        "schema": "rtgs_stage_d_formal_operator_v1", "git_commit": git("rev-parse", "HEAD"),
+        "schema": "rtgs_stage_d_formal_operator_v2", "git_commit": git("rev-parse", "HEAD"),
         "git_branch": git("branch", "--show-current"),
         "source": str(SOURCE), "source_sha256_before": FORMAL_SOURCE_SHA256,
         "geometry_manifest": str(MANIFEST), "release_aggregate_before": FORMAL_RELEASE_SHA256,
@@ -159,13 +180,14 @@ def main():
         "preexisting_display_compute_processes": observed_compute,
         "source_cuda_rng_state_count": source_cuda_rng_count,
         "preserved_zero_step_attempt": preserved_attempt,
+        "excluded_aborted_v1": excluded_v1,
     }
     atomic_json(record_path, record)
     environment = os.environ.copy()
     environment.update({
         "CUDA_VISIBLE_DEVICES": "0", "PYTHONHASHSEED": "0",
         "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:128,garbage_collection_threshold:0.8",
-        "RTGS_BVH_JIT_ROOT": "/tmp/rtgs-stage-d-formal-v1-jit",
+        "RTGS_BVH_JIT_ROOT": "/tmp/rtgs-stage-d-formal-v2-jit",
     })
     with log_path.open("x", encoding="utf-8") as log:
         process = subprocess.Popen(

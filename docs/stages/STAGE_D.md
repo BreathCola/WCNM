@@ -97,8 +97,17 @@ must start from the frozen Branch-A Stage-B global-15,000 checkpoint (SHA-256
 `050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`),
 not from any Stage D smoke. It uses `stage_c_geometry_release_v1` unchanged,
 creates fresh T as `random_bbox`, count 4,096, seed 20260703, and updates global
-15,001 through 20,000 only. Its unique output is
-`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1`.
+15,001 through 20,000 only. The initial v1 at
+`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1` was stopped by
+the user after global 15,018 because the safe 512-ray path projected 8.8 hours.
+It has no checkpoint and is excluded from resume. The authorized restart is a
+fresh trajectory at
+`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v2`.
+
+V2 uses checkpointed 2,048-ray training chunks with same-camera pre-commit OOM
+fallbacks at 1,024 and 512. It releases allocator cache only below 2 GiB device
+free. Debug remains at 512. Candidate/intersection definitions and all training
+math remain unchanged.
 
 This formal run keeps `L_depth` disabled throughout. Metadata must record
 global 40,000 as its future activation with `lambda_depth=0.2`. Checkpoint, PLY,

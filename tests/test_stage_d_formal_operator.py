@@ -5,8 +5,9 @@ import pytest
 from PIL import Image
 
 from stage_d_training import (
-    FORMAL_NODES, FORMAL_RELEASE_ID, FORMAL_RELEASE_SHA256,
-    FORMAL_SOURCE_SHA256, _validate_formal_contract,
+    FORMAL_NODES, FORMAL_RELEASE_ID, FORMAL_RELEASE_SHA256, FORMAL_SOURCE_SHA256,
+    _allocator_cache_under_pressure, _forward_backward_with_memory_retry,
+    _validate_formal_contract,
 )
 from utils.transmittance_debug import make_stage_d_contact_sheet
 from tools.audit_stage_d_formal import plot_curves
@@ -18,9 +19,9 @@ from tools.run_stage_d_formal_onset import (
 
 def formal_inputs(tmp_path):
     dataset = SimpleNamespace(
-        resolution=8, ray_chunk_size=512, transmittance_init_mode="random_bbox",
+        resolution=8, ray_chunk_size=2048, transmittance_init_mode="random_bbox",
         transmittance_init_count=4096, transmittance_init_seed=20260703,
-        model_path=str(tmp_path / "stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1"),
+        model_path=str(tmp_path / "stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v2"),
         _validated_specular_mask_manifest={
             "manifest_file_sha256": "056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551",
             "aggregate_sha256": "54dbb7661efbb2a334d86cef1cfec1d15ff812e71856c0d88930754013abc2e6",
@@ -144,3 +145,46 @@ def test_known_zero_step_attempt_is_preserved_without_deletion(tmp_path):
         "cameras.json", "cfg_args", "input.ply", "events.out.tfevents.test",
         "formal_operator_record.json", "operator.log",
     }
+
+
+def test_formal_memory_retry_keeps_camera_and_clears_all_gradients(monkeypatch):
+    attempts, cache_releases = [], []
+    payload = {"finite": True}
+
+    def fake_forward(camera, state, *_args):
+        attempts.append((camera.image_name, state.ray_chunk_size, state.ray_checkpoint_chunks))
+        if len(attempts) < 3:
+            raise __import__("torch").cuda.OutOfMemoryError("synthetic pressure")
+        return payload
+
+    class Optimizer:
+        def __init__(self): self.zero_calls = 0
+        def zero_grad(self, set_to_none=False):
+            assert set_to_none is True
+            self.zero_calls += 1
+
+    exposure, dopt, ropt, topt = Optimizer(), Optimizer(), Optimizer(), Optimizer()
+    diffuse = SimpleNamespace(exposure_optimizer=exposure, optimizer=dopt)
+    reflection, transmittance = SimpleNamespace(optimizer=ropt), SimpleNamespace(optimizer=topt)
+    state = SimpleNamespace(ray_chunk_size=2048, ray_checkpoint_chunks=True)
+    monkeypatch.setattr("stage_d_training._forward_backward_stage_d", fake_forward)
+    monkeypatch.setattr("stage_d_training.torch.cuda.max_memory_allocated", lambda: 10)
+    monkeypatch.setattr("stage_d_training.torch.cuda.max_memory_reserved", lambda: 20)
+    monkeypatch.setattr("stage_d_training.torch.cuda.empty_cache", lambda: cache_releases.append(True))
+    result, retries, used = _forward_backward_with_memory_retry(
+        SimpleNamespace(image_name="000039.jpg"), state, None, None,
+        SimpleNamespace(stage_d_formal_onset=True), None,
+        diffuse, reflection, transmittance, 15001,
+    )
+    assert result is payload and used == 512 and len(retries) == 2
+    assert attempts == [
+        ("000039.jpg", 2048, True), ("000039.jpg", 1024, True),
+        ("000039.jpg", 512, True),
+    ]
+    assert exposure.zero_calls == dopt.zero_calls == ropt.zero_calls == topt.zero_calls == 2
+    assert len(cache_releases) == 2
+
+
+def test_formal_cache_release_is_pressure_only():
+    assert _allocator_cache_under_pressure(2 * 1024**3) is False
+    assert _allocator_cache_under_pressure(2 * 1024**3 - 1) is True

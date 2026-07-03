@@ -2549,3 +2549,59 @@ establishes bird/background separation.
 
 Required ablation: None in this Stage D onset run. Final ablations remain Stage
 E work and are not authorized.
+
+## D-005 — Restart formal onset with bounded checkpointed 2,048-ray fast path
+
+Date: 2026-07-03
+
+Question: How should the formal T-onset trajectory be restarted after the user
+stopped v1 because its 512-ray checkpointed path projected an impractical run
+time?
+
+Observed evidence: v1 was interrupted by explicit user request after 18
+complete updates at global 15,018. It wrote no checkpoint, PLY, or review node
+and is never a resume source. Excluding the first JIT-warmup step, its median
+step time was 6.340 seconds, projecting 8.81 hours for 5,000 steps. Step time
+correlated 0.9700 with the number of valid T-domain pixels. Peak allocated and
+reserved memory were only 3.75/4.46 GiB. This isolates small checkpointed chunk
+count/recomputation as the dominant variable rather than capacity pressure.
+
+Chosen implementation: Preserve v1 unchanged and start a new v2 output from the
+original global-15,000 Stage-B checkpoint with fresh T using the exact D-004
+initialization and schedule. Use checkpointed 2,048-ray chunks as the fast path
+for R, first-bounce T, and second-bounce D. If CUDA OOM occurs before any
+optimizer, topology, checkpoint, telemetry, or debug commit, clear all D/R/T
+and exposure gradients, release unused cache, and recompute the same selected
+camera at checkpointed 1,024 then 512. Exhausting 512 is a hard failure. Camera
+selection, local/global counters, learning-rate updates, and RNG are committed
+only once outside the attempt sequence.
+
+At a completed-step boundary, delete all forward/loss/checkpoint references and
+call `empty_cache()` only when device-free memory is below 2 GiB. Debug renders
+remain at the smoke-verified 512-ray setting and do not alter training state.
+Telemetry records the successful chunk, every OOM retry, peak allocation, and
+whether pressure cache release occurred.
+
+Alternatives: Continue v1 for 8.8 hours; resume its uncheckpointed step 18;
+disable checkpointing; change resolution/model counts/losses; use data-parallel
+training; or enlarge chunks without an OOM fallback.
+
+Why: A 2,048-ray batch reduces Python/checkpoint/LBVH chunk launches by roughly
+four while preserving every ray and the same candidate and exact-intersection
+definitions. Checkpointing bounds retained graphs; the same-camera fallback
+restores the verified 512 endpoint if a view is unusually expensive. Pressure-
+only cache release reuses the Stage-B v4 evidence that unconditional per-step
+release adds substantial latency and does not bound a single live graph.
+
+Paper fidelity: Chunk grouping can change floating-point accumulation order but
+does not change represented rays, candidates, intersections, BRDF/BTDF,
+alpha-over, loss, optimizer, topology rule, data, mask, or geometry. This is a
+new v2 runtime identity and is never mixed with v1 updates.
+
+Impact: The sole restarted output is
+`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v2`. It still stops at
+global 20,000, keeps L_depth disabled until the future global-40,000 boundary,
+and runs the same checkpoint/debug/audit nodes. V1 remains aborted evidence.
+
+Required ablation: None. Runtime equivalence is covered by the existing
+checkpointed ray output/gradient tests plus Stage-D same-camera retry tests.

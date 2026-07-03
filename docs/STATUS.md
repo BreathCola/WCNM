@@ -106,13 +106,13 @@ formal authorization is limited to a new global 15,001--20,000 trajectory from
 the original Stage-B global-15,000 source; Stage E is still unauthorized.
 
 The committed formal-onset operator is fail-closed to that source hash, the
-frozen release aggregate, fresh-T `random_bbox/4096/20260703`, checkpointed
-512-ray chunks, global-20,000 endpoint, global-40,000 depth start, and the unique
-v1 output. It records every training step and automatically writes complete
+frozen release aggregate, fresh-T `random_bbox/4096/20260703`, global-20,000
+endpoint, and global-40,000 depth start. The current v2 policy uses checkpointed
+2,048-ray chunks with same-camera 1,024/512 OOM fallback and a unique v2 output.
+It records every training step and automatically writes complete
 checkpoint/PLY/nine-view review nodes at 15,100/15,500/16,000/17,500/20,000,
-then runs a CUDA-hidden recursive final audit. Pre-run regression is 147/147
-with CUDA enabled and 130 passed / 17 skipped with CUDA hidden. The next exact
-task is to create the clean pre-run commit and execute this one operator once.
+then runs a CUDA-hidden recursive final audit. Updated v2 regression results are
+149/149 with CUDA enabled and 132 passed / 17 skipped with CUDA hidden.
 
 The first operator invocation performed no training and created no output: its
 GPU preflight conservatively classified the persistent 260 MiB
@@ -128,6 +128,16 @@ cardinality before launch, exposes only GPU 0, and may reuse the required v1
 root only after moving that exact allowlisted footprint into a named archive;
 any checkpoint, telemetry, debug, PLY, unexpected file, hash change, or
 different failure text blocks reuse.
+
+The subsequently launched v1 formal trajectory was explicitly paused by the
+user after 18 complete finite updates (global 15,001--15,018) because its
+steady 512-ray checkpointed path projected 8.81 hours. It has no checkpoint,
+PLY, or review node and is excluded from resume. Median steady step time was
+6.340 seconds; time/T-valid-pixel correlation was 0.9700; peak allocated/
+reserved memory was only 3.75/4.46 GiB. The authorized v2 restart therefore
+returns to the original global-15,000 source and fresh T, uses checkpointed
+2,048 with same-camera pre-commit OOM fallbacks at 1,024/512, and releases cache
+only under 2 GiB device-free pressure. No rendering/loss/data formula changes.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
