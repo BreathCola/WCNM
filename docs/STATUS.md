@@ -110,9 +110,15 @@ frozen release aggregate, fresh-T `random_bbox/4096/20260703`, checkpointed
 512-ray chunks, global-20,000 endpoint, global-40,000 depth start, and the unique
 v1 output. It records every training step and automatically writes complete
 checkpoint/PLY/nine-view review nodes at 15,100/15,500/16,000/17,500/20,000,
-then runs a CUDA-hidden recursive final audit. Pre-run regression is 145/145
-with CUDA enabled and 128 passed / 17 skipped with CUDA hidden. The next exact
+then runs a CUDA-hidden recursive final audit. Pre-run regression is 146/146
+with CUDA enabled and 129 passed / 17 skipped with CUDA hidden. The next exact
 task is to create the clean pre-run commit and execute this one operator once.
+
+The first operator invocation performed no training and created no output: its
+GPU preflight conservatively classified the persistent 260 MiB
+`gnome-remote-desktop-daemon` C+G context as a conflicting compute job. The
+preflight now permits only that exact display-service path up to 512 MiB and
+records it; every other compute process remains a hard conflict.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.

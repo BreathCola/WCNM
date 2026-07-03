@@ -23,6 +23,7 @@ from stage_d_training import (
 SOURCE = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15000.pth"
 MANIFEST = ROOT / "geometry_releases/stage_c_geometry_release_v1.json"
 OUTPUT = ROOT / "output" / FORMAL_OUTPUT_NAME
+ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
 
 
 def git(*args):
@@ -33,6 +34,23 @@ def atomic_json(path, value):
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8")
     os.replace(temporary, path)
+
+
+def classify_compute_processes(text):
+    observed, conflicts = [], []
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        fields = [field.strip() for field in line.split(",")]
+        if len(fields) != 3:
+            raise ValueError(f"unexpected nvidia-smi compute-process row: {line!r}")
+        pid, process_name, memory_text = fields
+        record = {"pid": int(pid), "process_name": process_name, "used_gpu_memory_mib": int(memory_text)}
+        observed.append(record)
+        allowed_limit = ALLOWED_DISPLAY_COMPUTE.get(process_name)
+        if allowed_limit is None or record["used_gpu_memory_mib"] > allowed_limit:
+            conflicts.append(record)
+    return observed, conflicts
 
 
 def main():
@@ -54,11 +72,13 @@ def main():
         raise ValueError("formal geometry release aggregate mismatch")
     if shutil.disk_usage(ROOT).free < 20 * 2**30:
         raise RuntimeError("formal run requires at least 20 GiB free workspace storage")
-    gpu_query = subprocess.check_output(
-        ["nvidia-smi", "--query-compute-apps=pid", "--format=csv,noheader,nounits"], text=True
-    ).strip()
-    if gpu_query:
-        raise RuntimeError(f"conflicting GPU compute processes are active: {gpu_query}")
+    gpu_query = subprocess.check_output([
+        "nvidia-smi", "--query-compute-apps=pid,process_name,used_gpu_memory",
+        "--format=csv,noheader,nounits",
+    ], text=True)
+    observed_compute, conflicting_compute = classify_compute_processes(gpu_query)
+    if conflicting_compute:
+        raise RuntimeError(f"conflicting GPU compute processes are active: {conflicting_compute}")
 
     command = [
         sys.executable, str(ROOT / "train.py"),
@@ -90,6 +110,7 @@ def main():
         "source": str(SOURCE), "source_sha256_before": FORMAL_SOURCE_SHA256,
         "geometry_manifest": str(MANIFEST), "release_aggregate_before": FORMAL_RELEASE_SHA256,
         "training_command": command, "output": str(OUTPUT), "status": "RUNNING",
+        "preexisting_display_compute_processes": observed_compute,
     }
     atomic_json(record_path, record)
     environment = os.environ.copy()

@@ -10,6 +10,7 @@ from stage_d_training import (
 )
 from utils.transmittance_debug import make_stage_d_contact_sheet
 from tools.audit_stage_d_formal import plot_curves
+from tools.run_stage_d_formal_onset import classify_compute_processes
 
 
 def formal_inputs(tmp_path):
@@ -102,3 +103,12 @@ def test_cpu_curve_writer_has_no_optional_plot_dependency(tmp_path):
     node_target = plot_curves(rows, node_metrics, target)
     Image.open(target).verify()
     Image.open(node_target).verify()
+
+
+def test_gpu_preflight_allows_only_bounded_remote_desktop_process():
+    observed, conflicts = classify_compute_processes(
+        "2219, /usr/libexec/gnome-remote-desktop-daemon, 260\n"
+    )
+    assert len(observed) == 1 and conflicts == []
+    _, conflicts = classify_compute_processes("999, python, 1024\n")
+    assert conflicts[0]["process_name"] == "python"
