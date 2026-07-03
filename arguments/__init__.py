@@ -162,6 +162,7 @@ class OptimizationParams(ParamGroup):
         self.stage_d_depth_start_iteration = 40_000
         self.stage_d_smoke = False
         self.stage_d_smoke_max_steps = 3
+        self.stage_d_formal_onset = False
         self.stage_d_telemetry_jsonl = ""
         self.transmittance_position_lr_init = 0.00016
         self.transmittance_position_lr_final = 0.0000016

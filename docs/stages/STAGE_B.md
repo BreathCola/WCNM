@@ -17,7 +17,8 @@ mesh-guided second bounce
 full D + R + T reconstruction
 ```
 
-Stage C and Stage D have not started.
+At Stage B entry, Stage C and Stage D had not started. This sentence is retained
+only as historical scope; both later transitions are recorded in STATUS.
 
 ## Authorized entry state
 
@@ -570,4 +571,5 @@ complete telemetry. The regenerated CPU-only audit is healthy after correcting
 its timestamp-suffix parser. Branch A (R onset 3k) is selected only as the Stage
 C geometry source; Branch B (R onset 7k) remains a complete control. This does
 not establish globally optimal onset or completed Reflection separation. Stage
-B is closed; Stage D remains forbidden.
+B is closed. Stage C was subsequently accepted, and Stage D is now the current
+authorized stage; this Stage B file imposes no current Stage D block.

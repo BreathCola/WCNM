@@ -30,14 +30,25 @@ from utils.loss_utils import (
 )
 from utils.specular_mask import validate_specular_mask_set
 from utils.surfel_utils import camera_normals_to_world, face_forward
-from utils.training_state import make_camera_runtime_state, restore_camera_deck
-from utils.transmittance_debug import save_transmittance_debug_maps
+from utils.training_state import (
+    capture_rng_state, make_camera_runtime_state, restore_camera_deck,
+    restore_rng_state,
+)
+from utils.transmittance_debug import make_stage_d_contact_sheet, save_transmittance_debug_maps
 
 try:
     from fused_ssim import fused_ssim
     FUSED_SSIM_AVAILABLE = True
 except ImportError:
     FUSED_SSIM_AVAILABLE = False
+
+
+FORMAL_SOURCE_SHA256 = "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84"
+FORMAL_RELEASE_ID = "stage_c_geometry_release_v1"
+FORMAL_RELEASE_SHA256 = "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d"
+FORMAL_OUTPUT_NAME = "stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1"
+FORMAL_NODES = (15100, 15500, 16000, 17500, 20000)
+FORMAL_STEMS = ("000000", "000012", "000039", "000040", "000041", "000053", "000063", "000083", "000110")
 
 
 def _mesh_bounds(path: Path, device):
@@ -89,6 +100,19 @@ def _config(dataset, opt, release, source):
         "lambda_perc": float(opt.lambda_perc), "lambda_spec": float(opt.lambda_spec),
         "specular_k0": float(opt.specular_k0), "lambda_depth": float(opt.lambda_depth),
         "stage_d_depth_start_iteration": int(opt.stage_d_depth_start_iteration),
+        "stage_d_formal_onset": bool(opt.stage_d_formal_onset),
+        "transmittance_initialization": {
+            "mode": dataset.transmittance_init_mode,
+            "count": int(dataset.transmittance_init_count),
+            "seed": int(dataset.transmittance_init_seed),
+        },
+        "source_stage_b_contract": {
+            "lambda_spec": source["stage_b_config"].get("lambda_spec"),
+            "specular_k0": source["stage_b_config"].get("specular_k0"),
+            "specular_mask": source["stage_b_config"].get("specular_mask"),
+            "global_iteration": source.get("global_iteration"),
+            "reflection_iteration": source.get("reflection_iteration"),
+        },
         "transmittance_schedule": {
             "position_lr_init": float(opt.transmittance_position_lr_init),
             "position_lr_final": float(opt.transmittance_position_lr_final),
@@ -128,6 +152,88 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("lambda_depth must be non-negative")
     if opt.stage_d_smoke_max_steps <= 0:
         raise ValueError("stage_d_smoke_max_steps must be positive")
+    if opt.stage_d_smoke and opt.stage_d_formal_onset:
+        raise ValueError("formal Stage D onset must not use --stage_d_smoke")
+
+
+def _validate_formal_contract(dataset, opt, release, source, fresh_from_stage_b,
+                              saving_iterations, checkpoint_iterations):
+    if not opt.stage_d_formal_onset:
+        return
+    failures = []
+    required = {
+        "fresh_from_stage_b": fresh_from_stage_b,
+        "source_sha256": source.get("sha256") == FORMAL_SOURCE_SHA256,
+        "source_global": source.get("global_iteration") == 15000,
+        "source_r_local": source.get("reflection_iteration") == 12000,
+        "release_id": release.manifest.get("geometry_release_id") == FORMAL_RELEASE_ID,
+        "release_sha256": release.validation.get("aggregate_sha256") == FORMAL_RELEASE_SHA256,
+        "endpoint": int(opt.iterations) == 20000,
+        "depth_start": int(opt.stage_d_depth_start_iteration) == 40000,
+        "lambda_depth": float(opt.lambda_depth) == 0.2,
+        "lambda_spec": float(opt.lambda_spec) == 0.2,
+        "specular_k0": float(opt.specular_k0) == 0.9,
+        "resolution": int(dataset.resolution) == 8,
+        "ray_chunk_size": int(dataset.ray_chunk_size) == 512,
+        "t_init": (
+            dataset.transmittance_init_mode == "random_bbox"
+            and int(dataset.transmittance_init_count) == 4096
+            and int(dataset.transmittance_init_seed) == 20260703
+        ),
+        "output": Path(dataset.model_path).name == FORMAL_OUTPUT_NAME,
+        "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations))) == FORMAL_NODES,
+        "ply_nodes": tuple(sorted(set(saving_iterations))) == FORMAL_NODES,
+    }
+    source_config = source.get("stage_b_config", {})
+    source_mask = source_config.get("specular_mask", {})
+    current_mask = getattr(dataset, "_validated_specular_mask_manifest", {})
+    required["source_specular_contract"] = (
+        source_config.get("lambda_spec") == 0.2
+        and source_config.get("specular_k0") == 0.9
+        and source_mask.get("manifest_file_sha256")
+        == "056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551"
+        and current_mask.get("manifest_file_sha256")
+        == source_mask.get("manifest_file_sha256")
+        and current_mask.get("aggregate_sha256")
+        == source_mask.get("aggregate_sha256")
+    )
+    for name, passed in required.items():
+        if not passed:
+            failures.append(name)
+    if failures:
+        raise ValueError("formal Stage D onset contract mismatch: " + ", ".join(failures))
+
+
+def _render_formal_review_node(scene, state, pipe, background, release, iteration):
+    cameras = {
+        Path(str(camera.image_name)).stem: camera
+        for camera in (scene.getTestCameras() or scene.getTrainCameras())
+    }
+    missing = sorted(set(FORMAL_STEMS) - set(cameras))
+    if missing:
+        raise ValueError(f"formal review cameras are missing: {missing}")
+    iteration_directory = os.path.join(scene.model_path, "debug", f"iteration_{iteration:06d}")
+    prior_checkpoint_mode = state.ray_checkpoint_chunks
+    state.ray_checkpoint_chunks = False
+    try:
+        for stem in FORMAL_STEMS:
+            camera = cameras[stem]
+            debug = render(
+                camera, state, pipe, background,
+                return_ray_aux=False, return_ray_diagnostics=True,
+            )
+            directory = os.path.join(iteration_directory, stem)
+            save_transmittance_debug_maps(
+                debug, camera.original_image.cuda(), directory,
+                camera.specular_mask, camera.specular_mask_sha256,
+                release.manifest["geometry_release_id"],
+                release.validation["aggregate_sha256"],
+            )
+            del debug
+        make_stage_d_contact_sheet(iteration_directory, FORMAL_STEMS)
+    finally:
+        state.ray_checkpoint_chunks = prior_checkpoint_mode
+    return iteration_directory
 
 
 def _write_jsonl(path: Path, record: dict):
@@ -156,6 +262,7 @@ def training_stage_d(
     checkpoint_header = torch.load(start_checkpoint, map_location="cpu")
     checkpoint_format = checkpoint_header.get("format")
     fresh_from_stage_b = checkpoint_format == "rtgs_stage_b"
+    restored_rng_state = None
     del checkpoint_header
     if fresh_from_stage_b:
         bbox_min, bbox_max = _mesh_bounds(
@@ -169,7 +276,7 @@ def training_stage_d(
             bbox_min, bbox_max, dataset.transmittance_init_count,
             dataset.transmittance_init_seed, map_location="cuda",
         )
-        runtime_state = None
+        restored_rng_state = capture_rng_state()
     elif checkpoint_format == STAGE_D_FORMAT:
         (
             global_iteration, reflection_iteration, transmittance_iteration,
@@ -179,6 +286,7 @@ def training_stage_d(
             release.manifest["geometry_release_id"],
             release.validation["aggregate_sha256"], map_location="cuda",
         )
+        restored_rng_state = capture_rng_state()
         current = _config(dataset, opt, release, source)
         for key in (
             "geometry_release_id", "geometry_release_aggregate_sha256",
@@ -197,6 +305,26 @@ def training_stage_d(
     if opt.stage_d_smoke and added_steps > opt.stage_d_smoke_max_steps:
         raise ValueError("Stage D smoke exceeds its fail-closed step bound")
     config = _config(dataset, opt, release, source)
+    _validate_formal_contract(
+        dataset, opt, release, source, fresh_from_stage_b,
+        saving_iterations, checkpoint_iterations,
+    )
+    if opt.stage_d_formal_onset:
+        metadata = {
+            "schema": "rtgs_stage_d_formal_onset_run_v1",
+            "source": source,
+            "config": config,
+            "actual_transmittance_initialization": dict(transmittance.initialization),
+            "required_nodes": list(FORMAL_NODES),
+            "review_stems": list(FORMAL_STEMS),
+            "first_update": 15001,
+            "last_update": 20000,
+            "future_depth_activation_global": 40000,
+            "depth_enabled_during_run": False,
+        }
+        Path(scene.model_path, "formal_run_metadata.json").write_text(
+            json.dumps(metadata, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
+        )
 
     state = StageDRenderState(
         diffuse=diffuse, reflection=reflection, transmittance=transmittance,
@@ -218,6 +346,9 @@ def training_stage_d(
     if opt.lambda_perc > 0:
         from utils.perceptual_loss import VGG16PerceptualLoss
         perceptual = VGG16PerceptualLoss(pretrained=True).cuda().eval()
+    if restored_rng_state is not None:
+        # Process-local scene/helper construction is outside the resumed trajectory.
+        restore_rng_state(restored_rng_state)
 
     cameras = scene.getTrainCameras().copy()
     viewpoints, camera_indices = restore_camera_deck(cameras, runtime_state)
@@ -232,6 +363,11 @@ def training_stage_d(
     for iteration in range(global_iteration + 1, opt.iterations + 1):
         torch.cuda.reset_peak_memory_stats()
         wall_start = time.perf_counter()
+        counts_before = {
+            "diffuse": int(diffuse.get_xyz.shape[0]),
+            "reflection": int(reflection.get_xyz.shape[0]),
+            "transmittance": int(transmittance.get_xyz.shape[0]),
+        }
         reflection_iteration += 1
         transmittance_iteration += 1
         diffuse.update_learning_rate(iteration)
@@ -301,11 +437,13 @@ def training_stage_d(
             reflection.optimizer.step(); reflection.optimizer.zero_grad(set_to_none=True)
             transmittance.optimizer.step(); transmittance.optimizer.zero_grad(set_to_none=True)
             state.mark_parameters_updated()
+            topology_called = False
             if (
                 transmittance_iteration > opt.transmittance_densify_from_iter
                 and transmittance_iteration < opt.transmittance_densify_until_iter
                 and transmittance_iteration % opt.transmittance_densification_interval == 0
             ):
+                topology_called = True
                 transmittance.densify_and_prune(
                     opt.transmittance_densify_grad_threshold,
                     opt.transmittance_min_opacity, scene.cameras_extent,
@@ -323,7 +461,10 @@ def training_stage_d(
             depth_order = package["inside_depth"][valid] <= package["far_depth"][valid]
             wall_ms = float((time.perf_counter() - wall_start) * 1000.0)
             last_record = {
-                "schema": "rtgs_stage_d_smoke_telemetry_v1",
+                "schema": (
+                    "rtgs_stage_d_formal_telemetry_v1" if opt.stage_d_formal_onset
+                    else "rtgs_stage_d_smoke_telemetry_v1"
+                ),
                 "global_iteration": int(iteration),
                 "reflection_local_iteration": int(reflection_iteration),
                 "transmittance_local_iteration": int(transmittance_iteration),
@@ -335,8 +476,17 @@ def training_stage_d(
                     "reflection": int(reflection.get_xyz.shape[0]),
                     "transmittance": int(transmittance.get_xyz.shape[0]),
                 },
+                "counts_before": counts_before,
+                "topology_event": {
+                    "transmittance_densify_prune_called": topology_called,
+                    "diffuse_delta": int(diffuse.get_xyz.shape[0]) - counts_before["diffuse"],
+                    "reflection_delta": int(reflection.get_xyz.shape[0]) - counts_before["reflection"],
+                    "transmittance_delta": int(transmittance.get_xyz.shape[0]) - counts_before["transmittance"],
+                },
                 "loss": {
                     "rgb": float(rgb_loss), "l1": float(l1_value),
+                    "ssim": float(ssim_value), "l_norm": float(normal_loss),
+                    "l_mono": float(mono_loss), "l_perc": float(perceptual_loss),
                     "l_spec": float(specular_loss), "l_depth": float(depth_loss),
                     "lambda_depth_enabled": bool(depth_enabled), "total": float(loss),
                 },
@@ -364,6 +514,13 @@ def training_stage_d(
                 torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
             if iteration in saving_iterations or iteration == opt.iterations:
                 scene.save(iteration)
+            if opt.stage_d_formal_onset and iteration in FORMAL_NODES:
+                _render_formal_review_node(
+                    scene, state, pipe, background, release, iteration
+                )
+                last_record["formal_review_node"] = True
+            else:
+                last_record["formal_review_node"] = False
             _write_jsonl(telemetry_path, last_record)
             if writer:
                 writer.add_scalar("stage_d/loss", float(loss), iteration)
@@ -373,29 +530,36 @@ def training_stage_d(
         del package, image, gt, loss
         torch.cuda.empty_cache()
 
-    fixed_candidates = scene.getTestCameras() or scene.getTrainCameras()
-    fixed = next(
-        (
-            camera for camera in fixed_candidates
-            if Path(str(camera.image_name)).stem == "000039"
-        ),
-        fixed_candidates[0],
-    )
-    with torch.no_grad():
-        debug = render(
-            fixed, state, pipe, background,
-            return_ray_aux=False, return_ray_diagnostics=True,
-        )
+    if opt.stage_d_formal_onset:
         directory = os.path.join(scene.model_path, "debug", f"iteration_{opt.iterations:06d}")
-        save_transmittance_debug_maps(
-            debug, fixed.original_image.cuda(), directory,
-            fixed.specular_mask, fixed.specular_mask_sha256,
-            release.manifest["geometry_release_id"],
-            release.validation["aggregate_sha256"],
+        debug = None
+    else:
+        fixed_candidates = scene.getTestCameras() or scene.getTrainCameras()
+        fixed = next(
+            (
+                camera for camera in fixed_candidates
+                if Path(str(camera.image_name)).stem == "000039"
+            ),
+            fixed_candidates[0],
         )
+        with torch.no_grad():
+            debug = render(
+                fixed, state, pipe, background,
+                return_ray_aux=False, return_ray_diagnostics=True,
+            )
+            directory = os.path.join(scene.model_path, "debug", f"iteration_{opt.iterations:06d}")
+            save_transmittance_debug_maps(
+                debug, fixed.original_image.cuda(), directory,
+                fixed.specular_mask, fixed.specular_mask_sha256,
+                release.manifest["geometry_release_id"],
+                release.validation["aggregate_sha256"],
+            )
     final_release_validation = validate_geometry_release(dataset.geometry_release_manifest)
     summary = {
-        "status": "STAGE_D_SMOKE_COMPLETED",
+        "status": (
+            "STAGE_D_FORMAL_ONSET_COMPLETED" if opt.stage_d_formal_onset
+            else "STAGE_D_SMOKE_COMPLETED"
+        ),
         "start_checkpoint": str(Path(start_checkpoint).resolve()),
         "final_checkpoint": str(Path(scene.model_path) / f"chkpnt{opt.iterations}.pth"),
         "geometry_release_validation": final_release_validation,
@@ -408,7 +572,11 @@ def training_stage_d(
         "first_bounce": "T from D position + epsilon*d_cam",
         "second_bounce": "D from frozen back_position + epsilon*d_cam",
     }
-    with open(os.path.join(scene.model_path, "stage_d_smoke_summary.json"), "w", encoding="utf-8") as handle:
+    summary_name = (
+        "stage_d_formal_summary.json" if opt.stage_d_formal_onset
+        else "stage_d_smoke_summary.json"
+    )
+    with open(os.path.join(scene.model_path, summary_name), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True, allow_nan=False)
     progress.close()
-    print("STAGE_D_SMOKE_COMPLETED " + json.dumps(summary["last_telemetry"], sort_keys=True))
+    print(summary["status"] + " " + json.dumps(summary["last_telemetry"], sort_keys=True))

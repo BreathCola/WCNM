@@ -2,7 +2,7 @@
 
 Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
-Current implementation branch: `feature/stage-c-transparent-mesh`
+Current implementation branch: `feature/stage-d-transmittance`
 
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
@@ -65,10 +65,11 @@ The independent CPU-only audit returns `STAGE_C_GEOMETRY_RELEASE_VALID` for
 111/111 caches and records that no runtime mesh/cache generation is required.
 The release directory and its mesh/cache source directories have no write bits.
 
-Stage D is now authorized for implementation and one minimum real-scene smoke.
-It may only read this exact release, must store its release ID and aggregate in
-every checkpoint, and may not refit, regenerate, or modify geometry. This stage
-transition does not authorize long training or Stage E.
+Stage D is current. Its implementation and minimum real-scene smoke are
+complete. It may only read this exact release, must store its release ID and
+aggregate in every checkpoint, and may not refit, regenerate, or modify
+geometry. The user has now authorized exactly one formal 5,000-step T-onset run;
+Stage E and continuation beyond global 20,000 remain unauthorized.
 
 Stage D implementation now includes an independent Transmittance surfel model,
 optimizer/scheduler/topology/checkpoint/PLY namespace; validated frozen-cache
@@ -100,7 +101,18 @@ fixed debug view 000039 has `Din <= t_far` on 0.63439 of valid pixels. Inside T
 color is finite/nonzero but faint after only three updates; outside D color is
 structured from the frozen back-position query. Final glass is over-bright, so
 this is a technical smoke pass, not semantic T separation or Stage D acceptance.
-No long training or Stage E is authorized.
+That smoke verdict did not itself authorize long training. The subsequent
+formal authorization is limited to a new global 15,001--20,000 trajectory from
+the original Stage-B global-15,000 source; Stage E is still unauthorized.
+
+The committed formal-onset operator is fail-closed to that source hash, the
+frozen release aggregate, fresh-T `random_bbox/4096/20260703`, checkpointed
+512-ray chunks, global-20,000 endpoint, global-40,000 depth start, and the unique
+v1 output. It records every training step and automatically writes complete
+checkpoint/PLY/nine-view review nodes at 15,100/15,500/16,000/17,500/20,000,
+then runs a CUDA-hidden recursive final audit. Pre-run regression is 145/145
+with CUDA enabled and 128 passed / 17 skipped with CUDA hidden. The next exact
+task is to create the clean pre-run commit and execute this one operator once.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
@@ -132,7 +144,8 @@ ks rose relative to the original 15,003 fixed view. Its non-smoke training path
 did not persist whole-step CUDA allocated/reserved peaks, so exact allocator
 trend remains an evidence gap. Stage B is neither complete nor accepted. The
 frozen StableNormal baseline and C03 initialization artifacts remain unchanged.
-Stage C and Stage D have not started.
+At that historical Stage-B record point, Stage C and Stage D had not started.
+The current-stage record above supersedes that historical sentence.
 
 The bounded Tier-1 observability path was subsequently used by the user for
 matched 7k, 10k, and 15k fresh-R handoff pilots through R-local 175. Read-only
@@ -598,8 +611,8 @@ Stage A code evidence commit: `829dd82dc74f4c5dce640201448626df24afa25a`
   bird/background separation, transparent mesh, or two-hit geometry.
 - Do not start a matched StableNormal-versus-C03 Stage B comparison in parallel.
   It may be designed later if the reflection hypothesis requires it.
-- Stage C and Stage D remain forbidden until their own acceptance and explicit
-  stage transitions.
+- Historical Stage-B restrictions are closed. Stage C is accepted and Stage D
+  is current under its own explicit release and run contracts.
 
 Pending before acceptance: user evaluation of the real-scene `lambda_spec`
 pilot's transparent mask, overlay, ks, reflection contribution, and L_spec

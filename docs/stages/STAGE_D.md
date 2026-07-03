@@ -58,7 +58,8 @@ minimum steps needed to prove one optimizer update plus save/restore. It must:
   color-alpha-depth, transmittance color-alpha, depth violation, and frozen
   near/far/valid maps.
 
-The smoke is not a long training authorization and does not enter Stage E.
+The smoke was not itself a long training authorization and does not enter Stage
+E. The later formal-onset authorization is recorded below.
 
 ## Acceptance boundary
 
@@ -88,3 +89,20 @@ Verdict: `STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`. Inside color remains faint and
 the combined glass region is over-bright after only three updates. This is an
 engineering-path pass, not Stage D semantic/quality acceptance, long-training
 authorization, or Stage E entry.
+
+## Authorized formal T-onset trajectory
+
+The user has now authorized exactly one new formal 5,000-step trajectory. It
+must start from the frozen Branch-A Stage-B global-15,000 checkpoint (SHA-256
+`050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`),
+not from any Stage D smoke. It uses `stage_c_geometry_release_v1` unchanged,
+creates fresh T as `random_bbox`, count 4,096, seed 20260703, and updates global
+15,001 through 20,000 only. Its unique output is
+`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1`.
+
+This formal run keeps `L_depth` disabled throughout. Metadata must record
+global 40,000 as its future activation with `lambda_depth=0.2`. Checkpoint, PLY,
+telemetry, nine-view debug, and contact-sheet nodes are exactly 15,100, 15,500,
+16,000, 17,500, and 20,000. A CPU-only final audit must stop at
+`HOLD_FOR_SEMANTIC_REVIEW` or `BLOCKED`; it cannot enter Stage E or continue
+beyond global 20,000.

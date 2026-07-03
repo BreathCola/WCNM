@@ -2486,3 +2486,66 @@ training, semantic T claim, Stage D acceptance, or Stage E transition follows.
 Required ablation: Before long training, decide how to warm up T and control
 early outside/transmission energy; retain the global-40,000 production L_depth
 schedule unless separately approved.
+
+## D-004 — Formal T onset from the frozen global-15,000 geometry source
+
+Date: 2026-07-03
+
+Question: Which D/R state, geometry release, and loss schedule define the first
+formal 5,000-step Stage D trajectory after the successful technical smoke?
+
+Chosen implementation: Start one entirely new trajectory from the exact
+`C03-r8 Tier 2 onset study` Branch-A Stage-B checkpoint at global 15,000 /
+R-local 12,000, SHA-256
+`050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`.
+Use the already frozen `stage_c_geometry_release_v1`, aggregate SHA-256
+`4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
+This release's geometry source is that same global-15,000 state. The first T
+update is therefore global 15,001; do not separately extend D/R to global
+20,000 and do not rebuild the mesh or cache.
+
+Create fresh T with the smoke-verified independent initialization
+`random_bbox`, count 4,096, seed 20260703, inside the frozen mesh AABB. Restore
+the complete D/R model, optimizer, topology, RNG, and camera-deck state from the
+source. Continue through global 20,000 only, yielding R-local 17,000 and T-local
+5,000. Use the verified checkpointed 512-ray chunks for R, first-bounce T, and
+second-bounce D. Preserve full-frame RGB, global R rays, frozen valid two-hit
+caches, first-bounce T, second-bounce D, alpha-over Ct, and all existing
+rendering/loss/optimizer mathematics.
+
+The source checkpoint actually records `lambda_spec=0.2`, `K0=0.9`, and the
+reviewed-v1 mask manifest file SHA-256
+`056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551`.
+The formal run must validate and copy this contract into metadata rather than
+infer it from historical prose.
+
+This is not the smoke's early-L_depth exercise. For every update global
+15,001--20,000, compute depth violation only as telemetry/debug evidence but
+apply zero depth-loss weight. The production schedule remains
+`stage_d_depth_start_iteration=40000`; at global 40,000 and only then,
+`lambda_depth=0.2` becomes active. No part of this run authorizes continuation
+past global 20,000 or entry into Stage E.
+
+Alternatives: Resume `smoke_v3`; repeat short smoke/pilot gates; extend D/R to
+20,000 before creating T; rebuild a geometry v2; activate L_depth at T onset;
+or change chunks/formulas to manage early brightness.
+
+Why: Stage C is already frozen against the selected global-15,000 geometry, and
+the smoke proved the exact T/two-bounce execution path. A fresh 5,000-step
+trajectory from that same state isolates whether T semantic structure starts to
+form without mixing smoke updates, a new geometry fit, or early depth pressure.
+
+Paper fidelity: This changes the project-specific T onset from the master
+plan's generic global 20,001 to global 15,001 because the accepted geometry is
+already frozen at global 15,000. It retains the master plan's global-40,000
+L_depth activation and changes no image-formation formula.
+
+Impact: A fail-closed one-command operator owns the unique output
+`output/stage_d_tihubird_c03r8_formal_onset_g15000_g20000_v1`. It saves five
+complete checkpoint/PLY/review nodes, per-step telemetry, nine fixed views,
+contact sheets, a CPU-only recursive audit, and a semantic-review report. A
+healthy run stops at `HOLD_FOR_SEMANTIC_REVIEW`; loss reduction alone never
+establishes bird/background separation.
+
+Required ablation: None in this Stage D onset run. Final ablations remain Stage
+E work and are not authorized.
