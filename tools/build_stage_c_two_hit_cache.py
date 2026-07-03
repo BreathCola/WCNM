@@ -23,7 +23,9 @@ from geometry.mesh_intersector import MeshIntersector
 from geometry.two_hit import CACHE_SCHEMA, masked_camera_rays, scatter_two_hits
 
 
-DEBUG_STEMS = {"000000", "000039", "000040", "000041", "000075", "000110"}
+DEBUG_STEMS = {
+    "000000", "000039", "000040", "000041", "000053", "000063", "000075", "000110",
+}
 
 
 def sha256_file(path: Path) -> str:

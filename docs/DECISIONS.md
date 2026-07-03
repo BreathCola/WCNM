@@ -2271,3 +2271,63 @@ validation/fusion, `mask_soft` remains L_spec-only, and RGB remains full-frame.
 Required ablation: Before Stage D, establish and approve a geometry repair that
 raises cross-view two-hit coverage and removes folded/multi-crossing structure
 without replacing measured glass geometry by an assumed primitive.
+
+## C-002 — DR-guided six-plane repair for the TiHuBird enclosure
+
+Date: 2026-07-03
+
+Question: Can the failed pure-TSDF shell be repaired with the existing
+DiffusionRenderer depth/normal evidence without hand-authoring a glass box?
+
+Observed evidence: The repository contains 111 mapped raw DR depth and normal
+frames at 704x384. Raw depth is an 8-bit RGB decoder output rather than metric
+camera depth. Against full-D metric depth on reliable pixels outside the formal
+glass mask, its per-view monotonic relation is nevertheless strong: Spearman
+has 0.89904 median. Robust per-view direct- or inverse-depth calibration has R²
+0.38935 minimum / 0.73163 median. DR normals visibly encode the glass planes and
+fit three orthogonal world axes with 0.98984 median axis alignment.
+
+Chosen implementation: Decode the audited C03 `[-x,+y,+z]` camera-normal
+mapping, transform normals into world space, and robustly fit three sign-invariant
+orthogonal axes. Use the retained D-depth TSDF mesh only to initialize metric
+plane bounds at its 2nd/98th percentiles. Optimize the six bounds against all
+111 geometry-resolution hard masks, then validate the projected cuboid against
+all 111 original-resolution formal masks. Separately calibrate every raw DR
+depth image on opaque outside-mask D depth and compare it with the candidate
+front hit; never interpret raw PNG intensity directly as metric depth.
+
+Why: TiHuBird's target is visibly a planar six-face enclosure. A constrained
+model eliminates the folds and internal sheets that violate this known scene
+structure, while its orientation, scale, offsets, and validation are all tied
+to recorded DR/D/mask measurements. This is materially different from manually
+drawing a convenient cuboid.
+
+Measured result: The v2 mesh is watertight with 8 vertices/12 triangles. At
+source resolution, recall is 0.97200 mean / 0.91240 minimum and IoU is 0.95128
+mean. The v4 caches reload strictly for all 111 views, have hard-mask validity
+0.97038 mean / 0.90821 minimum, eroded validity 0.99117 mean, 100% valid
+`t_far > t_near`, and exactly zero more-than-two intersections. Worst-view
+overlays show that the remaining error is concentrated at mask disagreement;
+notably `000053` contains a background protrusion that is not absorbed into the
+mesh.
+
+Evidence boundary: The method assumes this particular enclosure is cuboid. DR
+depth remains a calibrated relative proxy; across views, the median of each
+view's median cuboid-versus-DR relative front-depth residual is 0.12280 and the
+worst is 0.42512. The fit must not be generalized to curved or unknown glass
+without a new model and audit.
+
+Paper fidelity: Offline Stage C geometry only. Reflection rays remain full
+valid-D-surface rays. `mask_hard` gates mesh rays, `mask_eroded` validates
+geometry, `mask_soft` remains L_spec-only, and RGB remains full-frame. No D/R
+checkpoint, Tier-2 artifact, renderer, BRDF, optimizer, loss, T field, second
+bounce, or Stage D behavior is changed.
+
+Impact: Retain the failed TSDF v3/v2-cache evidence unchanged. The repaired
+mesh/caches use new v2/v4 identities. Stage C now supplies the geometric
+prerequisite for Stage D under the documented cuboid assumption, but Stage D is
+not entered and T training remains unauthorized.
+
+Required ablation: If Stage D is later authorized, preserve this fixed mesh and
+cache as immutable inputs; do not refit them during T training. Report mask-
+invalid pixels separately rather than silently expanding the cuboid.

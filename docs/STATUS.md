@@ -34,14 +34,27 @@ caches. The accepted source, audit, mesh, and cache details are recorded in
 `docs/stages/STAGE_C.md`. The retained v3 mesh has zero boundary and non-manifold
 edges. All valid cached rays satisfy `t_far > t_near`.
 
-Stage C is not accepted for Stage D geometry use: mean hard-mask two-hit
-coverage is 0.80313 (minimum view 0.67551), mean eroded coverage is 0.81843,
-and 0.44044 of valid rays cross the extracted surface more than twice. Existing
-debug maps show structured missing regions and folded/internal far-surface
-structure. The caches are valid preprocessing artifacts, but they do not yet
-establish a reliable glass front/back shell. Reflection rays remain enabled on
-every valid D surface and RGB remains full-frame. No Transmittance Gaussian, T
-training, second bounce, or Stage D work has been performed or authorized.
+The first pure-TSDF v3 mesh remains a diagnostic failure: mean hard-mask
+two-hit coverage was 0.80313 and 0.44044 of valid rays had more than two mesh
+crossings. It has not been overwritten. The independent DR-guided repair uses
+C03 normals for orthogonal axes, the D/TSDF result only for metric initialization,
+the existing raw DR depth after per-view opaque-region metric calibration as an
+independent front-depth check, and all 111 source-resolution formal masks to fit
+the six measured enclosure planes. It does not hand-place a box.
+
+The repaired v2 cuboid mesh and v4 caches pass the Stage C geometry gate. At
+source resolution the projected mesh has mean/minimum mask recall
+0.97200/0.91240 and mean IoU 0.95128. The 111 strict cache reloads have mean
+hard-mask validity 0.97038, minimum 0.90821, mean eroded validity 0.99117,
+`t_far > t_near` on every valid ray, and zero rays with more than two distinct
+crossings. Source-resolution worst-view overlays and fixed-view near/far/valid
+maps show a coherent front/back cuboid without the former holes or folds.
+
+This establishes the Stage D geometric prerequisite under an explicit
+TiHuBird-glass-is-a-six-plane-enclosure assumption. It does not start Stage D:
+Reflection rays remain enabled on every valid D surface and RGB remains
+full-frame. No Transmittance Gaussian, T training, second bounce, or Stage D
+work has been performed or authorized.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
