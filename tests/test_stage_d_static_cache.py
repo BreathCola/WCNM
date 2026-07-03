@@ -14,6 +14,7 @@ from utils.stage_d_static_cache import (
     renderer_contract, state_sha256, write_manifest,
 )
 from geometry.geometry_release import sha256_file
+from utils.transmittance_debug import _mask_hwc
 
 
 def dataset_config():
@@ -34,6 +35,15 @@ def test_renderer_identity_binds_all_required_inputs():
     changed = dict(contract, ray_chunk_size=1024)
     assert make_identity("a" * 64, "b" * 64, "c" * 64, changed) \
         != first
+
+
+def test_debug_mask_normalizes_chw_and_hwc_without_broadcasting():
+    chw = torch.zeros((1, 269, 478))
+    hwc = _mask_hwc(chw)
+    assert hwc.shape == (269, 478, 1)
+    assert _mask_hwc(hwc).shape == (269, 478, 1)
+    with pytest.raises(ValueError, match="one-channel"):
+        _mask_hwc(torch.zeros((3, 269, 478)))
 
 
 def test_cache_rejects_target_rgb():

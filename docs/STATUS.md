@@ -159,9 +159,25 @@ the abandoned all-joint plan, and Phase A is not full joint training.
 The implementation includes a fail-closed 10-view output/loss/T-gradient
 parity gate, D/R full-state hashes, a no-update performance benchmark, eight
 complete checkpoint/PLY/nine-view nodes, continuous phase-aware telemetry, and
-a CPU-only final audit. No cache, benchmark, training, render, or formal output
-has been run or created by the implementation agent. `L_depth` remains off
-through global 20,000 with future activation recorded at global 40,000.
+a CPU-only final audit. `L_depth` remains off through global 20,000 with future
+activation recorded at global 40,000.
+
+The user-launched cached-T v1 passed its 111-view cache build and ten-view
+parity gate. Output and loss differences were exactly zero; the largest T
+gradient difference was below `7.3e-12`. View 000018 measured 254.95 ms cached
+T-only versus 1,909.46 ms frozen-uncached median, a 7.49x speedup. Training then
+completed 25 finite T-only updates but failed while exporting the first global-
+15,025 review node: the CHW `[1,269,478]` mask was expanded directly against an
+HWC `[269,478,3]` RGB tensor. Telemetry is complete only through global 15,024,
+although a finite 15,025 checkpoint was written immediately before the debug
+failure. V1 is preserved, classified `CACHED_T_WARMUP_BLOCKED`, and is never a
+resume source.
+
+The debug-only CHW-to-HWC normalization is covered by CPU tests. The authorized
+retry uses a new v2 output, restarts from the original global-15,000 Stage-B
+checkpoint with fresh T, and fail-closed audits the exact v1 failure artifacts
+before launch. No v2 cache build, benchmark, render, or GPU training has been
+started by the implementation agent.
 
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.

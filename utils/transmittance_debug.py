@@ -29,6 +29,17 @@ def _stats(value, mask):
     }
 
 
+def _mask_hwc(mask):
+    """Normalize a one-channel mask to the renderer's [H,W,1] map layout."""
+    if mask.ndim == 2:
+        return mask[..., None]
+    if mask.ndim == 3 and mask.shape[-1] == 1:
+        return mask
+    if mask.ndim == 3 and mask.shape[0] == 1:
+        return mask.permute(1, 2, 0)
+    raise ValueError(f"expected a one-channel mask, found shape {tuple(mask.shape)}")
+
+
 @torch.no_grad()
 def save_transmittance_debug_maps(
     output, ground_truth, directory, specular_mask, mask_sha256,
@@ -83,7 +94,7 @@ def save_transmittance_debug_maps(
         os.path.join(directory, "din_vs_far_violation.png"),
     )
     gt_hwc = ground_truth.detach().permute(1, 2, 0)
-    hard = specular_mask.detach() >= 0.5
+    hard = _mask_hwc(specular_mask.detach()) >= 0.5
     full_l1 = torch.abs(output["final"] - gt_hwc).mean()
     transparent_l1 = torch.abs(output["final"] - gt_hwc)[hard.expand_as(gt_hwc)].mean()
     outside_hard = ~hard

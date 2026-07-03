@@ -142,3 +142,13 @@ and uses the immutable Stage-C v1 release and fresh-T initialization above.
 The operator may return only `CACHED_T_WARMUP_AND_JOINT_ONSET_PASS`,
 `HOLD_FOR_SEMANTIC_REVIEW`, or `CACHED_T_WARMUP_BLOCKED`. It must not infer
 bird/background separation from falling loss and must not continue into Stage E.
+
+### Cached trajectory v1 failure and v2 retry
+
+The user-launched v1 completed 25 Phase-A updates but failed inside debug export
+at the first 15,025 node because a CHW mask was expanded against HWC RGB. Its
+cache/parity/training evidence remains preserved, but its checkpoint precedes
+an incomplete review/telemetry commit and is not resumable. The debug-only mask
+layout fix retries from the original Stage-B source with fresh T at the unique
+v2 output. V2 keeps every Phase A/B schedule, cache identity, parity tolerance,
+node, renderer, loss, and audit requirement above unchanged.

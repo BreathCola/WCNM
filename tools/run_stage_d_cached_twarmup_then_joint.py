@@ -27,6 +27,11 @@ SOURCE = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15
 MANIFEST = ROOT / "geometry_releases/stage_c_geometry_release_v1.json"
 OUTPUT = ROOT / "output" / CACHED_OUTPUT_NAME
 LOG = OUTPUT.with_suffix(".log")
+FAILED_V1 = ROOT / "output/stage_d_tihubird_c03r8_cached_twarmup_then_joint_g15000_g20000_v1"
+FAILED_V1_LOG = FAILED_V1.with_suffix(".log")
+FAILED_V1_TELEMETRY_SHA256 = "3ed241a0e787d1505673a6afc876e3cc8d615fc9b6f33fa4aefef8d201585a48"
+FAILED_V1_LOG_SHA256 = "9fd845418b6ab3b257981d77da674ada397e5de1396c48b281a41a970edb9554"
+FAILED_V1_CHECKPOINT_SHA256 = "a72fa90ccc7d3d15402f3ebae81d11fd1a1c2fe89c8762c7a2d1c91bbb9085c9"
 ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
 
 
@@ -61,12 +66,48 @@ def classify_compute_processes(text):
     return observed, conflicts
 
 
+def audit_excluded_failed_v1():
+    record = json.loads(
+        (FAILED_V1 / "cached_twarmup_operator_record.json").read_text(encoding="utf-8")
+    )
+    parity = json.loads((FAILED_V1 / "cache_parity_report.json").read_text(encoding="utf-8"))
+    telemetry_path = FAILED_V1 / "stage_d_telemetry.jsonl"
+    telemetry = [
+        json.loads(line) for line in telemetry_path.read_text(encoding="utf-8").splitlines()
+    ]
+    checkpoint = FAILED_V1 / "chkpnt15025.pth"
+    log_text = FAILED_V1_LOG.read_text(encoding="utf-8")
+    if not (
+        record.get("schema") == "rtgs_stage_d_cached_twarmup_operator_v1"
+        and record.get("status") == "CACHED_T_WARMUP_BLOCKED"
+        and record.get("training_exit_code") == 1
+        and record.get("source_sha256_before") == FORMAL_SOURCE_SHA256
+        and record.get("source_sha256_after") == FORMAL_SOURCE_SHA256
+        and record.get("release_aggregate_before") == FORMAL_RELEASE_SHA256
+        and record.get("release_aggregate_after") == FORMAL_RELEASE_SHA256
+        and parity.get("status") == "PASS" and not parity.get("failures")
+        and [row.get("global_iteration") for row in telemetry] == list(range(15001, 15025))
+        and sha256_file(telemetry_path) == FAILED_V1_TELEMETRY_SHA256
+        and sha256_file(FAILED_V1_LOG) == FAILED_V1_LOG_SHA256
+        and sha256_file(checkpoint) == FAILED_V1_CHECKPOINT_SHA256
+        and "expanded size of the tensor (3)" in log_text
+        and "Target sizes: [269, 478, 3]" in log_text
+    ):
+        raise ValueError("failed cached-T v1 exclusion audit failed")
+    return {
+        "path": str(FAILED_V1), "last_committed_telemetry_iteration": 15024,
+        "checkpoint_15025_sha256": FAILED_V1_CHECKPOINT_SHA256,
+        "failure": "debug mask CHW/HWC mismatch at the first review node",
+        "resume_allowed": False,
+    }
+
+
 def training_command():
     return [
         sys.executable, str(ROOT / "train.py"),
         "-s", str(ROOT / "data/TiHuBird"), "-m", str(OUTPUT),
         "--images", "images", "--model_type", "surfel", "--stage", "stage_d",
-        "--experiment", "TiHuBird C03-r8 Stage D cached T warm-up then exact joint v1",
+        "--experiment", "TiHuBird C03-r8 Stage D cached T warm-up then exact joint v2",
         "--resolution", "8",
         "--normal_priors", "diffrender_priors_candidates/axis_smoke/C03/normal",
         "--normal_prior_space", "camera",
@@ -122,7 +163,7 @@ def main():
     environment.update({
         "CUDA_VISIBLE_DEVICES": "0", "PYTHONHASHSEED": "0",
         "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:128,garbage_collection_threshold:0.8",
-        "RTGS_BVH_JIT_ROOT": "/tmp/rtgs-stage-d-cached-twarmup-v1-jit",
+        "RTGS_BVH_JIT_ROOT": "/tmp/rtgs-stage-d-cached-twarmup-v2-jit",
     })
     exit_code = 2
     try:
@@ -131,6 +172,7 @@ def main():
             raise RuntimeError("formal cached Stage D requires a clean committed worktree")
         record["git_commit"] = git("rev-parse", "HEAD")
         record["git_branch"] = git("branch", "--show-current")
+        record["excluded_failed_v1"] = audit_excluded_failed_v1()
         source_sha = sha256_file(SOURCE)
         if source_sha != FORMAL_SOURCE_SHA256:
             raise ValueError("source checkpoint SHA-256 mismatch")

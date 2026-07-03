@@ -2663,3 +2663,46 @@ continues beyond global 20,000 or enters Stage E.
 
 Required ablation: None in Stage D. The cached and uncached parity gate is an
 equivalence test, not a quality ablation.
+
+## D-007 — Preserve failed cached-T v1 and retry debug-only fix as v2
+
+Date: 2026-07-03
+
+Question: How should the cached-T operator recover after its first review node
+failed despite successful cache parity and finite Phase-A updates?
+
+Observed evidence: v1 built and validated all 111 caches, passed the nine fixed
+plus one random-view parity gate with zero output/loss differences and T-gradient
+differences below `7.3e-12`, and measured a 254.95 ms cached median versus
+1,909.46 ms frozen-uncached median on view 000018 (7.49x). It completed 25 T
+optimizer updates and wrote a finite global-15,025 checkpoint, but telemetry was
+committed only through global 15,024 because review export follows checkpoint
+save and precedes telemetry commit.
+
+The failure was confined to debug statistics: `camera.specular_mask` is CHW
+`[1,269,478]`, while transparent-region RGB L1 expanded it directly against
+HWC `[269,478,3]`. No renderer, loss, gradient, optimizer, cache, geometry, or
+training tensor failed.
+
+Chosen implementation: Preserve v1 unchanged and forbid resume. Normalize only
+the debug-statistics mask to HWC before RGB boolean expansion, with CPU tests
+for CHW/HWC inputs. Retry from the original Stage-B global-15,000 source and
+fresh T in a new `..._v2` output. The v2 operator fail-closed audits the exact
+v1 telemetry, log, checkpoint hash, source/release identity, parity verdict,
+and exception before launching.
+
+Alternatives: Resume the global-15,025 checkpoint; overwrite v1; omit the first
+review node; or change training/cache mathematics.
+
+Why: The checkpoint was written before an incomplete review/telemetry commit,
+so it is not an atomic operator resume boundary. A fresh v2 preserves evidence
+and deterministic schedule semantics. The mask conversion repairs only output
+observability.
+
+Paper fidelity: Debug layout only. No image formation or training mathematics
+change.
+
+Impact: v1 remains `CACHED_T_WARMUP_BLOCKED`; the only retry output is
+`output/stage_d_tihubird_c03r8_cached_twarmup_then_joint_g15000_g20000_v2`.
+
+Required ablation: None.
