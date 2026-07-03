@@ -67,3 +67,24 @@ content, Cout represents exterior content, T does not absorb R/background,
 L_depth constrains Din, reconstruction remains stable, and novel views do not
 flicker. A passing minimum smoke only returns
 `STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`.
+
+## Minimum smoke evidence
+
+`output/stage_d_tihubird_c03r8_smoke_v3/` completed two fresh steps and one
+actual restored step. Final checkpoint is global 15,003 / R-local 12,003 /
+T-local 3 with SHA-256
+`f71d4644fcb2873ddc9d0ea058c87ce698c405d2f1b43e83b7fdd9df4349e560`.
+
+- D/R/T counts: 258,593 / 3,088 / 4,096;
+- three independent optimizer/state namespaces updated finitely;
+- all three telemetry rows have zero non-finite count;
+- scoped peak allocated/reserved: 3.48/4.40 GB;
+- fixed-view `Din <= t_far`: 0.63439;
+- geometry release aggregate matches before/after;
+- all required debug files, three PLYs, telemetry, checkpoints, and CPU-only
+  final audit are present.
+
+Verdict: `STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`. Inside color remains faint and
+the combined glass region is over-bright after only three updates. This is an
+engineering-path pass, not Stage D semantic/quality acceptance, long-training
+authorization, or Stage E entry.

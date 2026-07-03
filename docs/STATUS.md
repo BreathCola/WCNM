@@ -85,6 +85,23 @@ stems. Both attempts are preserved; neither performed an optimizer update or
 wrote a checkpoint. Stage D now canonicalizes camera identity with
 `Path(image_name).stem` before frozen-cache lookup.
 
+The new `smoke_v3` completed global 15,001--15,002 from the frozen Stage B
+source, then actually restored `chkpnt15002.pth` and completed global 15,003 / R
+local 12,003 / T local 3. The CPU-only final audit returns
+`STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`. Final D/R/T counts are
+258,593/3,088/4,096; all three parameter namespaces changed by finite nonzero
+amounts and retain separate optimizer state. The final checkpoint SHA-256 is
+`f71d4644fcb2873ddc9d0ea058c87ce698c405d2f1b43e83b7fdd9df4349e560`.
+
+All three telemetry rows have zero non-finite count. Maximum observed scoped
+allocated/reserved memory is 3,483,877,888 / 4,395,630,592 bytes and training
+steps take 5.94--8.29 seconds. L_depth is finite and active at every smoke step;
+fixed debug view 000039 has `Din <= t_far` on 0.63439 of valid pixels. Inside T
+color is finite/nonzero but faint after only three updates; outside D color is
+structured from the frozen back-position query. Final glass is over-bright, so
+this is a technical smoke pass, not semantic T separation or Stage D acceptance.
+No long training or Stage E is authorized.
+
 Historical Stage B record follows. Stage A is formally closed. Stage B-0 was approved by the user and
 B-1a/B-1b/B-1c implementation is present with synthetic/CUDA tests passing.
 The first user-operated TiHuBird smoke restored D and initialized R, then

@@ -2445,3 +2445,44 @@ schedule, or RNG behavior changes.
 Impact: Preserve v1/v2 smoke evidence and use a new v3 output identity.
 
 Required ablation: None.
+
+## D-003 — Minimum real-scene smoke and actual Stage D resume
+
+Date: 2026-07-03
+
+Question: Does the implemented Stage D path execute end to end on TiHuBird,
+including fresh T, two bounces, loss, optimizer state, checkpoint restore, PLY,
+debug, telemetry, and frozen-release enforcement?
+
+Observed evidence: `smoke_v3` completed two fresh steps to global 15,002, saved
+a full checkpoint, then restored that checkpoint and completed one more step to
+global 15,003 / R-local 12,003 / T-local 3. CPU-only audit recursively checked
+86 tensors / 15,055,935 elements, all finite, and returned
+`STAGE_D_SMOKE_PASSED_AWAITING_REVIEW`. Final checkpoint SHA-256 is
+`f71d4644fcb2873ddc9d0ea058c87ce698c405d2f1b43e83b7fdd9df4349e560`.
+
+Branch independence: D/R/T counts are 258,593/3,088/4,096 with separate
+optimizer state and storage. Relative to their source/first saved state,
+maximum xyz updates are `8.83e-4 / 7.44e-5 / 3.20e-4`; opacity and color also
+change finitely and nonzero. This proves all three optimizers executed; it does
+not prove semantic branch separation.
+
+Path evidence: The fixed 000039 debug view has coherent frozen two-hit support,
+faint but nonzero inside T color, and structured outside D color. Ct uses the
+tested alpha-over formula. L_depth is finite/active for all three steps; the
+fixed-view `Din <= t_far` fraction is 0.63439. The final image is visibly
+over-bright over glass, expected from an untrained T branch and strong outside
+contribution, so no quality acceptance is claimed.
+
+Engineering health: All telemetry has `nonfinite_count=0`. Scoped peak
+allocated/reserved memory is at most 3,483,877,888/4,395,630,592 bytes and step
+wall time is 5.94--8.29 seconds. The geometry release revalidates after training
+with unchanged aggregate
+`4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
+
+Impact: The technical smoke passes and awaits user review. No long Stage D
+training, semantic T claim, Stage D acceptance, or Stage E transition follows.
+
+Required ablation: Before long training, decide how to warm up T and control
+early outside/transmission energy; retain the global-40,000 production L_depth
+schedule unless separately approved.
