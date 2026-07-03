@@ -233,7 +233,7 @@ class ReflectionSurfelModel:
     def save_ply(self, path: str) -> None:
         mkdir_p(os.path.dirname(path))
         arrays = [
-            self._xyz.detach().cpu().numpy(),
+            self.get_xyz.detach().cpu().numpy(),
             self.get_normal.detach().cpu().numpy(),
             self._color.detach().cpu().numpy(),
             self._opacity.detach().cpu().numpy(),

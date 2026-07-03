@@ -9,6 +9,7 @@ from torchvision.utils import save_image
 
 from utils.reflection_debug import save_reflection_debug_maps
 from utils.surfel_utils import visualize_depth
+from utils.semantic_repair import spatial_frequency_energy
 
 
 def _chw(output, name):
@@ -56,6 +57,26 @@ def save_transmittance_debug_maps(
         "transmittance_color",
     ):
         save_image(_chw(output, name).clamp(0, 1), os.path.join(directory, f"{name}.png"))
+    semantic_rgb = (
+        "reflection_unfiltered", "reflection_inside", "reflection_interface",
+        "reflection_outside", "reflection_final_filtered",
+        "conditional_inside_color", "outside_unfiltered", "outside_inside",
+        "outside_interface", "outside_outside", "outside_final_filtered",
+        "t_spatial_class_map",
+    )
+    for name in semantic_rgb:
+        if name in output:
+            save_image(_chw(output, name).clamp(0, 1), os.path.join(directory, f"{name}.png"))
+    for source, alias in (
+        ("outside_unfiltered", "cout_unfiltered"),
+        ("outside_inside", "cout_inside"),
+        ("outside_interface", "cout_interface"),
+        ("outside_outside", "cout_outside"),
+        ("outside_final_filtered", "cout_final"),
+        ("conditional_inside_color", "c_in_cond"),
+    ):
+        if source in output:
+            save_image(_chw(output, source).clamp(0, 1), os.path.join(directory, f"{alias}.png"))
     for name in (
         "inside_alpha", "outside_alpha", "transmittance_alpha",
         "two_hit_valid", "transmittance_valid",
@@ -64,6 +85,18 @@ def save_transmittance_debug_maps(
             _chw(output, name).repeat(3, 1, 1).clamp(0, 1),
             os.path.join(directory, f"{name}.png"),
         )
+    for prefix in ("reflection_inside", "reflection_interface", "reflection_outside"):
+        alpha_name, depth_name, hit_name = f"{prefix}_alpha", f"{prefix}_depth", f"{prefix}_hit"
+        if alpha_name in output:
+            save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
+            save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
+            save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
+    for prefix in ("outside_inside", "outside_interface", "outside_outside"):
+        alpha_name, depth_name, hit_name = f"{prefix}_alpha", f"{prefix}_depth", f"{prefix}_hit"
+        if alpha_name in output:
+            save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
+            save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
+            save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
     for name, alpha_name in (
         ("inside_depth", "inside_alpha"),
         ("outside_depth", "outside_alpha"),
@@ -125,6 +158,42 @@ def save_transmittance_debug_maps(
         },
         "depth_violation_display_p99": scale,
     }
+    if "t_spatial_counts" in output:
+        ain = output["inside_alpha"][hard]
+        conditional_luma = (
+            output["conditional_inside_color"]
+            * output["conditional_inside_color"].new_tensor((0.2126, 0.7152, 0.0722))
+        ).sum(dim=-1, keepdim=True)[hard]
+        metadata["semantic_repair"] = {
+            "t_spatial_counts": output["t_spatial_counts"],
+            "r_spatial": output.get("semantic_r_stats", {}),
+            "cout_spatial": output.get("semantic_cout_stats", {}),
+            "r_filter": output.get("semantic_r_filter_stats", {}),
+            "cout_filter": output.get("semantic_cout_filter_stats", {}),
+            "ain": {
+                "mean": float(ain.mean()), "p50": float(torch.quantile(ain, 0.50)),
+                "p95": float(torch.quantile(ain, 0.95)),
+                "p99": float(torch.quantile(ain, 0.99)),
+                "saturation_fraction_ge_0_95": float((ain >= 0.95).float().mean()),
+            } if ain.numel() else {},
+            "conditional_inside_luminance": _stats(
+                conditional_luma,
+                torch.ones_like(conditional_luma, dtype=torch.bool),
+            ),
+            "high_ain_near_black_fraction": float(
+                ((ain >= 0.80) & (conditional_luma < 0.08)).float().mean()
+            ) if ain.numel() else 0.0,
+            "spatial_frequency_energy": {
+                branch: spatial_frequency_energy(output[name], hard)
+                for branch, name in (
+                    ("diffuse", "diffuse_contribution"),
+                    ("reflection", "reflection_final_filtered"),
+                    ("transmittance", "transmittance_contribution"),
+                )
+            },
+            "bird_roi_available": False,
+            "bird_level_quantification": "unavailable: no independent versioned bird ROI",
+        }
     with open(os.path.join(directory, "transmittance_metadata.json"), "w", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2, sort_keys=True, allow_nan=False)
 
@@ -159,5 +228,51 @@ def make_stage_d_contact_sheet(iteration_directory, stems):
             canvas.paste(image, (x, y))
             draw.text((col * thumb[0] + 4, y0 + 5), f"{stem} | {label}", fill="black")
     target = os.path.join(iteration_directory, "contact_sheet.png")
+    canvas.save(target)
+    return target
+
+
+def make_semantic_repair_contact_sheet(iteration_directory, stems):
+    columns = (
+        ("ground_truth.png", "GT"), ("final.png", "final"),
+        ("diffuse_contribution.png", "D"),
+        ("reflection_unfiltered.png", "R unfiltered"),
+        ("reflection_inside.png", "R inside"),
+        ("reflection_interface.png", "R interface"),
+        ("reflection_outside.png", "R outside"),
+        ("reflection_final_filtered.png", "R final"),
+        ("transmittance_contribution.png", "T"),
+        ("inside_color.png", "Cin"), ("inside_alpha.png", "Ain"),
+        ("inside_depth.png", "Din"), ("c_in_cond.png", "Cin/Ain"),
+        ("cout_unfiltered.png", "Cout unfiltered"),
+        ("cout_inside.png", "Cout inside"),
+        ("cout_interface.png", "Cout interface"),
+        ("cout_outside.png", "Cout outside"),
+        ("cout_final.png", "Cout final"),
+        ("transmittance_color.png", "Ct"),
+        ("transmittance_alpha.png", "At"),
+        ("din_vs_far_violation.png", "Din vs far"),
+        ("transparent_mask.png", "mask"), ("ks.png", "ks"),
+        ("t_spatial_class_map.png", "T spatial"),
+    )
+    thumb, label_height = (240, 135), 25
+    canvas = Image.new(
+        "RGB", (thumb[0] * len(columns), (thumb[1] + label_height) * len(stems)), "white"
+    )
+    draw = ImageDraw.Draw(canvas)
+    for row, stem in enumerate(stems):
+        view = os.path.join(iteration_directory, stem)
+        for col, (filename, label) in enumerate(columns):
+            path = os.path.join(view, filename)
+            if not os.path.isfile(path):
+                raise FileNotFoundError(path)
+            image = Image.open(path).convert("RGB")
+            image.thumbnail(thumb, Image.Resampling.LANCZOS)
+            x = col * thumb[0] + (thumb[0] - image.width) // 2
+            y0 = row * (thumb[1] + label_height)
+            y = y0 + label_height + (thumb[1] - image.height) // 2
+            canvas.paste(image, (x, y))
+            draw.text((col * thumb[0] + 3, y0 + 4), f"{stem} | {label}", fill="black")
+    target = os.path.join(iteration_directory, "semantic_repair_contact_sheet.png")
     canvas.save(target)
     return target

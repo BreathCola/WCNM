@@ -27,6 +27,7 @@ def initialize_stage_d_from_stage_b(
     transmittance_bbox_max,
     transmittance_count: int,
     transmittance_seed: int,
+    transmittance_cuboid_space=None,
     map_location=None,
 ):
     before = sha256_file(path)
@@ -36,10 +37,15 @@ def initialize_stage_d_from_stage_b(
             map_location=map_location, return_runtime_state=True,
         )
     )
-    transmittance.create_random_bbox(
-        transmittance_bbox_min, transmittance_bbox_max,
-        transmittance_count, transmittance_seed,
-    )
+    if transmittance_cuboid_space is None:
+        transmittance.create_random_bbox(
+            transmittance_bbox_min, transmittance_bbox_max,
+            transmittance_count, transmittance_seed,
+        )
+    else:
+        transmittance.create_random_inside_cuboid(
+            transmittance_cuboid_space, transmittance_count, transmittance_seed,
+        )
     transmittance.initialization["branch"] = "transmittance"
     transmittance.training_setup(transmittance_args)
     after = sha256_file(path)

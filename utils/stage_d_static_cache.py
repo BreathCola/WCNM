@@ -18,6 +18,7 @@ FORBIDDEN_CACHE_KEYS = {"gt", "ground_truth", "target", "target_rgb", "original_
 TRAINING_PACKAGE_KEYS = {
     "alpha", "position", "normal", "surface_ks", "microfacet_F",
     "diffuse_contribution", "reflection_contribution",
+    "semantic_r_stats", "semantic_r_filter_stats", "semantic_r_transparent_ray_count",
 }
 
 
@@ -84,6 +85,14 @@ def renderer_contract(dataset) -> dict:
         "alpha_over": "Ct=Cin+(1-Ain)*Cout;At=Ain+(1-Ain)*Aout",
         "final_composition": "D_contribution+R_contribution+T_contribution+background",
         "bsdf_weight_mode": "brdf_times_cosine",
+        "semantic_repair": bool(getattr(dataset, "_semantic_cuboid_space_metadata", None)),
+        "cuboid_space": getattr(dataset, "_semantic_cuboid_space_metadata", None),
+        "r_transparent_spatial_filter": (
+            "outside_only" if getattr(dataset, "_semantic_cuboid_space_metadata", None) else None
+        ),
+        "cout_spatial_filter": (
+            "outside_only" if getattr(dataset, "_semantic_cuboid_space_metadata", None) else None
+        ),
     }
 
 
@@ -213,6 +222,7 @@ class StaticDRCache:
         static_inputs = payload["static_inputs"]
         if training_only:
             static_inputs = dict(static_inputs)
+            static_inputs.pop("semantic_cout_components", None)
             package = static_inputs.get("package", {})
             static_inputs["package"] = {
                 key: value for key, value in package.items()

@@ -57,6 +57,8 @@ class StageDRenderState:
     reflection_acceleration: object = None
     transmittance_acceleration: object = None
     diffuse_acceleration: object = None
+    cuboid_space: object = None
+    semantic_repair: bool = False
 
     def __post_init__(self):
         self.reflection_acceleration = self.reflection_acceleration or CudaLBVH(self.ray_cutoff_sigma)
@@ -74,6 +76,8 @@ class StageDRenderState:
             roughness_remap=self.roughness_remap,
             ray_background="scene", ray_checkpoint_chunks=self.ray_checkpoint_chunks,
             acceleration=self.reflection_acceleration,
+            cuboid_space=self.cuboid_space,
+            semantic_repair=self.semantic_repair,
         )
 
     def mark_parameters_updated(self):
@@ -106,13 +110,24 @@ def alpha_over_transmittance(inside_color, inside_alpha, outside_color, outside_
     return color, alpha
 
 
-def _trace(model, origins, directions, acceleration, state, return_aux, diagnostics):
+def semantic_cout_outside_only(components):
+    """Select the audited outside class as the only formal second-bounce Cout."""
+    if set(components) != {"inside", "interface", "outside"}:
+        raise ValueError("semantic Cout requires disjoint inside/interface/outside components")
+    return components["outside"]
+
+
+def _trace(
+    model, origins, directions, acceleration, state, return_aux, diagnostics,
+    surfel_filter=None,
+):
     traced = raytrace(
         model, origins, directions, acceleration=acceleration,
         chunk_size=state.ray_chunk_size, cutoff_sigma=state.ray_cutoff_sigma,
         hit_threshold=state.ray_hit_threshold, return_aux=return_aux,
         return_diagnostics=diagnostics,
         checkpoint_chunks=bool(state.ray_checkpoint_chunks and not diagnostics),
+        surfel_filter=surfel_filter,
     )
     if return_aux and diagnostics:
         outputs, aux, diagnostic = traced
@@ -173,6 +188,46 @@ def build_static_dr_inputs(
             return_ray_diagnostics,
         )
     outside_raw, outside_alpha, outside_relative_depth, outside_hit = outside_outputs
+    semantic_cout_components = None
+    semantic_cout_stats = None
+    if state.semantic_repair:
+        if state.cuboid_space is None:
+            raise RuntimeError("semantic Cout filtering requires cuboid_space")
+        class_masks = state.cuboid_space.masks(state.diffuse.get_xyz.detach())
+        semantic_cout_components = {}
+        semantic_cout_stats = {}
+        for class_name in ("inside", "interface", "outside"):
+            class_outputs, _, class_diagnostics = _trace(
+                state.diffuse_raytrace, second_origin, direction,
+                state.diffuse_acceleration, state, False,
+                return_ray_diagnostics, surfel_filter=class_masks[class_name],
+            )
+            class_raw, class_alpha, class_depth, class_hit = class_outputs
+            semantic_cout_components[class_name] = {
+                "raw": class_raw, "alpha": class_alpha, "depth": class_depth,
+                "hit": class_hit,
+                "surfel_count": int(class_masks[class_name].sum()),
+                "candidate_count": (
+                    int(class_diagnostics.eligible_candidate_counts.sum())
+                    if class_diagnostics is not None else None
+                ),
+                "hit_count": int(class_hit.sum()),
+            }
+            semantic_cout_stats[class_name] = {
+                "surfel_count": int(class_masks[class_name].sum()),
+                "candidate_count": (
+                    int(class_diagnostics.eligible_candidate_counts.sum())
+                    if class_diagnostics is not None else None
+                ),
+                "hit_count": int(class_hit.sum()),
+                "contribution_energy": float(class_raw.detach().mean())
+                if class_raw.numel() else 0.0,
+            }
+        formal = semantic_cout_outside_only(semantic_cout_components)
+        outside_raw = formal["raw"]
+        outside_alpha = formal["alpha"]
+        outside_relative_depth = formal["depth"]
+        outside_hit = formal["hit"]
     return {
         "package": package,
         "height": int(height), "width": int(width), "indices": indices,
@@ -182,11 +237,21 @@ def build_static_dr_inputs(
         "outside_raw": outside_raw, "outside_alpha": outside_alpha,
         "outside_relative_depth": outside_relative_depth,
         "outside_hit": outside_hit,
+        "outside_unfiltered_raw": outside_outputs[0],
+        "outside_unfiltered_alpha": outside_outputs[1],
+        "outside_unfiltered_relative_depth": outside_outputs[2],
+        "outside_unfiltered_hit": outside_outputs[3],
+        "semantic_cout_components": semantic_cout_components,
+        "semantic_cout_stats": semantic_cout_stats,
         "near_depth": t_near[..., None], "far_depth": t_far[..., None],
         "two_hit_valid": valid_cache[..., None].to(dtype),
         "transmittance_valid": valid[..., None].to(dtype),
         "outside_ray_aux": outside_aux,
         "outside_ray_diagnostics": outside_diagnostics,
+        "outside_unfiltered_candidate_count": (
+            int(outside_diagnostics.candidate_counts.sum())
+            if outside_diagnostics is not None else None
+        ),
     }
 
 
@@ -212,6 +277,11 @@ def render_from_static_dr(
     dtype = package["position"].dtype
     ray_background = background.reshape(1, 3).to(outside_raw)
     outside_color = outside_raw + (1.0 - outside_alpha) * ray_background
+    outside_unfiltered_raw = static_inputs.get("outside_unfiltered_raw", outside_raw)
+    outside_unfiltered_alpha = static_inputs.get("outside_unfiltered_alpha", outside_alpha)
+    outside_unfiltered_color = (
+        outside_unfiltered_raw + (1.0 - outside_unfiltered_alpha) * ray_background
+    )
     transmittance_color, transmittance_alpha = alpha_over_transmittance(
         inside_raw, inside_alpha, outside_color, outside_alpha
     )
@@ -220,6 +290,7 @@ def render_from_static_dr(
     far = static_inputs["far"]
     outside_depth = far + outside_relative_depth
     violation = torch.relu(inside_depth - far)
+    conditional_inside = inside_raw / inside_alpha.clamp_min(1e-6)
 
     alpha = package["alpha"].reshape(-1, 1)[indices]
     ks = package["surface_ks"].reshape(-1, 1)[indices]
@@ -245,6 +316,12 @@ def render_from_static_dr(
         "outside_alpha": _scatter(outside_alpha, indices, height, width, 1),
         "outside_depth": _scatter(outside_depth, indices, height, width, 1),
         "outside_hit_mask": _scatter(outside_hit.to(dtype), indices, height, width, 1),
+        "conditional_inside_color": _scatter(
+            conditional_inside, indices, height, width, 3
+        ),
+        "outside_unfiltered": _scatter(
+            outside_unfiltered_color, indices, height, width, 3
+        ),
         "transmittance_color": _scatter(transmittance_color, indices, height, width, 3),
         "transmittance_alpha": _scatter(transmittance_alpha, indices, height, width, 1),
         "depth_violation": _scatter(violation, indices, height, width, 1),
@@ -258,6 +335,58 @@ def render_from_static_dr(
         "inside_ray_diagnostics": inside_diagnostics,
         "outside_ray_diagnostics": static_inputs.get("outside_ray_diagnostics"),
     })
+    semantic_components = static_inputs.get("semantic_cout_components")
+    if state.semantic_repair:
+        stats = dict(static_inputs.get("semantic_cout_stats") or {})
+        if semantic_components is not None:
+            stats = {}
+            for class_name, component in semantic_components.items():
+                absolute_depth = far + component["depth"]
+                package[f"outside_{class_name}"] = _scatter(
+                    component["raw"], indices, height, width, 3
+                )
+                package[f"outside_{class_name}_alpha"] = _scatter(
+                    component["alpha"], indices, height, width, 1
+                )
+                package[f"outside_{class_name}_depth"] = _scatter(
+                    absolute_depth, indices, height, width, 1
+                )
+                package[f"outside_{class_name}_hit"] = _scatter(
+                    component["hit"].to(dtype), indices, height, width, 1
+                )
+                stats[class_name] = {
+                    "surfel_count": component["surfel_count"],
+                    "candidate_count": component["candidate_count"],
+                    "hit_count": component["hit_count"],
+                    "contribution_energy": float(component["raw"].detach().mean())
+                    if component["raw"].numel() else 0.0,
+                }
+        package["outside_final_filtered"] = package["outside_color"]
+        package["semantic_cout_stats"] = stats
+        cout_difference = torch.abs(outside_unfiltered_color - outside_color)
+        package["semantic_cout_filter_stats"] = {
+            "unfiltered_surfel_count": int(state.diffuse.get_xyz.shape[0]),
+            "unfiltered_candidate_count": (
+                static_inputs.get("outside_unfiltered_candidate_count")
+            ),
+            "unfiltered_hit_count": int(static_inputs["outside_unfiltered_hit"].sum()),
+            "rgb_difference_mean_abs": float(cout_difference.detach().mean())
+            if cout_difference.numel() else 0.0,
+            "rgb_difference_max_abs": float(cout_difference.detach().max())
+            if cout_difference.numel() else 0.0,
+        }
+        t_classes = state.cuboid_space.classify(state.transmittance.get_xyz.detach())
+        t_map = package["final"].new_zeros((height, width, 3))
+        if bool((t_classes == 0).all()):
+            t_map[..., 1:2] = package["transmittance_valid"]
+        else:
+            t_map[..., 0:1] = package["transmittance_valid"]
+        package["t_spatial_class_map"] = t_map
+        package["t_spatial_counts"] = {
+            "inside": int((t_classes == 0).sum()),
+            "interface": int((t_classes == 1).sum()),
+            "outside": int((t_classes == 2).sum()),
+        }
     _assert_finite_outputs(package, (
         "final", "transmittance_contribution", "inside_color", "inside_alpha",
         "inside_depth", "outside_color", "outside_alpha", "outside_depth",

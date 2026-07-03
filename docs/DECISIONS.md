@@ -2706,3 +2706,97 @@ Impact: v1 remains `CACHED_T_WARMUP_BLOCKED`; the only retry output is
 `output/stage_d_tihubird_c03r8_cached_twarmup_then_joint_g15000_g20000_v2`.
 
 Required ablation: None.
+
+## D-008 — Semantic-repair v3 spatial responsibility filters and anti-veil prior
+
+Date: 2026-07-04
+
+Question: How should Stage D falsify the three observed cached-v2 shortcuts:
+R representing cuboid-internal content, second-bounce Cout returning internal
+content, and T becoming a near-opaque black veil?
+
+Observed evidence: The read-only v2 causal audit records final transparent-mask
+Ain mean/p50/p95/p99 `0.9584/1/1/1`, saturation coverage `0.9517`, conditional
+Cin/Ain luminance mean `0.00774`, and high-Ain/near-black fraction `0.9001`.
+T pruning starts at T-local 200 (4,096 to 2,531) and finishes at 540 surfels.
+Classifying the saved v2 world-space T positions gives only 34 inside, 27
+interface, and 479 outside. V2 did not save class-filtered R or Cout traces, so
+their inside/interface/outside source energies are explicitly an evidence gap;
+no independent versioned bird ROI exists.
+
+Chosen implementation: Introduce `rtgs_cuboid_space_v1`, shared by D/R/T. For
+orthonormal cuboid axes and local fitted bounds, signed clearance is
+`min(local-lower, upper-local)` over all six planes. With default margin
+`m=0.05` and epsilon `e=1e-6`, inside means clearance `>m+e`, outside means
+clearance `<-(m+e)`, and the remainder is the separately reported interface
+band. The named policy is
+`transparent_interface_margin_mode=exclude`: interface surfels are never
+silently assigned to inside or outside. The margin is in the release's
+orthonormal local/world length units, is checkpointed, cache-identity-bound,
+and does not claim a physical glass thickness.
+
+Only inside the reviewed transparent mask, formal R replaces the unfiltered R
+trace with a trace whose candidates are current-position outside-class R
+surfels. Outside the mask the original global-R result is unchanged. Formal
+second-bounce Cout similarly accepts only outside-class D candidates. Candidate
+generation, exact intersection, ray origins/directions, BRDF/BTDF, alpha-over,
+and the immutable Stage-C cache are unchanged. Unfiltered, inside, interface,
+outside, and final-filtered traces are retained separately with surfel,
+candidate, hit, and energy statistics.
+
+Fresh T stores an unconstrained cuboid-local latent `z` and renders positions
+as `local=(lower+m+4e)+sigmoid(z)*(upper-lower-2(m+4e))`, then rotates to world
+space. Thus finite or saturated latent values remain strictly in the
+inside-safe class without projection or optimizer-state surgery. The
+1,000-step pilot fixes T at 4,096 and disables both pruning and densification;
+any count or spatial-class drift is a hard failure.
+
+The versioned engineering prior `rtgs_stage_d_anti_veil_v1` uses luminance
+`Y`, `Ccond=Cin/clamp(Ain,1e-6)`, soft gates
+`b=sigmoid((Ygt-0.15)/0.05)`, `h=sigmoid((Ain-0.80)/0.05)`, and
+`s=sigmoid((Ain-0.95)/0.05)`. Over valid-two-hit transparent-mask bright
+support `M=mask*valid_two_hit` with `Z=sum(M*b)`:
+
+```text
+d = 0.02 * softplus((0.08 - Y(Ccond))/0.02)
+L_black = sum(M * b * h * d) / clamp(Z, 1e-6)
+q = sum(M * b * s) / clamp(Z, 1e-6)
+L_sat = 0.02 * softplus((q - 0.35)/0.02)
+L_anti = ramp(T-local) * (0.05 * L_black + 0.02 * L_sat)
+ramp(k) = smoothstep(clamp(k/200, 0, 1))
+```
+
+The bright-GT gate avoids penalizing legitimately dark content, the conditional
+color test targets black opacity rather than copying GT into T, and the 35%
+soft saturation allowance permits localized high-Ain objects such as a bird
+instead of globally forcing Ain down. This is an explicit project engineering
+prior, not an RT-GS paper loss or branch-level GT label. Parity preflight
+records nonzero T-opacity/T-color gradients where mathematically applicable and
+requires no D/R gradient leakage.
+
+Alternatives: Enable L_depth early; add an unsupported D-zero loss; derive a
+bird ROI from T predictions; project T after optimizer updates; prune T as in
+v2; or change mesh, rays, resolution, sampling, BRDF, or alpha-over.
+
+Why: Each mechanism directly blocks one observed shortcut while preserving the
+final renderer definitions outside the transparent semantic-decomposition path.
+The pilot is deliberately falsification-oriented: absence of an independent
+bird ROI forces at least `SEMANTIC_REPAIR_PILOT_HOLD` even when all technical
+constraints pass.
+
+Impact: The only new executable experiment is a fresh 1,000-step cached-T-only
+pilot from the immutable Stage-B global-15,000 source at
+`output/stage_d_tihubird_c03r8_semantic_repair_v3`. D/R and their entire state
+remain frozen, R-local remains 12,000, L_depth remains off, and the operator
+cannot enter joint Phase B, global 16,001, Stage E, or resume any v2 checkpoint.
+
+Limitation: Spatial source filtering is necessary but not a semantic label. In
+the v2 final checkpoint all 3,088 R surfel centers already classify outside, so
+an outside R surfel could still memorize a view-dependent bird appearance;
+likewise an outside D surfel may encode colors that visually resemble internal
+content. The v3 pilot therefore exports cross-view contribution maps and cannot
+claim responsibility separation from the filter or loss alone.
+
+Required ablation: This pilot is a semantic falsification gate, not a final
+ablation. Any later comparison or joint continuation requires a separate user
+decision after nine-view review.

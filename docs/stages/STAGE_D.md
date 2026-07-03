@@ -152,3 +152,49 @@ an incomplete review/telemetry commit and is not resumable. The debug-only mask
 layout fix retries from the original Stage-B source with fresh T at the unique
 v2 output. V2 keeps every Phase A/B schedule, cache identity, parity tolerance,
 node, renderer, loss, and audit requirement above unchanged.
+
+## Authorized semantic-repair v3 falsification pilot
+
+The completed cached-v2 engineering path is a semantic failure and is now
+read-only evidence. It must never be resumed. The only authorized next run is
+fresh from the original Stage-B global-15,000 source and immutable Stage-C v1
+release at `output/stage_d_tihubird_c03r8_semantic_repair_v3`.
+
+- Run only global 15,001--16,000. D/R parameters, optimizers, schedulers,
+  densification bookkeeping, topology, and R-local iteration are frozen. Use
+  the fail-closed FP32 static cache and full-frame RGB; do not enter an exact
+  joint phase.
+- Use shared `rtgs_cuboid_space_v1` classification with margin 0.05 and
+  `transparent_interface_margin_mode=exclude`. Interface is independently
+  counted and may not be folded into another class.
+- Within the transparent mask, formal R and formal second-bounce Cout accept
+  only current-position outside-class surfels. Outside-mask R remains the
+  original global path. Export unfiltered/inside/interface/outside/final maps
+  and surfel/candidate/hit/energy statistics.
+- Fresh T uses `cuboid_inside_sigmoid_v1`, count 4,096, seed 20260703. Pruning
+  and densification are disabled; every step must assert all T surfels remain
+  strictly inside-safe and count remains 4,096.
+- Apply the D-008 anti-veil prior with defaults and T-local 0--200 smoothstep
+  ramp recorded in checkpoint/run/cache metadata. It is an engineering prior,
+  not an RT-GS paper claim. It may not copy GT as T supervision or leak
+  gradients into frozen D/R.
+- Before optimization, compare uncached frozen-D/R and cached-T paths on nine
+  fixed plus one deterministic random view for final/Cin/Ain/Din/Cout/Aout/
+  Dout/Ct/At, every loss, and all T parameter gradients. Max/mean absolute
+  tolerances are `2e-5/2e-6`; any mismatch blocks training.
+- Save full checkpoint, PLY, nine-view maps, and semantic contact sheet at
+  15,025, 15,100, 15,500, and 16,000. CPU audit checks source/release/cache
+  identity, recursive finite state, frozen D/R hashes, telemetry continuity,
+  fixed T topology/space, outside-only formal composition, hard metrics, and
+  all required files.
+
+Verdict is only `SEMANTIC_REPAIR_PILOT_PASS`,
+`SEMANTIC_REPAIR_PILOT_HOLD`, or `SEMANTIC_REPAIR_PILOT_BLOCKED`. With no
+independent versioned bird ROI, a technically valid run remains at least HOLD
+for human nine-view review. The operator cannot run global 16,001, joint
+fine-tuning, Stage E, or infer semantic success from lower loss.
+
+Outside-only center classification does not prove semantic content: outside R
+or D surfels can still memorize colors resembling internal content. Nine-view
+structure review remains mandatory and the filters alone are never acceptance
+evidence.

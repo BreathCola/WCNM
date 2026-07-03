@@ -14,7 +14,7 @@ def pack_reflection_parameters(model) -> torch.Tensor:
     """Pack raw R parameters once without changing their parameterization."""
     return torch.cat(
         (
-            model._xyz,
+            model.get_xyz,
             model._rotation,
             model._scaling,
             model._opacity,

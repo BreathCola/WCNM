@@ -27,6 +27,8 @@ class StageBRenderState:
     ray_checkpoint_chunks: bool = False
     acceleration: object = None
     model_type: str = "stage_b"
+    cuboid_space: object = None
+    semantic_repair: bool = False
 
     def __post_init__(self):
         if self.ray_background != "scene":
@@ -40,6 +42,26 @@ def _scatter(values, indices, height, width, channels, fill=0.0):
     if indices.numel():
         output = output.index_copy(0, indices, values)
     return output.reshape(height, width, channels)
+
+
+def _replace_selected(base, selected, replacement):
+    result = base.clone()
+    if bool(selected.any()):
+        result[selected] = replacement
+    return result
+
+
+def semantic_transparent_outside_only(unfiltered, outside, transparent_rays):
+    """Replace only transparent-mask rays; outside-mask R remains bit-identical."""
+    return _replace_selected(unfiltered, transparent_rays, outside)
+
+
+def _zero_ray_outputs(reference, count):
+    return (
+        reference.new_zeros((count, 3)), reference.new_zeros((count, 1)),
+        reference.new_zeros((count, 1)),
+        torch.zeros((count, 1), dtype=torch.bool, device=reference.device),
+    )
 
 
 def render(
@@ -122,6 +144,79 @@ def render(
         cd_surface = flat("Cd")
         diffuse_contribution = alpha * (1.0 - ks) * cd_surface
         reflection_contribution = alpha * ks * material["wr"] * reflection_color
+        reflection_unfiltered_contribution = reflection_contribution
+        reflection_unfiltered_hit = reflection_hit
+        semantic_r_components = None
+        if state.semantic_repair:
+            if state.cuboid_space is None:
+                raise RuntimeError("semantic R filtering requires cuboid_space")
+            mask = viewpoint_camera.specular_mask
+            if mask is None:
+                raise RuntimeError("semantic R filtering requires transparent mask")
+            if mask.ndim == 3 and mask.shape[0] == 1:
+                mask = mask.permute(1, 2, 0)
+            transparent_rays = mask.reshape(-1)[indices] >= 0.5
+            selected_count = int(transparent_rays.sum())
+            class_masks = state.cuboid_space.masks(state.reflection.get_xyz.detach())
+            semantic_r_components = {}
+            ray_origins = rays["origins"][transparent_rays]
+            ray_directions = rays["directions"][transparent_rays]
+            selected_alpha = alpha[transparent_rays]
+            selected_ks = ks[transparent_rays]
+            selected_wr = material["wr"][transparent_rays]
+            for class_name in ("inside", "interface", "outside"):
+                if selected_count:
+                    class_trace = raytrace(
+                        state.reflection, ray_origins, ray_directions,
+                        acceleration=state.acceleration,
+                        chunk_size=state.ray_chunk_size,
+                        cutoff_sigma=state.ray_cutoff_sigma,
+                        hit_threshold=state.ray_hit_threshold,
+                        return_aux=False,
+                        return_diagnostics=return_ray_diagnostics,
+                        checkpoint_chunks=state.ray_checkpoint_chunks,
+                        surfel_filter=class_masks[class_name],
+                    )
+                    if return_ray_diagnostics:
+                        class_outputs, class_diagnostics = class_trace
+                    else:
+                        class_outputs, class_diagnostics = class_trace, None
+                else:
+                    class_outputs = _zero_ray_outputs(raw_color, 0)
+                    class_diagnostics = None
+                class_raw, class_alpha, class_depth, class_hit = class_outputs
+                class_color = class_raw + (1.0 - class_alpha) * background
+                class_contribution = selected_alpha * selected_ks * selected_wr * class_raw
+                formal_contribution = selected_alpha * selected_ks * selected_wr * class_color
+                semantic_r_components[class_name] = {
+                    "raw": class_raw, "color": class_color, "alpha": class_alpha,
+                    "depth": class_depth, "hit": class_hit,
+                    "contribution": class_contribution,
+                    "formal_contribution": formal_contribution,
+                    "surfel_count": int(class_masks[class_name].sum()),
+                    "candidate_count": (
+                        int(class_diagnostics.eligible_candidate_counts.sum())
+                        if class_diagnostics is not None else None
+                    ),
+                    "hit_count": int(class_hit.sum()),
+                }
+            outside = semantic_r_components["outside"]
+            raw_color = semantic_transparent_outside_only(raw_color, outside["raw"], transparent_rays)
+            reflection_color = semantic_transparent_outside_only(
+                reflection_color, outside["color"], transparent_rays
+            )
+            reflection_alpha = semantic_transparent_outside_only(
+                reflection_alpha, outside["alpha"], transparent_rays
+            )
+            reflection_depth = semantic_transparent_outside_only(
+                reflection_depth, outside["depth"], transparent_rays
+            )
+            reflection_hit = semantic_transparent_outside_only(
+                reflection_hit, outside["hit"], transparent_rays
+            )
+            reflection_contribution = semantic_transparent_outside_only(
+                reflection_contribution, outside["formal_contribution"], transparent_rays
+            )
         final_valid = diffuse_contribution + reflection_contribution + (1.0 - alpha) * background
     else:
         raw_color = diffuse["Cd"].new_zeros((0, 3))
@@ -138,6 +233,9 @@ def render(
         }
         diffuse_contribution = raw_color
         reflection_contribution = raw_color
+        reflection_unfiltered_contribution = raw_color
+        reflection_unfiltered_hit = reflection_hit
+        semantic_r_components = None
         final_valid = raw_color
         ray_aux = None
         ray_diagnostics = None
@@ -162,6 +260,9 @@ def render(
             "microfacet_wr": _scatter(material["wr"], indices, height, width, 3, 0.0),
             "diffuse_contribution": _scatter(diffuse_contribution, indices, height, width, 3, 0.0),
             "reflection_contribution": _scatter(reflection_contribution, indices, height, width, 3, 0.0),
+            "reflection_unfiltered": _scatter(
+                reflection_unfiltered_contribution, indices, height, width, 3, 0.0
+            ),
             "surface_Cd": decoded["Cd"],
             "surface_roughness": decoded["roughness"],
             "surface_f0": decoded["f0"],
@@ -171,6 +272,50 @@ def render(
             "ray_aux": ray_aux,
         }
     )
+    if semantic_r_components is not None:
+        transparent_indices = indices[transparent_rays]
+        stats = {}
+        for class_name, component in semantic_r_components.items():
+            contribution_map = _scatter(
+                component["contribution"], transparent_indices, height, width, 3, 0.0
+            )
+            output[f"reflection_{class_name}"] = contribution_map
+            output[f"reflection_{class_name}_alpha"] = _scatter(
+                component["alpha"], transparent_indices, height, width, 1, 0.0
+            )
+            output[f"reflection_{class_name}_depth"] = _scatter(
+                component["depth"], transparent_indices, height, width, 1, 0.0
+            )
+            output[f"reflection_{class_name}_hit"] = _scatter(
+                component["hit"].to(diffuse["alpha"]),
+                transparent_indices, height, width, 1, 0.0,
+            )
+            stats[class_name] = {
+                "surfel_count": component["surfel_count"],
+                "candidate_count": component["candidate_count"],
+                "hit_count": component["hit_count"],
+                "contribution_energy": float(component["contribution"].detach().mean())
+                if component["contribution"].numel() else 0.0,
+            }
+        output["reflection_final_filtered"] = output["reflection_contribution"]
+        output["semantic_r_stats"] = stats
+        output["semantic_r_transparent_ray_count"] = selected_count
+        filter_difference = torch.abs(
+            reflection_unfiltered_contribution[transparent_rays]
+            - semantic_r_components["outside"]["formal_contribution"]
+        )
+        output["semantic_r_filter_stats"] = {
+            "unfiltered_surfel_count": int(state.reflection.get_xyz.shape[0]),
+            "unfiltered_candidate_count": (
+                int(ray_diagnostics.candidate_counts[transparent_rays].sum())
+                if ray_diagnostics is not None else None
+            ),
+            "unfiltered_hit_count": int(reflection_unfiltered_hit[transparent_rays].sum()),
+            "rgb_difference_mean_abs": float(filter_difference.detach().mean())
+            if filter_difference.numel() else 0.0,
+            "rgb_difference_max_abs": float(filter_difference.detach().max())
+            if filter_difference.numel() else 0.0,
+        }
     if return_ray_diagnostics:
         candidate_counts = (
             ray_diagnostics.candidate_counts.to(diffuse["alpha"])

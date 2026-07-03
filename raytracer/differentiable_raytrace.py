@@ -20,6 +20,7 @@ class RaytraceAux:
 @dataclass
 class CandidateTraceDiagnostics:
     exact_intersection_counts: torch.Tensor
+    eligible_candidate_counts: torch.Tensor
 
 
 def _package_trace_result(outputs, aux, diagnostics, return_aux, return_diagnostics):
@@ -30,6 +31,20 @@ def _package_trace_result(outputs, aux, diagnostics, return_aux, return_diagnost
     if return_diagnostics:
         return outputs, diagnostics
     return outputs
+
+
+def apply_surfel_filter(candidate_ids, candidate_valid, surfel_filter):
+    """Apply a global spatial-class mask without changing candidate generation."""
+    if surfel_filter is None:
+        return candidate_valid
+    if surfel_filter.ndim != 1:
+        raise ValueError("surfel_filter must have shape [N]")
+    safe = candidate_ids.clamp_min(0)
+    if safe.numel() and int(safe.max()) >= surfel_filter.shape[0]:
+        raise ValueError("surfel_filter is shorter than the candidate ID domain")
+    return candidate_valid & surfel_filter.to(
+        device=candidate_ids.device, dtype=torch.bool
+    )[safe]
 
 
 def trace_candidates(
@@ -43,6 +58,7 @@ def trace_candidates(
     return_aux: bool = False,
     return_diagnostics: bool = False,
     candidate_parameter_table: torch.Tensor = None,
+    surfel_filter: torch.Tensor = None,
 ):
     ray_count = origins.shape[0]
     counts = offsets[1:] - offsets[:-1]
@@ -58,7 +74,7 @@ def trace_candidates(
             if return_aux else None
         )
         diagnostics = (
-            CandidateTraceDiagnostics(torch.zeros_like(counts))
+            CandidateTraceDiagnostics(torch.zeros_like(counts), torch.zeros_like(counts))
             if return_diagnostics else None
         )
         return _package_trace_result(
@@ -73,6 +89,8 @@ def trace_candidates(
     padded[rows, slots] = candidates
     candidate_valid = padded >= 0
     safe = padded.clamp_min(0)
+    candidate_valid = apply_surfel_filter(padded, candidate_valid, surfel_filter)
+    eligible_candidate_counts = candidate_valid.sum(dim=1) if return_diagnostics else None
 
     if candidate_parameter_table is None:
         candidate_parameter_table = pack_reflection_parameters(model)
@@ -129,7 +147,9 @@ def trace_candidates(
     else:
         aux = None
     diagnostics = (
-        CandidateTraceDiagnostics(exact_intersection_counts.detach())
+        CandidateTraceDiagnostics(
+            exact_intersection_counts.detach(), eligible_candidate_counts.detach()
+        )
         if return_diagnostics else None
     )
     return _package_trace_result(
