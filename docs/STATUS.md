@@ -26,6 +26,15 @@ to run only the new global 16,001--16,050 real recovery preflight. No 16,051+ tr
 joint tuning, or Stage E action is authorized until that audit passes and the
 user manually launches the returned continuation command.
 
+The first committed recovery implementation (`2c4db50`) was correctly blocked
+before any optimizer update by the real fixed-view migration parity gate. A
+float32 `log(active)` round trip changed scale by at most `5.96e-8`, but finite
+support candidate boundaries amplified that into final-RGB mean/max differences
+`0.00943/0.70810`. Its v1 preflight directory is preserved. The corrected v2
+stores the exact active scale as checkpointed non-optimizer state and uses a
+straight-through bounded derivative, while retaining projected raw log-scale
+and scale-only Adam surgery. The retry output is uniquely suffixed `_v2`.
+
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
 branches at global 15,000: Branch A started Reflection at global 3,000 and

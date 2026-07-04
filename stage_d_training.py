@@ -102,10 +102,10 @@ OWNERSHIP_T_LONG_BLACK_LIMIT = 0.10
 OWNERSHIP_T_LONG_CAPPED_FRACTION_LIMIT = 0.10
 OWNERSHIP_T_LONG_MIN_SCALE_FACTOR = 0.02
 TSCALE_RECOVERY_PREFLIGHT_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v1"
+    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v2"
 )
 TSCALE_RECOVERY_LONG_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v1"
+    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v2"
 )
 TSCALE_RECOVERY_SOURCE_SHA256 = (
     "52d1368dfb2a729240265e27f7696b0d230522af3fae795049c70932a673158e"

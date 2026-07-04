@@ -3085,11 +3085,24 @@ ray, path, BRDF/BTDF, composition, ownership gate, cache, RGB domain, or depth
 schedule at migration time.
 
 Impact: The recovery preflight output is
-`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v1`.
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v2`.
 The possible continuation output is
-`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v1`.
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v2`.
 Neither result is Stage D acceptance or semantic separation proof.
 
 Required ablation: None. CPU active/world parity and synthetic CUDA raytrace
 parity are mandatory implementation tests; the real 50-step run is the
 required recovery gate.
+
+Implementation correction: Commit `2c4db50` attempted the migration using only
+`log(active)` storage. The real fixed-view zero-update gate showed that
+float32 log/exp round-trip differences of only `5.96e-8` in scale and
+`1.19e-7` in decoded position changed finite-support LBVH candidates at boundary
+rays, producing unacceptable final-RGB mean/max differences
+`0.00943/0.70810`. The v1 preflight stopped before global 16,001 and is
+preserved BLOCKED evidence. Projected-v2 therefore checkpoints the exact active
+scale as non-optimizer state and returns it with a straight-through bounded
+derivative; raw log-scale remains within `2e-6`, is projected after every step,
+and remains the only scale optimizer parameter. This makes migration forward
+values exact without freezing scale gradients or changing non-scale state. The
+fresh retry uses the v2 output names above.

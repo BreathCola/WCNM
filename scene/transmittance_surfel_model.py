@@ -19,6 +19,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         super().__init__()
         self.position_parameterization = "world"
         self.scaling_parameterization = "exp_v1"
+        self._projected_active_scaling = torch.empty(0)
         self.cuboid_space = None
 
     @property
@@ -41,9 +42,18 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         if self.position_parameterization == "cuboid_inside_support_sigmoid_v2":
             if self.cuboid_space is None:
                 raise RuntimeError("support-safe cuboid T scaling is missing its space")
-            return self.cuboid_space.constrain_support_scaling(
+            bounded = self.cuboid_space.constrain_support_scaling(
                 self.get_rotation, scaling, sigma=3.0,
             )
+            if self.scaling_parameterization == "cuboid_support_projected_cap_v2":
+                if self._projected_active_scaling.shape != bounded.shape:
+                    raise RuntimeError("projected T active-scale state is missing or mismatched")
+                # Preserve the exact checkpointed forward value while retaining
+                # the bounded raw/rotation derivative through a straight-through
+                # correction.  The buffer is refreshed after every optimizer step.
+                active = self._projected_active_scaling.to(bounded)
+                return bounded + (active - bounded).detach()
+            return bounded
         return scaling
 
     def create_random_inside_cuboid(
@@ -75,6 +85,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         self._color = nn.Parameter(_raw_from_unit(torch.full((count, 3), 0.5, device=device, dtype=dtype)))
         self.position_parameterization = "cuboid_inside_sigmoid_v1"
         self.scaling_parameterization = "exp_v1"
+        self._projected_active_scaling = torch.empty(0, device=device, dtype=dtype)
         self._reset_stats(count, device)
         self.topology_version = 0
         self.initialization = {
@@ -123,6 +134,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         )
         self.position_parameterization = "cuboid_inside_support_sigmoid_v2"
         self.scaling_parameterization = "cuboid_support_uniform_cap_v1"
+        self._projected_active_scaling = torch.empty(0, device=device, dtype=dtype)
         self._reset_stats(count, device); self.topology_version = 0
         self.initialization = {
             "mode": "random_strict_inside", "count": int(count), "seed": int(seed),
@@ -206,6 +218,8 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         state = super().capture()
         state["position_parameterization"] = self.position_parameterization
         state["scaling_parameterization"] = self.scaling_parameterization
+        if self.scaling_parameterization == "cuboid_support_projected_cap_v2":
+            state["projected_active_scaling"] = self._projected_active_scaling
         state["cuboid_space"] = (
             self.cuboid_space.metadata() if self.cuboid_space is not None else None
         )
@@ -224,6 +238,15 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             )
         self.position_parameterization = mode
         self.scaling_parameterization = scaling_mode
+        projected = state.get("projected_active_scaling")
+        if scaling_mode == "cuboid_support_projected_cap_v2":
+            if not torch.is_tensor(projected) or projected.shape != state["scaling_2d"].shape:
+                raise ValueError("projected T checkpoint is missing exact active scale")
+            self._projected_active_scaling = projected.detach().clone()
+        else:
+            self._projected_active_scaling = torch.empty(
+                0, device=state["scaling_2d"].device, dtype=state["scaling_2d"].dtype,
+            )
         metadata = state.get("cuboid_space")
         if mode in ("cuboid_inside_sigmoid_v1", "cuboid_inside_support_sigmoid_v2"):
             if not isinstance(metadata, dict):
@@ -289,9 +312,9 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
                     state_rows_zeroed.append(name)
 
         raw_after = torch.exp(self._scaling)
-        active_after = self.cuboid_space.constrain_support_scaling(
-            self.get_rotation, raw_after, sigma=3.0,
-        )
+        self.scaling_parameterization = "cuboid_support_projected_cap_v2"
+        self._projected_active_scaling = active_before.detach().clone()
+        active_after = self.get_scaling.detach()
         ratio_after = active_after / raw_after.clamp_min(torch.finfo(raw_after.dtype).tiny)
         factor_after = ratio_after.amin(dim=-1)
         difference = (active_after - raw_after).abs()
@@ -301,7 +324,6 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         if float(difference.max()) > tolerance * max(1.0, float(active_after.abs().max())):
             raise RuntimeError("T scale projection failed raw/active consistency")
 
-        self.scaling_parameterization = "cuboid_support_projected_cap_v2"
         self.assert_strictly_inside()
         step = state.get("step")
         step_preserved = (

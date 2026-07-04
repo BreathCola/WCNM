@@ -219,7 +219,12 @@ def main():
             count = int(t["xyz"].shape[0])
             rotation = torch.nn.functional.normalize(t["rotation"].double(), dim=-1)
             raw = torch.exp(t["scaling_2d"].double())
-            active = cuboid.constrain_support_scaling(rotation, raw, sigma=3.0)
+            projected = t.get("projected_active_scaling")
+            if not torch.is_tensor(projected) or projected.shape != raw.shape:
+                errors.append(f"checkpoint {node} exact active-scale state missing")
+                projected = cuboid.constrain_support_scaling(rotation, raw, sigma=3.0)
+            active = projected.double()
+            bounded = cuboid.constrain_support_scaling(rotation, raw, sigma=3.0)
             world = cuboid.decode_inside_support_latent(
                 t["xyz"].double(), rotation, active, sigma=3.0,
             )
@@ -229,6 +234,8 @@ def main():
             if count != 4096 or not bool((classes == SUPPORT_STRICT_INSIDE).all()):
                 errors.append(f"checkpoint {node} T support/count failure")
             if float(difference.max()) > TSCALE_RECOVERY_RAW_ACTIVE_ATOL \
+                    or float((active - bounded).abs().max()) \
+                    > TSCALE_RECOVERY_RAW_ACTIVE_ATOL \
                     or float(factor.min()) < 1.0 - TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
                 errors.append(f"checkpoint {node} raw/active scale mismatch")
             audit = load_json(

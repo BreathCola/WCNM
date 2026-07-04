@@ -345,3 +345,10 @@ PASS authorizes only a user-operated T-only continuation from the new 16,050
 checkpoint to 20,000. That continuation must keep the projected-scale repair,
 write checkpoint/PLY/fixed-nine/hash audits at least every 250 steps, stop on
 any guard, and never enter joint tuning or Stage E.
+
+The first v1 recovery implementation stopped at its zero-update real parity
+gate: tiny log/exp geometry round-off changed finite-support candidates and was
+not acceptable as a lossless migration. V1 is preserved BLOCKED evidence. The
+v2 retry checkpoints the exact active scale as non-optimizer state with a
+straight-through bounded derivative, retains raw log-scale projection and
+scale-only Adam surgery, and uses unique v2 preflight/continuation outputs.
