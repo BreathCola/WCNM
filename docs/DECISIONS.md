@@ -2964,3 +2964,61 @@ schedule, A/B-variable, and verdict contracts remain unchanged.
 Required ablation: The already required matched A/B; synthetic tests additionally
 force extreme raw scale and verify finite strict-inside active support without
 changing copied feasible raw scales.
+
+## D-012 — Continue transferred T only through global 20,000 under ownership guards
+
+Date: 2026-07-04
+
+Question: Does the completed 500-step ownership A/B justify a longer T run, and
+what may that continuation claim?
+
+Observed evidence: The `7c37088` A/B is technically complete with no audit
+errors, exact source/release hashes, v4 cache parity, D/R frozen, 4,096
+strict-inside T supports, and zero formal transparent D/R energy. It is HOLD,
+not PASS, solely because no independent human-authored bird ROI exists.
+
+Across the fixed nine views, transferred Arm B improves transparent L1 from
+0.16185 at local 0 to 0.10741 at local 500; random Arm A reaches 0.13369.
+Turning T off worsens transparent L1 in every view at the endpoint, with mean
+delta +0.24244 and minimum +0.20135. Turning Cout off also worsens every view
+(mean +0.12308). Arm-B Cin visibly contains consistent bird/base structure
+across the nine fixed cameras, while Arm A remains materially less structured.
+High-Ain/near-black fraction remains approximately zero.
+
+Risk evidence is nontrivial: Arm-B nine-view Ain p95 averages 0.9891,
+saturation coverage averages 0.0972, and 16/4,096 supports use the scale cap
+with minimum factor about 0.164. Therefore the result supports a bounded T-only
+continuation, not an unguarded long run, ownership acceptance, or joint tuning.
+
+Chosen implementation: Continue only Arm B from its exact global-15,500 /
+R-local-12,000 / T-local-500 checkpoint SHA-256
+`eff2135e19b48dd68f3661cbf23825d79deb0beaf29338887c0d5e8146127321`.
+Run global 15,501--20,000 (4,500 updates; T-local 501--5,000). D/R parameters,
+optimizers, schedulers, topology, and R-local iteration remain frozen. Reuse
+the validated v4 cache; retain cuboid-front path, transparent D/R off,
+strict-outside-safe Cout, fixed 4,096 strict-inside T, full-frame RGB, and
+L_depth disabled with future marker global 40,000. No pruning, densification,
+joint phase, R re-enable, or Stage E follows.
+
+The 100-step rolling runtime guard begins at T-local 1,000 and blocks when mean
+Ain saturation reaches 0.50, mean high-Ain/near-black fraction reaches 0.10,
+mean capped-support fraction reaches 0.10, or any minimum active/raw scale
+factor reaches 0.02. OOM retry, count/support drift, non-finite state, D/R
+energy, cache/source/release mutation, or frozen-state drift also block. Review
+nodes are global 15,500, 16,000, 17,500, and 20,000 with the fixed nine views.
+
+Alternatives: Continue random Arm A; enable L_depth early; restore R or D direct;
+enter joint tuning; remove the scale cap; or interpret HOLD as semantic proof.
+Arm B is selected because the matched evidence supports stronger T handoff, but
+this remains an engineering trajectory rather than a bird-label conclusion.
+
+Impact: The fresh-only output is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_tlong_g15500_g20000_v1`.
+The single operator validates the pilot/source/cache, runs only the bounded
+T continuation, then performs a CPU audit. With no independent bird ROI, a
+technically healthy endpoint remains `OWNERSHIP_T_LONG_HOLD`; the only other
+verdict is `OWNERSHIP_T_LONG_BLOCKED`.
+
+Required ablation: None beyond the completed matched A/B that selected Arm B.
+Any later change to D/R ownership or joint tuning requires a new decision and
+review of this long-run evidence.

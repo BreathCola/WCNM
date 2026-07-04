@@ -23,7 +23,11 @@ from tools.run_stage_d_ownership_ab import (
     archive_retryable_ownership_failure,
     common_training_contract, training_command,
 )
-from stage_d_training import _requires_cuboid_space
+from stage_d_training import (
+    OWNERSHIP_T_LONG_ENDPOINT, OWNERSHIP_T_LONG_NODES,
+    _ownership_long_guard_result, _phase_for_iteration, _requires_cuboid_space,
+)
+from tools.run_stage_d_ownership_t_long import training_command as long_training_command
 from utils.stage_d_static_cache import OWNERSHIP_CACHE_SCHEMA, renderer_contract
 
 
@@ -326,3 +330,33 @@ def test_legacy_semantic_cache_contract_remains_center_outside_only():
     assert contract["schema"] == "rtgs_stage_d_renderer_contract_v1"
     assert contract["r_transparent_spatial_filter"] == "outside_only"
     assert contract["cout_spatial_filter"] == "outside_only"
+
+
+def test_ownership_t_long_command_is_bounded_frozen_t_only_continuation():
+    command = long_training_command()
+    assert "--stage_d_ownership_t_long" in command
+    assert "--stage_d_reuse_static_cache" in command
+    assert command[command.index("--start_checkpoint") + 1].endswith(
+        "arm_b_transferred_d_inside/chkpnt15500.pth"
+    )
+    assert command[command.index("--iterations") + 1] == str(OWNERSHIP_T_LONG_ENDPOINT)
+    assert command[command.index("--stage_d_depth_start_iteration") + 1] == "40000"
+    assert command[command.index("--transparent_direct_mode") + 1] == "off"
+    assert command[command.index("--transparent_reflection_mode") + 1] == "off"
+    assert tuple(map(int, command[command.index("--checkpoint_iterations") + 1:])) \
+        == OWNERSHIP_T_LONG_NODES
+    assert _phase_for_iteration(15501, ownership_t_long=True) \
+        == "cuboid_path_ownership_t_long"
+
+
+def test_ownership_t_long_guard_accepts_pilot_health_and_blocks_collapse():
+    healthy = [{
+        "saturation": 0.10, "black": 0.001,
+        "capped_fraction": 16 / 4096, "minimum_scale_factor": 0.16,
+    }] * 100
+    summary, failures = _ownership_long_guard_result(healthy)
+    assert failures == [] and summary["window"] == 100
+    collapsed = [dict(healthy[0], saturation=0.6, black=0.2)] * 100
+    _, failures = _ownership_long_guard_result(collapsed)
+    assert "Ain saturation" in failures
+    assert "high-Ain near-black collapse" in failures

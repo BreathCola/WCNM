@@ -294,3 +294,32 @@ strict-support and fixed-count requirements remain mandatory. For matched-code
 integrity, the next retry archives the entire `17d2663` output with suffix
 `_failed_scale_17d2663`, rebuilds the cache, and reruns both arms fresh from
 global 15,000. Reusing completed Arm A or resuming partial Arm B is forbidden.
+
+## Authorized ownership transferred-T long continuation
+
+The completed `7c37088` A/B is technically healthy but remains HOLD because no
+independent bird ROI exists. It is sufficient to select transferred Arm B for
+one bounded T-only continuation: fixed-nine transparent L1 and intervention
+evidence are consistently better than random Arm A, T-off worsens every view,
+and black-veil coverage remains approximately zero. It is not sufficient to
+claim bird semantics, restore D/R, or enter joint training.
+
+The only source is Arm-B global-15,500 checkpoint SHA-256
+`eff2135e19b48dd68f3661cbf23825d79deb0beaf29338887c0d5e8146127321`.
+Run global 15,501--20,000 / T-local 501--5,000 only. D/R and all their state
+remain frozen at R-local 12,000; transparent D direct and R stay off; Cout stays
+strict-outside-safe; T remains exactly 4,096 strict-inside-safe supports with no
+topology changes; full-frame RGB remains active; L_depth remains disabled.
+
+The runtime uses a 100-step rolling guard from T-local 1,000: saturation <0.50,
+high-Ain/near-black <0.10, capped-support fraction <0.10, and minimum scale-cap
+factor >0.02. Required global nodes are 15,500, 16,000, 17,500, and 20,000 with
+checkpoint, three PLY namespaces, fixed-nine debug, raw statistics, ownership
+interventions, and CPU audit. Any contract/hash/cache/frozen-state/finite/OOM/
+support/count/guard failure blocks.
+
+The unique output is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_tlong_g15500_g20000_v1`.
+Verdict is only `OWNERSHIP_T_LONG_HOLD` or `OWNERSHIP_T_LONG_BLOCKED`. HOLD does
+not authorize joint fine-tuning, final glass physics, Stage D acceptance, or
+Stage E.

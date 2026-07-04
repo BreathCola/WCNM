@@ -740,6 +740,17 @@ evidence is judged sufficient by the user.
   archives this attempt as `_failed_scale_17d2663` and rebuilds both arms from
   global 15,000 under one commit; no partial result is resumed or reused. Codex
   has not launched that retry.
+- The `7c37088` ownership A/B subsequently completed with technical HOLD only
+  because no independent bird ROI exists. Transferred Arm B is the selected
+  bounded continuation: fixed-nine transparent L1 reaches 0.10741 versus
+  random Arm A 0.13369, and T-off worsens every fixed view. Black-veil fraction
+  remains approximately zero, but Ain p95 is already 0.9891 and 16 supports are
+  scale-capped, so continuation requires rolling saturation/black/cap guards.
+- A fresh-only transferred-T operator is prepared for global 15,501--20,000
+  from the exact Arm-B 15,500 checkpoint. It freezes all D/R state, reuses the
+  v4 cache, retains strong ownership isolation, fixes T at 4,096, keeps L_depth
+  off, and cannot enter joint tuning or Stage E. No long run has been launched
+  by Codex; without a bird ROI, a healthy endpoint remains HOLD.
 
 ## Three-step formal-mask L_spec smoke
 
