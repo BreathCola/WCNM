@@ -28,6 +28,7 @@ def initialize_stage_d_from_stage_b(
     transmittance_count: int,
     transmittance_seed: int,
     transmittance_cuboid_space=None,
+    transmittance_init_mode="random_bbox",
     map_location=None,
 ):
     before = sha256_file(path)
@@ -37,15 +38,23 @@ def initialize_stage_d_from_stage_b(
             map_location=map_location, return_runtime_state=True,
         )
     )
-    if transmittance_cuboid_space is None:
+    if transmittance_init_mode in ("random_strict_inside", "transferred_d_inside"):
+        if transmittance_cuboid_space is None:
+            raise ValueError("support-safe T initialization requires cuboid space")
+        transmittance.create_random_support_safe_inside_cuboid(
+            transmittance_cuboid_space, transmittance_count, transmittance_seed,
+        )
+    elif transmittance_cuboid_space is None:
         transmittance.create_random_bbox(
             transmittance_bbox_min, transmittance_bbox_max,
             transmittance_count, transmittance_seed,
         )
-    else:
+    elif transmittance_init_mode == "random_bbox":
         transmittance.create_random_inside_cuboid(
             transmittance_cuboid_space, transmittance_count, transmittance_seed,
         )
+    else:
+        raise ValueError(f"unsupported Stage D T initialization: {transmittance_init_mode}")
     transmittance.initialization["branch"] = "transmittance"
     transmittance.training_setup(transmittance_args)
     after = sha256_file(path)

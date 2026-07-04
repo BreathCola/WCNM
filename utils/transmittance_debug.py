@@ -54,15 +54,28 @@ def save_transmittance_debug_maps(
     for name in (
         "diffuse_contribution", "reflection_contribution",
         "transmittance_contribution", "inside_color", "outside_color",
-        "transmittance_color",
+        "transmittance_color", "inside_contribution", "cout_contribution",
+        "final_t_off", "final_cout_off", "final_d_direct_off", "final_r_off",
     ):
-        save_image(_chw(output, name).clamp(0, 1), os.path.join(directory, f"{name}.png"))
+        if name in output:
+            save_image(_chw(output, name).clamp(0, 1), os.path.join(directory, f"{name}.png"))
+    gt_hwc = ground_truth.detach().permute(1, 2, 0)
+    save_image(
+        torch.abs(output["final"] - gt_hwc).permute(2, 0, 1).clamp(0, 1),
+        os.path.join(directory, "final_diff.png"),
+    )
     semantic_rgb = (
         "reflection_unfiltered", "reflection_inside", "reflection_interface",
         "reflection_outside", "reflection_final_filtered",
         "conditional_inside_color", "outside_unfiltered", "outside_inside",
         "outside_interface", "outside_outside", "outside_final_filtered",
         "t_spatial_class_map",
+        "t_support_legal",
+        "reflection_strict_inside_safe", "reflection_interface_margin",
+        "reflection_strict_outside_safe", "reflection_crossing_or_ambiguous",
+        "outside_strict_inside_safe", "outside_interface_margin",
+        "outside_strict_outside_safe", "outside_crossing_or_ambiguous",
+        "cout_ownership_class_map",
     )
     for name in semantic_rgb:
         if name in output:
@@ -91,12 +104,45 @@ def save_transmittance_debug_maps(
             save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
             save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
             save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
+    for prefix in (
+        "reflection_strict_inside_safe", "reflection_interface_margin",
+        "reflection_strict_outside_safe", "reflection_crossing_or_ambiguous",
+    ):
+        alpha_name, depth_name, hit_name = f"{prefix}_alpha", f"{prefix}_depth", f"{prefix}_hit"
+        if alpha_name in output:
+            save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
+            save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
+            save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
     for prefix in ("outside_inside", "outside_interface", "outside_outside"):
         alpha_name, depth_name, hit_name = f"{prefix}_alpha", f"{prefix}_depth", f"{prefix}_hit"
         if alpha_name in output:
             save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
             save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
             save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
+    for prefix in (
+        "outside_strict_inside_safe", "outside_interface_margin",
+        "outside_strict_outside_safe", "outside_crossing_or_ambiguous",
+    ):
+        alpha_name, depth_name, hit_name = f"{prefix}_alpha", f"{prefix}_depth", f"{prefix}_hit"
+        if alpha_name in output:
+            save_image(_chw(output, alpha_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{alpha_name}.png"))
+            save_image(visualize_depth(output[depth_name], output[alpha_name]), os.path.join(directory, f"{depth_name}.png"))
+            save_image(_chw(output, hit_name).repeat(3, 1, 1).clamp(0, 1), os.path.join(directory, f"{hit_name}.png"))
+    if "front_normal" in output:
+        save_image(
+            ((_chw(output, "front_normal") + 1.0) * 0.5).clamp(0, 1),
+            os.path.join(directory, "front_normal.png"),
+        )
+        valid_front = output["transparent_path_valid"] > 0.5
+        front = output["front_position"].detach()
+        selected_front = front[valid_front.expand_as(front)]
+        lo = float(selected_front.min()) if selected_front.numel() else 0.0
+        hi = float(selected_front.max()) if selected_front.numel() else 1.0
+        front_vis = (front - lo) / max(hi - lo, 1e-8)
+        save_image(
+            _chw({"front": front_vis}, "front").clamp(0, 1),
+            os.path.join(directory, "front_position.png"),
+        )
     for name, alpha_name in (
         ("inside_depth", "inside_alpha"),
         ("outside_depth", "outside_alpha"),
@@ -126,7 +172,6 @@ def save_transmittance_debug_maps(
         order_map.detach().permute(2, 0, 1),
         os.path.join(directory, "din_vs_far_violation.png"),
     )
-    gt_hwc = ground_truth.detach().permute(1, 2, 0)
     hard = _mask_hwc(specular_mask.detach()) >= 0.5
     full_l1 = torch.abs(output["final"] - gt_hwc).mean()
     transparent_l1 = torch.abs(output["final"] - gt_hwc)[hard.expand_as(gt_hwc)].mean()
@@ -157,6 +202,30 @@ def save_transmittance_debug_maps(
             )
         },
         "depth_violation_display_p99": scale,
+        "path_contract": {
+            "transparent_path_mode": output.get("transparent_path_mode"),
+            "transparent_direct_mode": output.get("transparent_direct_mode"),
+            "transparent_reflection_mode": output.get("transparent_reflection_mode"),
+            "front_origin_tnear_error": _stats(
+                output.get("front_origin_tnear_error", torch.zeros_like(output["inside_alpha"])),
+                valid,
+            ),
+            "front_normal_faceforward_dot": _stats(
+                output.get("front_normal_faceforward_dot", torch.zeros_like(output["inside_alpha"])),
+                valid,
+            ),
+            "front_plane_residual": _stats(
+                output.get("front_plane_residual", torch.zeros_like(output["inside_alpha"])),
+                valid,
+            ),
+            "back_tfar_residual": _stats(
+                output.get(
+                    "frozen_back_distance_residual",
+                    torch.zeros_like(output["inside_alpha"]),
+                ),
+                valid,
+            ),
+        },
     }
     if "t_spatial_counts" in output:
         ain = output["inside_alpha"][hard]
@@ -194,6 +263,21 @@ def save_transmittance_debug_maps(
             "bird_roi_available": False,
             "bird_level_quantification": "unavailable: no independent versioned bird ROI",
         }
+    raw_names = (
+        "final", "diffuse_contribution", "reflection_contribution",
+        "transmittance_contribution", "inside_color", "inside_alpha",
+        "inside_depth", "conditional_inside_color", "outside_color",
+        "outside_alpha", "outside_depth", "transmittance_color",
+        "transmittance_alpha", "inside_contribution", "cout_contribution",
+        "front_position", "front_normal", "near_depth", "far_depth",
+        "front_origin_tnear_error", "front_normal_faceforward_dot",
+    )
+    metadata["raw_float_statistics"] = {
+        name: _stats(output[name], valid) for name in raw_names if name in output
+    }
+    metadata["raw_float_statistics_transparent_hard"] = {
+        name: _stats(output[name], hard) for name in raw_names if name in output
+    }
     with open(os.path.join(directory, "transmittance_metadata.json"), "w", encoding="utf-8") as handle:
         json.dump(metadata, handle, indent=2, sort_keys=True, allow_nan=False)
 

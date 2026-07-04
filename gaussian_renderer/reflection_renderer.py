@@ -1,10 +1,14 @@
 """Stage B Diffuse rasterization plus Reflection ray tracing and full GGX."""
 
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
+import torch.nn.functional as F
 
 from gaussian_renderer.surfel_renderer import render as render_diffuse
+from geometry.cuboid_path import build_cuboid_front_path, scatter_front_path
+from geometry.cuboid_space import SUPPORT_CLASS_NAMES
 from raytracer.acceleration_structure import CudaLBVH
 from raytracer.ray_utils import decode_stage_a_gbuffer, generate_reflection_rays
 from raytracer.tracer import raytrace
@@ -29,12 +33,29 @@ class StageBRenderState:
     model_type: str = "stage_b"
     cuboid_space: object = None
     semantic_repair: bool = False
+    geometry_release: object = None
+    transparent_path_mode: str = "legacy_d_gbuffer"
+    transparent_direct_mode: str = "legacy"
+    transparent_reflection_mode: str = "legacy"
+    support_sigma: float = 3.0
 
     def __post_init__(self):
         if self.ray_background != "scene":
             raise ValueError("Stage B supports only deterministic --ray_background scene")
         if self.acceleration is None:
             self.acceleration = CudaLBVH(self.ray_cutoff_sigma)
+        if self.transparent_path_mode not in ("legacy_d_gbuffer", "cuboid_front_v1"):
+            raise ValueError("unsupported transparent path mode")
+        if self.transparent_direct_mode not in ("legacy", "interface_only", "off"):
+            raise ValueError("unsupported transparent direct mode")
+        if self.transparent_reflection_mode not in (
+            "legacy", "support_safe_outside", "off",
+        ):
+            raise ValueError("unsupported transparent reflection mode")
+        if self.transparent_path_mode == "cuboid_front_v1" and (
+            self.geometry_release is None or self.cuboid_space is None
+        ):
+            raise ValueError("cuboid-front path requires frozen geometry release and cuboid space")
 
 
 def _scatter(values, indices, height, width, channels, fill=0.0):
@@ -54,6 +75,114 @@ def _replace_selected(base, selected, replacement):
 def semantic_transparent_outside_only(unfiltered, outside, transparent_rays):
     """Replace only transparent-mask rays; outside-mask R remains bit-identical."""
     return _replace_selected(unfiltered, transparent_rays, outside)
+
+
+def apply_transparent_contribution_mode(unfiltered, selected, transparent_rays, mode):
+    """Apply a contribution-only gate while preserving non-transparent pixels."""
+    if mode == "legacy":
+        return unfiltered
+    if mode == "off":
+        selected = torch.zeros_like(unfiltered[transparent_rays])
+    return _replace_selected(unfiltered, transparent_rays, selected)
+
+
+def support_safe_outside_mask(model, cuboid_space, sigma=3.0):
+    """The only candidate mask admitted by support_safe_outside mode."""
+    return cuboid_space.support_masks(
+        model.get_xyz.detach(), model.get_rotation.detach(),
+        model.get_scaling.detach(), sigma=float(sigma),
+    )["strict_outside_safe"]
+
+
+def apply_cuboid_front_reflection_path(
+    rays, transparent_rays, front_position, front_normal, camera_direction, epsilon,
+):
+    """Replace only transparent R path fields with frozen cuboid-front geometry."""
+    selected_count = int(transparent_rays.sum())
+    expected = (selected_count, 3)
+    for name, value in (
+        ("front_position", front_position), ("front_normal", front_normal),
+        ("camera_direction", camera_direction),
+    ):
+        if value.shape != expected or not torch.isfinite(value).all():
+            raise RuntimeError(f"cuboid-front {name} is missing/non-finite")
+    reflection_direction = F.normalize(
+        camera_direction
+        - 2.0 * (camera_direction * front_normal).sum(dim=-1, keepdim=True)
+        * front_normal,
+        dim=-1, eps=1e-8,
+    )
+    result = dict(rays)
+    for key in ("origins", "directions", "d_cam", "wo", "normal"):
+        result[key] = rays[key].clone()
+    result["origins"][transparent_rays] = front_position + float(epsilon) * reflection_direction
+    result["directions"][transparent_rays] = reflection_direction
+    result["d_cam"][transparent_rays] = camera_direction
+    result["wo"][transparent_rays] = -camera_direction
+    result["normal"][transparent_rays] = front_normal
+    return result
+
+
+class _FilteredDiffuseView:
+    """Differentiable parameter subset used by interface-only direct rasterization."""
+    def __init__(self, diffuse, mask):
+        self.source = diffuse; self.mask = mask
+
+    @property
+    def get_xyz(self): return self.source.get_xyz[self.mask]
+    @property
+    def get_rotation(self): return self.source.get_rotation[self.mask]
+    @property
+    def get_scaling(self): return self.source.get_scaling[self.mask]
+    @property
+    def get_opacity(self): return self.source.get_opacity[self.mask]
+    @property
+    def get_base_color(self): return self.source.get_base_color[self.mask]
+    @property
+    def get_roughness(self): return self.source.get_roughness[self.mask]
+    @property
+    def get_f0(self): return self.source.get_f0[self.mask]
+    @property
+    def get_ks(self): return self.source.get_ks[self.mask]
+
+
+def _transparent_front_contract(viewpoint_camera, state, diffuse, legacy_rays):
+    cache = state.geometry_release.load_view(Path(str(viewpoint_camera.image_name)).stem)
+    device, dtype = diffuse["position"].device, diffuse["position"].dtype
+    valid_cache = torch.from_numpy(cache["valid_two_hit"]).to(device=device, dtype=torch.bool)
+    near = torch.from_numpy(cache["t_near"]).to(device=device, dtype=dtype)
+    far = torch.from_numpy(cache["t_far"]).to(device=device, dtype=dtype)
+    back = torch.from_numpy(cache["back_position"]).to(device=device, dtype=dtype)
+    mask = viewpoint_camera.specular_mask
+    if mask is None:
+        raise RuntimeError("cuboid-front path requires hard transparent mask")
+    if mask.ndim == 3 and mask.shape[0] == 1:
+        mask = mask.permute(1, 2, 0)
+    if mask.ndim == 2:
+        mask = mask[..., None]
+    if mask.ndim != 3 or mask.shape[-1] != 1:
+        raise ValueError("cuboid-front transparent mask must be one-channel")
+    hard = mask[..., 0] >= 0.5
+    formal_valid = hard & valid_cache
+    missing_surface = formal_valid & ~legacy_rays["valid_mask"]
+    if bool(missing_surface.any()):
+        raise RuntimeError("cuboid-front valid transparent ray lacks required D material surface")
+    path = build_cuboid_front_path(
+        viewpoint_camera.camera_center.to(dtype=dtype), back, near, far,
+        formal_valid, state.cuboid_space,
+    )
+    maps = scatter_front_path(
+        path, diffuse["position"].shape[0], diffuse["position"].shape[1],
+        diffuse["position"],
+    )
+    maps.update({
+        "near_depth": near[..., None], "far_depth": far[..., None],
+        "two_hit_valid": valid_cache[..., None].to(dtype),
+        "transparent_path_valid": formal_valid[..., None].to(dtype),
+        "transparent_mask_hard": hard[..., None].to(dtype),
+        "frozen_back_position": back,
+    })
+    return path, maps
 
 
 def _zero_ray_outputs(reference, count):
@@ -102,6 +231,26 @@ def render(
     )
     indices = rays["flat_indices"]
     background = bg_color.reshape(1, 3).to(diffuse["Cd"])
+    front_maps = {}
+    transparent_rays = torch.zeros((indices.numel(),), dtype=torch.bool, device=indices.device)
+    ownership_rays = transparent_rays
+    if state.transparent_path_mode == "cuboid_front_v1":
+        _, front_maps = _transparent_front_contract(
+            viewpoint_camera, state, diffuse, rays,
+        )
+        transparent_rays = (
+            front_maps["transparent_path_valid"].reshape(-1)[indices] >= 0.5
+        )
+        ownership_rays = front_maps["transparent_mask_hard"].reshape(-1)[indices] >= 0.5
+        selected_indices = indices[transparent_rays]
+        selected_direction = front_maps["frozen_camera_direction"].reshape(-1, 3)[selected_indices]
+        selected_normal = front_maps["front_normal"].reshape(-1, 3)[selected_indices]
+        selected_front = front_maps["front_position"].reshape(-1, 3)[selected_indices]
+        epsilon = float(state.ray_epsilon_scale * state.scene_radius)
+        rays = apply_cuboid_front_reflection_path(
+            rays, transparent_rays, selected_front, selected_normal,
+            selected_direction, epsilon,
+        )
 
     if indices.numel():
         traced = raytrace(
@@ -143,11 +292,47 @@ def render(
         ks = flat("ks")
         cd_surface = flat("Cd")
         diffuse_contribution = alpha * (1.0 - ks) * cd_surface
+        diffuse_unfiltered_contribution = diffuse_contribution
+        if state.transparent_path_mode == "cuboid_front_v1":
+            if state.transparent_direct_mode == "off":
+                diffuse_contribution = apply_transparent_contribution_mode(
+                    diffuse_contribution, None, ownership_rays, "off",
+                )
+            elif state.transparent_direct_mode == "interface_only":
+                d_masks = state.cuboid_space.support_masks(
+                    state.diffuse.get_xyz.detach(), state.diffuse.get_rotation.detach(),
+                    state.diffuse.get_scaling.detach(), sigma=state.support_sigma,
+                )
+                selected_indices = indices[ownership_rays]
+                if bool(d_masks["interface_margin"].any()):
+                    interface_diffuse = render_diffuse(
+                        viewpoint_camera,
+                        _FilteredDiffuseView(state.diffuse, d_masks["interface_margin"]),
+                        pipe, bg_color, scaling_modifier=scaling_modifier,
+                        separate_sh=separate_sh, override_color=None,
+                        use_trained_exp=False,
+                    )
+                    interface_decoded = decode_stage_a_gbuffer(
+                        interface_diffuse, bg_color, roughness_min=state.roughness_min,
+                        alpha_threshold=state.material_alpha_threshold,
+                    )
+                    ia = interface_decoded["alpha"].reshape(-1, 1)[selected_indices]
+                    iks = interface_decoded["ks"].reshape(-1, 1)[selected_indices]
+                    icd = interface_decoded["Cd"].reshape(-1, 3)[selected_indices]
+                    interface_contribution = ia * (1.0 - iks) * icd
+                else:
+                    interface_contribution = diffuse_contribution.new_zeros(
+                        (selected_indices.numel(), 3)
+                    )
+                diffuse_contribution = apply_transparent_contribution_mode(
+                    diffuse_contribution, interface_contribution,
+                    ownership_rays, "interface_only",
+                )
         reflection_contribution = alpha * ks * material["wr"] * reflection_color
         reflection_unfiltered_contribution = reflection_contribution
         reflection_unfiltered_hit = reflection_hit
         semantic_r_components = None
-        if state.semantic_repair:
+        if state.semantic_repair or state.transparent_path_mode == "cuboid_front_v1":
             if state.cuboid_space is None:
                 raise RuntimeError("semantic R filtering requires cuboid_space")
             mask = viewpoint_camera.specular_mask
@@ -155,16 +340,28 @@ def render(
                 raise RuntimeError("semantic R filtering requires transparent mask")
             if mask.ndim == 3 and mask.shape[0] == 1:
                 mask = mask.permute(1, 2, 0)
-            transparent_rays = mask.reshape(-1)[indices] >= 0.5
+            if state.transparent_path_mode != "cuboid_front_v1":
+                transparent_rays = mask.reshape(-1)[indices] >= 0.5
             selected_count = int(transparent_rays.sum())
-            class_masks = state.cuboid_space.masks(state.reflection.get_xyz.detach())
+            if state.transparent_path_mode == "cuboid_front_v1":
+                class_names = SUPPORT_CLASS_NAMES
+                class_masks = state.cuboid_space.support_masks(
+                    state.reflection.get_xyz.detach(), state.reflection.get_rotation.detach(),
+                    state.reflection.get_scaling.detach(), sigma=state.support_sigma,
+                )
+                class_masks["strict_outside_safe"] = support_safe_outside_mask(
+                    state.reflection, state.cuboid_space, sigma=state.support_sigma,
+                )
+            else:
+                class_names = ("inside", "interface", "outside")
+                class_masks = state.cuboid_space.masks(state.reflection.get_xyz.detach())
             semantic_r_components = {}
             ray_origins = rays["origins"][transparent_rays]
             ray_directions = rays["directions"][transparent_rays]
             selected_alpha = alpha[transparent_rays]
             selected_ks = ks[transparent_rays]
             selected_wr = material["wr"][transparent_rays]
-            for class_name in ("inside", "interface", "outside"):
+            for class_name in class_names:
                 if selected_count:
                     class_trace = raytrace(
                         state.reflection, ray_origins, ray_directions,
@@ -200,23 +397,33 @@ def render(
                     ),
                     "hit_count": int(class_hit.sum()),
                 }
-            outside = semantic_r_components["outside"]
-            raw_color = semantic_transparent_outside_only(raw_color, outside["raw"], transparent_rays)
-            reflection_color = semantic_transparent_outside_only(
-                reflection_color, outside["color"], transparent_rays
+            outside_name = (
+                "strict_outside_safe"
+                if state.transparent_path_mode == "cuboid_front_v1" else "outside"
             )
-            reflection_alpha = semantic_transparent_outside_only(
-                reflection_alpha, outside["alpha"], transparent_rays
-            )
-            reflection_depth = semantic_transparent_outside_only(
-                reflection_depth, outside["depth"], transparent_rays
-            )
-            reflection_hit = semantic_transparent_outside_only(
-                reflection_hit, outside["hit"], transparent_rays
-            )
-            reflection_contribution = semantic_transparent_outside_only(
-                reflection_contribution, outside["formal_contribution"], transparent_rays
-            )
+            outside = semantic_r_components[outside_name]
+            if state.transparent_reflection_mode == "support_safe_outside" \
+                    or state.transparent_path_mode != "cuboid_front_v1":
+                raw_color = semantic_transparent_outside_only(raw_color, outside["raw"], transparent_rays)
+                reflection_color = semantic_transparent_outside_only(
+                    reflection_color, outside["color"], transparent_rays
+                )
+                reflection_alpha = semantic_transparent_outside_only(
+                    reflection_alpha, outside["alpha"], transparent_rays
+                )
+                reflection_depth = semantic_transparent_outside_only(
+                    reflection_depth, outside["depth"], transparent_rays
+                )
+                reflection_hit = semantic_transparent_outside_only(
+                    reflection_hit, outside["hit"], transparent_rays
+                )
+                reflection_contribution = semantic_transparent_outside_only(
+                    reflection_contribution, outside["formal_contribution"], transparent_rays
+                )
+            elif state.transparent_reflection_mode == "off":
+                reflection_contribution = apply_transparent_contribution_mode(
+                    reflection_contribution, None, ownership_rays, "off",
+                )
         final_valid = diffuse_contribution + reflection_contribution + (1.0 - alpha) * background
     else:
         raw_color = diffuse["Cd"].new_zeros((0, 3))
@@ -232,6 +439,7 @@ def render(
             "wr": diffuse["Cd"].new_zeros((0, 3)),
         }
         diffuse_contribution = raw_color
+        diffuse_unfiltered_contribution = raw_color
         reflection_contribution = raw_color
         reflection_unfiltered_contribution = raw_color
         reflection_unfiltered_hit = reflection_hit
@@ -259,6 +467,9 @@ def render(
             "microfacet_fr": _scatter(material["fr"], indices, height, width, 3, 0.0),
             "microfacet_wr": _scatter(material["wr"], indices, height, width, 3, 0.0),
             "diffuse_contribution": _scatter(diffuse_contribution, indices, height, width, 3, 0.0),
+            "diffuse_unfiltered": _scatter(
+                diffuse_unfiltered_contribution, indices, height, width, 3, 0.0
+            ),
             "reflection_contribution": _scatter(reflection_contribution, indices, height, width, 3, 0.0),
             "reflection_unfiltered": _scatter(
                 reflection_unfiltered_contribution, indices, height, width, 3, 0.0
@@ -272,6 +483,10 @@ def render(
             "ray_aux": ray_aux,
         }
     )
+    output.update(front_maps)
+    output["transparent_path_mode"] = state.transparent_path_mode
+    output["transparent_direct_mode"] = state.transparent_direct_mode
+    output["transparent_reflection_mode"] = state.transparent_reflection_mode
     if semantic_r_components is not None:
         transparent_indices = indices[transparent_rays]
         stats = {}
@@ -300,11 +515,21 @@ def render(
         output["reflection_final_filtered"] = output["reflection_contribution"]
         output["semantic_r_stats"] = stats
         output["semantic_r_transparent_ray_count"] = selected_count
+        comparison_name = (
+            "strict_outside_safe"
+            if state.transparent_path_mode == "cuboid_front_v1" else "outside"
+        )
+        comparison = (
+            torch.zeros_like(reflection_unfiltered_contribution[transparent_rays])
+            if state.transparent_reflection_mode == "off"
+            else semantic_r_components[comparison_name]["formal_contribution"]
+        )
         filter_difference = torch.abs(
-            reflection_unfiltered_contribution[transparent_rays]
-            - semantic_r_components["outside"]["formal_contribution"]
+            reflection_unfiltered_contribution[transparent_rays] - comparison
         )
         output["semantic_r_filter_stats"] = {
+            "formal_mode": state.transparent_reflection_mode,
+            "support_sigma": float(state.support_sigma),
             "unfiltered_surfel_count": int(state.reflection.get_xyz.shape[0]),
             "unfiltered_candidate_count": (
                 int(ray_diagnostics.candidate_counts[transparent_rays].sum())

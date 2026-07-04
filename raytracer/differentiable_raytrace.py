@@ -15,6 +15,8 @@ from raytracer.candidate_parameters import (
 class RaytraceAux:
     contributing_indices: torch.Tensor
     contributing_weights: torch.Tensor
+    contributing_ray_indices: torch.Tensor = None
+    contributing_depths: torch.Tensor = None
 
 
 @dataclass
@@ -70,7 +72,10 @@ def trace_candidates(
             torch.zeros((ray_count, 1), dtype=torch.bool, device=origins.device),
         )
         aux = (
-            RaytraceAux(candidates.new_empty((0,)), origins.new_empty((0,)))
+            RaytraceAux(
+                candidates.new_empty((0,)), origins.new_empty((0,)),
+                candidates.new_empty((0,)), origins.new_empty((0,)),
+            )
             if return_aux else None
         )
         diagnostics = (
@@ -143,6 +148,9 @@ def trace_candidates(
         aux = RaytraceAux(
             sorted_indices[contributing].detach(),
             weights[contributing].detach(),
+            torch.arange(ray_count, device=origins.device)[:, None]
+            .expand_as(sorted_indices)[contributing].detach(),
+            sorted_distance[contributing].detach(),
         )
     else:
         aux = None

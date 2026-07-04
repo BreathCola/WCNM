@@ -198,3 +198,65 @@ Outside-only center classification does not prove semantic content: outside R
 or D surfels can still memorize colors resembling internal content. Nine-view
 structure review remains mandatory and the filters alone are never acceptance
 evidence.
+
+## Authorized cuboid-front ownership v4 A/B pilot
+
+The user-executed v3 is blocked evidence, not a resume source. Despite fixed
+4,096 inside-center T and center-filtered R/Cout, it retained the D-derived
+transparent interface path and ended with Ain saturation/black-veil collapse.
+The next and only authorized execution is the fresh v4 A/B pilot at
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_ab500_v4`.
+
+For `mask_hard & valid_two_hit`, `cuboid_front_v1` computes
+`front_position=camera_center+t_near*d`, where `d` is the normalized frozen
+camera-to-back-position direction. The normal is the selected cuboid entering
+face normal, transformed from cuboid-local axes and face-forwarded so
+`dot(n,-d)>0`. R origin/d_cam/wo/reflection direction/Fresnel normal and T
+origin/direction use that contract; T absolute depth is
+`t_near+eps+relative_depth`. Cout retains the frozen back-position origin.
+Missing/non-finite fields, invalid near/far ordering, off-plane front points,
+or a missing required material surface fail closed. Pixels outside the hard
+transparent mask retain the existing D/R formulas and paths exactly.
+
+Ownership is based on complete cuboid-local finite 3-sigma surfel support, not
+centers. Every D/R/T support is classified as strict-inside-safe, interface,
+strict-outside-safe, or crossing/ambiguous, with separate surfel, candidate,
+hit, alpha-energy, and map outputs. The pilot requires:
+
+- transparent D direct contribution `off`;
+- transparent R contribution `off` (while retaining tested
+  `support_safe_outside` as a future configurable mode);
+- Cout from strict-outside-safe D support only;
+- exactly 4,096 strict-inside-safe T surfels with no pruning/densification;
+- full-frame RGB loss and L_depth disabled throughout;
+- D/R parameters, optimizer/scheduler/topology state, and local iteration
+  frozen for all 500 updates in each arm.
+
+These path/support/ownership controls are versioned renderer and cache
+contracts intended to remain available for later joint fine-tuning. The strong
+D/R-off setting isolates ownership and is not asserted to be the final physical
+rendering policy. Changing or disabling a gate requires a new decision and
+evidence; it must not happen automatically at a warm-up boundary.
+
+Arm A is `random_strict_inside`; Arm B is `transferred_d_inside`. The latter
+copies only D surfels with strict-inside-safe 3-sigma support and multi-view
+attributed hits whose absolute depths lie safely between frozen near/far. It
+copies xyz, rotation, raw 2D scale, and raw base color; opacity is scaled by
+0.25 and clamped to 0.005--0.05; material fields and all training state are
+fresh. Deterministic support-safe random fill reaches 4,096. This is a matched
+initialization ablation, not a semantic label or proof that D content is true.
+
+Both arms start from the same immutable Stage-B global-15,000 checkpoint and
+Stage-C release, share the same random camera sequence and all training/loss
+settings, and stop at global 15,500. Required nodes are 15,000, 15,100, 15,250,
+and 15,500 for the fixed nine views. A new v4 static-cache schema binds the
+cuboid-front and ownership identities and rejects every legacy D-origin cache.
+
+The operator performs preflight, immutable hashes, fresh cache/parity, Arm A,
+Arm B using the same validated cache, and a CPU-only audit. Verdicts are only
+`CUBOID_PATH_OWNERSHIP_PILOT_PASS`, `CUBOID_PATH_OWNERSHIP_PILOT_HOLD`, or
+`CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED`. No independent human-authored bird ROI
+currently exists, so RGB improvement cannot be called semantic success and the
+run must HOLD or BLOCKED. Even PASS means only that T has demonstrated handoff
+conditions under strong ownership isolation; it cannot authorize joint
+fine-tuning, final separation claims, or Stage E.

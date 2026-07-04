@@ -2800,3 +2800,82 @@ claim responsibility separation from the filter or loss alone.
 Required ablation: This pilot is a semantic falsification gate, not a final
 ablation. Any later comparison or joint continuation requires a separate user
 decision after nine-view review.
+
+## D-009 — Cuboid-front transparent path and permanent support-safe ownership
+
+Date: 2026-07-04
+
+Question: How should Stage D remove the D-G-buffer path contamination and
+branch non-identifiability that remained after the v3 center-space filters and
+anti-veil prior?
+
+Observed evidence: The user-executed v3 completed 1,000 T-only updates with D/R
+state hashes unchanged, T fixed at 4,096, no topology events, and every T center
+inside the cuboid. It nevertheless ended `SEMANTIC_REPAIR_PILOT_BLOCKED`:
+transparent Ain mean/p50/p95/p99 was 0.9729/0.99997/1/1, saturation fraction
+was 0.8744, and the high-Ain near-black conditional fraction was 0.9723. Its
+first bounce still originated at the transparent D G-buffer position, D direct
+and R remained formal contributors, and spatial ownership used centers rather
+than finite surfel support. Therefore v3 is immutable failed evidence and is
+not a resume source.
+
+Chosen implementation: Add the versioned `cuboid_front_v1` path only on
+`mask_hard & valid_two_hit`. Frozen camera direction is normalized from camera
+center to frozen `back_position`; `front_position=camera_center+t_near*d`.
+The nearest of the six fitted cuboid planes selects the entering-face normal in
+cuboid-local coordinates; it is transformed by the orthonormal axes and flipped
+when necessary so `dot(front_normal,-d)>0`. Non-finite fields, invalid depth
+ordering, a front point farther than 5e-4 from a cuboid plane, or a missing D
+material surface fail the run rather than falling back to D position/normal.
+
+For valid transparent rays, R origin, incident direction, outgoing direction,
+reflection direction, Fresnel normal, and microfacet normal all use this frozen
+front contract. T starts at `front_position+eps*d`; its absolute depth is
+`t_near+eps+relative_T_depth`, in the same coordinate system as `t_far`.
+Second-bounce Cout retains `back_position+eps*d`. Outside the hard transparent
+mask the existing D/R path and contribution tensors remain unchanged.
+
+All D/R/T ownership now uses one cuboid-local finite 3-sigma tangent-support
+partition: `strict_inside_safe`, `interface_margin`, `strict_outside_safe`, and
+`crossing_or_ambiguous`. The pilot sets D direct and R contribution to `off` on
+the entire hard transparent mask, admits only strict-outside-safe D support to
+Cout, and constrains all 4,096 fixed T supports to strict-inside-safe through a
+rotation/scale-aware sigmoid parameterization. The configurable modes are part
+of the renderer/cache/checkpoint contract and are intended to survive later
+joint fine-tuning; re-enabling a contribution requires a later explicit
+decision and new evidence. The strong D/R-off policy is an ownership-isolation
+diagnostic, not a claimed final physical renderer.
+
+The sole matched ablation compares `random_strict_inside` with
+`transferred_d_inside`. Transfer eligibility requires strict-inside-safe D
+support, nonzero attributed contributions from at least three cached training
+views, aggregate weight at least 0.01, and attributed absolute depths inside
+`[t_near+0.05,t_far-0.05]`. It copies D xyz, quaternion, raw 2D scale, and raw
+base color, but not roughness/f0/ks or optimizer/topology state. Opacity is
+recalibrated as `clamp(0.25*sigmoid(D_raw),0.005,0.05)`; a deterministic
+strict-inside random fill reaches 4,096 if eligible D is insufficient. This is
+an initialization hypothesis, never a fact label; D is copied, not removed.
+
+The new static cache schemas are `rtgs_stage_d_cuboid_front_cache_v4` and
+`rtgs_stage_d_cuboid_front_cache_manifest_v4`. Their identity binds source,
+release, masks, cuboid-front path, ownership modes, support rule, and renderer
+configuration, making all legacy D-origin caches incompatible. A single
+fresh-only operator runs parity, Arm A 500 steps, Arm B 500 steps, and CPU audit
+at nodes 15,000/15,100/15,250/15,500. Both arms share the camera deck, losses,
+seed, T count, and all training settings; only T initialization provenance and
+the mechanically necessary Arm-B cache reuse flag/output path differ.
+
+Alternatives: Continue v3 longer; enable L_depth early; retain center-only
+filtering; use anti-veil as the primary repair; delete D surfels globally; or
+derive a bird ROI from model/GT appearance. These do not remove the path and
+ownership ambiguity or would create unsupported semantic supervision.
+
+Impact and boundary: The only authorized output is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_ab500_v4`. L_depth stays
+disabled (future marker global 40,000). No joint fine-tune or Stage E follows.
+Without an independent, versioned, human-authored bird ROI the audit must HOLD
+or BLOCKED. Even PASS means only that T has testable handoff conditions under
+the cuboid-front path and strong ownership isolation, not final D/R/T separation.
+
+Required ablation: The two matched 500-step arms above; no conclusion may be
+drawn from one arm alone or from RGB loss alone.

@@ -80,7 +80,7 @@ def raytrace(
         bvh_events[0][1].record(stream)
 
     output_chunks = [[], [], [], []]
-    aux_indices, aux_weights = [], []
+    aux_indices, aux_weights, aux_ray_indices, aux_depths = [], [], [], []
     candidate_count_chunks, eligible_count_chunks, exact_count_chunks = [], [], []
     traversal_events, intersection_events = [], []
     candidate_parameter_table = pack_reflection_parameters(model)
@@ -123,7 +123,13 @@ def raytrace(
                 )
                 if return_aux:
                     retry_outputs, retry_aux = retry_result
-                    return (*retry_outputs, retry_aux.contributing_indices, retry_aux.contributing_weights)
+                    return (
+                        *retry_outputs,
+                        retry_aux.contributing_indices,
+                        retry_aux.contributing_weights,
+                        retry_aux.contributing_ray_indices,
+                        retry_aux.contributing_depths,
+                    )
                 return retry_result
 
             checkpointed = checkpoint(
@@ -135,7 +141,9 @@ def raytrace(
             )
             if return_aux:
                 outputs = checkpointed[:4]
-                aux = RaytraceAux(checkpointed[4], checkpointed[5])
+                aux = RaytraceAux(
+                    checkpointed[4], checkpointed[5], checkpointed[6], checkpointed[7]
+                )
                 result = outputs, aux
             else:
                 result = checkpointed
@@ -173,6 +181,8 @@ def raytrace(
         if return_aux:
             aux_indices.append(aux.contributing_indices)
             aux_weights.append(aux.contributing_weights)
+            aux_ray_indices.append(aux.contributing_ray_indices + int(start))
+            aux_depths.append(aux.contributing_depths)
         for target, value in zip(output_chunks, outputs):
             target.append(value)
     if ray_origins.shape[0] == 0:
@@ -189,6 +199,8 @@ def raytrace(
         aux = RaytraceAux(
             torch.cat(aux_indices) if aux_indices else torch.empty(0, dtype=torch.long, device=device),
             torch.cat(aux_weights) if aux_weights else ray_origins.new_empty((0,)),
+            torch.cat(aux_ray_indices) if aux_ray_indices else torch.empty(0, dtype=torch.long, device=device),
+            torch.cat(aux_depths) if aux_depths else ray_origins.new_empty((0,)),
         )
     else:
         aux = None

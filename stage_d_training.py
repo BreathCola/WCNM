@@ -24,7 +24,9 @@ from gaussian_renderer.transmittance_renderer import (
 from geometry.geometry_release import (
     GeometryRelease, camera_identity_sha256, sha256_file, validate_geometry_release,
 )
-from geometry.cuboid_space import CuboidSpace, INSIDE
+from geometry.cuboid_space import (
+    CuboidSpace, INSIDE, SUPPORT_CLASS_NAMES, SUPPORT_STRICT_INSIDE,
+)
 from scene.diffuse_surfel_model import DiffuseSurfelModel
 from scene.reflection_surfel_model import ReflectionSurfelModel
 from scene.stage_d_scene import StageDScene
@@ -49,7 +51,7 @@ from utils.transmittance_debug import (
 )
 from utils.stage_d_static_cache import (
     TRAINING_PACKAGE_KEYS, StaticDRCache, cpu_cache_payload, frozen_branch_hash,
-    make_identity, renderer_contract, write_manifest,
+    make_identity, renderer_contract, write_manifest, OWNERSHIP_CACHE_SCHEMA,
 )
 from utils.semantic_repair import (
     anti_veil_config, anti_veil_loss, smooth_ramp, spatial_frequency_energy,
@@ -78,13 +80,25 @@ CACHED_RANDOM_VIEW_SEED = 20260703
 SEMANTIC_OUTPUT_NAME = "stage_d_tihubird_c03r8_semantic_repair_v3"
 SEMANTIC_NODES = (15025, 15100, 15500, 16000)
 SEMANTIC_ENDPOINT = 16000
+OWNERSHIP_OUTPUT_NAME = "stage_d_tihubird_c03r8_cuboid_path_ownership_ab500_v4"
+OWNERSHIP_ARM_NAMES = {
+    "random_strict_inside": "arm_a_random_strict_inside",
+    "transferred_d_inside": "arm_b_transferred_d_inside",
+}
+OWNERSHIP_NODES = (15000, 15100, 15250, 15500)
+OWNERSHIP_ENDPOINT = 15500
 
 
 def _cached_mode(opt):
-    return bool(opt.stage_d_cached_twarmup or opt.stage_d_semantic_repair_pilot)
+    return bool(
+        opt.stage_d_cached_twarmup or opt.stage_d_semantic_repair_pilot
+        or opt.stage_d_ownership_pilot
+    )
 
 
 def _required_nodes(opt):
+    if opt.stage_d_ownership_pilot:
+        return OWNERSHIP_NODES
     return SEMANTIC_NODES if opt.stage_d_semantic_repair_pilot else FORMAL_NODES
 
 
@@ -149,31 +163,45 @@ def _config(dataset, opt, release, source):
         "stage_d_formal_onset": bool(opt.stage_d_formal_onset),
         "stage_d_cached_twarmup": bool(opt.stage_d_cached_twarmup),
         "stage_d_semantic_repair_pilot": bool(opt.stage_d_semantic_repair_pilot),
+        "stage_d_ownership_pilot": bool(opt.stage_d_ownership_pilot),
+        "stage_d_ownership_arm": str(opt.stage_d_ownership_arm),
+        "transparent_path_mode": str(dataset.transparent_path_mode),
+        "transparent_direct_mode": str(dataset.transparent_direct_mode),
+        "transparent_reflection_mode": str(dataset.transparent_reflection_mode),
+        "cout_ownership_mode": str(dataset.cout_ownership_mode),
         "cached_t_warmup": (
             {
                 "phase_a_global": [
                     15001,
+                    OWNERSHIP_ENDPOINT if opt.stage_d_ownership_pilot else (
                     SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot
-                    else CACHED_PHASE_A_END,
+                    else CACHED_PHASE_A_END
+                    )
                 ],
                 "phase_a_updates": {
                     "diffuse": 0, "reflection": 0,
-                    "transmittance": 1000 if opt.stage_d_semantic_repair_pilot else 3000,
+                    "transmittance": (
+                        500 if opt.stage_d_ownership_pilot else (
+                        1000 if opt.stage_d_semantic_repair_pilot else 3000)
+                    ),
                 },
                 "phase_b_global": (
-                    None if opt.stage_d_semantic_repair_pilot
+                    None if (opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot)
                     else [CACHED_PHASE_A_END + 1, 20000]
                 ),
                 "phase_b_mode": (
-                    None if opt.stage_d_semantic_repair_pilot
+                    None if (opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot)
                     else "exact_uncached_joint_d_r_t"
                 ),
                 "reflection_local_semantics": (
-                    "R-local remains 12000 for the entire semantic pilot; no Phase B"
-                    if opt.stage_d_semantic_repair_pilot else
+                    "R-local remains 12000 for the entire ownership/semantic pilot; no Phase B"
+                    if (opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot) else
                     "R-local remains 12000 in Phase A and advances only for Phase-B optimizer updates"
                 ),
-                "cache_schema": "rtgs_stage_d_static_dr_cache_v1",
+                "cache_schema": (
+                    OWNERSHIP_CACHE_SCHEMA if opt.stage_d_ownership_pilot
+                    else "rtgs_stage_d_static_dr_cache_v1"
+                ),
                 "cache_fp": "float32",
                 "cache_contains_target_rgb": False,
             }
@@ -191,6 +219,31 @@ def _config(dataset, opt, release, source):
                 "pilot_global": [15001, SEMANTIC_ENDPOINT],
             }
             if opt.stage_d_semantic_repair_pilot else None
+        ),
+        "ownership_handoff": (
+            {
+                "schema": "rtgs_stage_d_cuboid_path_ownership_v4",
+                "transparent_path_mode": dataset.transparent_path_mode,
+                "transparent_direct_mode": dataset.transparent_direct_mode,
+                "transparent_reflection_mode": dataset.transparent_reflection_mode,
+                "cout_ownership_mode": dataset.cout_ownership_mode,
+                "support_classification": "cuboid_local_finite_3sigma_v1",
+                "support_sigma": 3.0,
+                "t_topology": {"densification": False, "pruning": False, "required_count": 4096},
+                "arm": opt.stage_d_ownership_arm,
+                "transfer_selection": {
+                    "minimum_views": int(opt.transfer_min_views),
+                    "minimum_total_weight": float(opt.transfer_min_total_weight),
+                    "depth_margin": float(opt.transfer_depth_margin),
+                    "opacity_scale": float(opt.transfer_opacity_scale),
+                    "opacity_min": float(opt.transfer_opacity_min),
+                    "opacity_max": float(opt.transfer_opacity_max),
+                },
+                "pilot_global": [15001, OWNERSHIP_ENDPOINT],
+                "depth_enabled": False,
+                "diagnostic_isolation_not_final_physics": True,
+            }
+            if opt.stage_d_ownership_pilot else None
         ),
         "transmittance_initialization": {
             "mode": dataset.transmittance_init_mode,
@@ -239,8 +292,11 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("Stage D requires --start_checkpoint")
     if not dataset.geometry_release_manifest:
         raise ValueError("Stage D requires --geometry_release_manifest")
-    if dataset.transmittance_init_mode != "random_bbox":
-        raise ValueError("Stage D currently requires transmittance_init_mode=random_bbox")
+    allowed_t_init = {"random_bbox"}
+    if opt.stage_d_ownership_pilot:
+        allowed_t_init = {"random_strict_inside", "transferred_d_inside"}
+    if dataset.transmittance_init_mode not in allowed_t_init:
+        raise ValueError(f"Stage D T initialization must be one of {sorted(allowed_t_init)}")
     if dataset.transmittance_init_count <= 0:
         raise ValueError("transmittance_init_count must be positive")
     if dataset.transmittance_compose != "alpha_over":
@@ -257,20 +313,42 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("formal Stage D onset must not use --stage_d_smoke")
     if _cached_mode(opt) and (opt.stage_d_smoke or opt.stage_d_formal_onset):
         raise ValueError("cached T warm-up is a distinct formal mode")
-    if opt.stage_d_cached_twarmup and opt.stage_d_semantic_repair_pilot:
-        raise ValueError("semantic repair and legacy cached warm-up flags are mutually exclusive")
-    expected_phase_end = SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot else CACHED_PHASE_A_END
+    modes = sum(bool(value) for value in (
+        opt.stage_d_cached_twarmup, opt.stage_d_semantic_repair_pilot,
+        opt.stage_d_ownership_pilot,
+    ))
+    if modes > 1:
+        raise ValueError("Stage D cached/semantic/ownership modes are mutually exclusive")
+    expected_phase_end = (
+        OWNERSHIP_ENDPOINT if opt.stage_d_ownership_pilot else (
+        SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot else CACHED_PHASE_A_END)
+    )
     if int(opt.stage_d_phase_a_end_iteration) != expected_phase_end:
         raise ValueError(f"cached T warm-up Phase A must end at global {expected_phase_end}")
     if opt.stage_d_cache_parity_atol <= 0 or opt.stage_d_cache_parity_mean_atol <= 0:
         raise ValueError("cached T warm-up parity tolerances must be positive")
     if opt.transparent_interface_margin_mode != "exclude":
         raise ValueError("semantic repair requires transparent_interface_margin_mode=exclude")
-    if opt.stage_d_semantic_repair_pilot:
+    if opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot:
         if opt.lambda_anti_veil_black <= 0 or opt.lambda_anti_veil_saturation <= 0:
             raise ValueError("semantic repair requires positive anti-veil weights")
         if int(opt.anti_veil_ramp_end) <= int(opt.anti_veil_ramp_start):
             raise ValueError("semantic repair anti-veil ramp is invalid")
+    if opt.stage_d_ownership_pilot:
+        required = {
+            "path": dataset.transparent_path_mode == "cuboid_front_v1",
+            "direct": dataset.transparent_direct_mode == "off",
+            "reflection": dataset.transparent_reflection_mode == "off",
+            "cout": dataset.cout_ownership_mode == "support_safe_outside",
+            "arm": opt.stage_d_ownership_arm in OWNERSHIP_ARM_NAMES,
+            "depth": int(opt.stage_d_depth_start_iteration) == 40000,
+            "transfer_views": int(opt.transfer_min_views) >= 2,
+            "transfer_weight": float(opt.transfer_min_total_weight) > 0,
+            "transfer_margin": float(opt.transfer_depth_margin) > 0,
+        }
+        failures = [name for name, passed in required.items() if not passed]
+        if failures:
+            raise ValueError("ownership pilot configuration mismatch: " + ", ".join(failures))
 
 
 def _validate_formal_contract(dataset, opt, release, source, fresh_from_stage_b,
@@ -416,7 +494,57 @@ def _validate_semantic_repair_contract(
         raise ValueError("semantic repair pilot contract mismatch: " + ", ".join(failures))
 
 
-def _phase_for_iteration(iteration, semantic_repair=False):
+def _validate_ownership_contract(
+    dataset, opt, release, source, fresh_from_stage_b,
+    saving_iterations, checkpoint_iterations,
+):
+    if not opt.stage_d_ownership_pilot:
+        return
+    arm_name = OWNERSHIP_ARM_NAMES.get(opt.stage_d_ownership_arm)
+    source_config = source.get("stage_b_config", {})
+    source_mask = source_config.get("specular_mask", {})
+    current_mask = getattr(dataset, "_validated_specular_mask_manifest", {})
+    required = {
+        "fresh_from_stage_b": fresh_from_stage_b,
+        "source_sha256": source.get("sha256") == FORMAL_SOURCE_SHA256,
+        "source_global": source.get("global_iteration") == 15000,
+        "source_r_local": source.get("reflection_iteration") == 12000,
+        "release_id": release.manifest.get("geometry_release_id") == FORMAL_RELEASE_ID,
+        "release_sha256": release.validation.get("aggregate_sha256") == FORMAL_RELEASE_SHA256,
+        "endpoint": int(opt.iterations) == OWNERSHIP_ENDPOINT,
+        "phase_end": int(opt.stage_d_phase_a_end_iteration) == OWNERSHIP_ENDPOINT,
+        "depth_disabled": int(opt.stage_d_depth_start_iteration) == 40000,
+        "resolution": int(dataset.resolution) == 8,
+        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
+        "t_count_seed": int(dataset.transmittance_init_count) == 4096
+        and int(dataset.transmittance_init_seed) == 20260703,
+        "arm_init_match": dataset.transmittance_init_mode == opt.stage_d_ownership_arm,
+        "output": arm_name is not None and Path(dataset.model_path).name == arm_name
+        and Path(dataset.model_path).parent.name == OWNERSHIP_OUTPUT_NAME,
+        "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations))) == OWNERSHIP_NODES,
+        "ply_nodes": tuple(sorted(set(saving_iterations))) == OWNERSHIP_NODES,
+        "path": dataset.transparent_path_mode == "cuboid_front_v1",
+        "direct_off": dataset.transparent_direct_mode == "off",
+        "reflection_off": dataset.transparent_reflection_mode == "off",
+        "cout_safe": dataset.cout_ownership_mode == "support_safe_outside",
+        "cache_path": Path(dataset.stage_d_static_cache_path).name == "cuboid_front_cache_v4",
+        "source_specular_contract": (
+            source_config.get("lambda_spec") == 0.2
+            and source_config.get("specular_k0") == 0.9
+            and current_mask.get("manifest_file_sha256")
+            == source_mask.get("manifest_file_sha256")
+            == "056da740a6bb20e7b888be890ac39b597734d5e0487003b36384b57a9cb66551"
+            and current_mask.get("aggregate_sha256") == source_mask.get("aggregate_sha256")
+        ),
+    }
+    failures = [name for name, passed in required.items() if not passed]
+    if failures:
+        raise ValueError("cuboid path ownership pilot contract mismatch: " + ", ".join(failures))
+
+
+def _phase_for_iteration(iteration, semantic_repair=False, ownership=False):
+    if ownership:
+        return "cuboid_path_ownership_t_only"
     if semantic_repair:
         return "semantic_repair_cached_t_only"
     return "cached_t_warmup" if int(iteration) <= CACHED_PHASE_A_END else "exact_joint"
@@ -424,7 +552,7 @@ def _phase_for_iteration(iteration, semantic_repair=False):
 
 def _transmittance_topology_update_allowed(opt, transmittance_iteration):
     """Keep the semantic pilot's fixed-cardinality T contract fail closed."""
-    if opt.stage_d_semantic_repair_pilot:
+    if opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot:
         return False
     return (
         transmittance_iteration > opt.transmittance_densify_from_iter
@@ -471,6 +599,11 @@ def _semantic_step_metrics(package, gt, transparent_mask):
         "reflection_interface", "reflection_outside", "reflection_final_filtered",
         "transmittance_contribution", "outside_unfiltered", "outside_inside",
         "outside_interface", "outside_outside", "outside_final_filtered",
+        "inside_contribution", "cout_contribution", "diffuse_unfiltered",
+        "reflection_strict_inside_safe", "reflection_interface_margin",
+        "reflection_strict_outside_safe", "reflection_crossing_or_ambiguous",
+        "outside_strict_inside_safe", "outside_interface_margin",
+        "outside_strict_outside_safe", "outside_crossing_or_ambiguous",
     ):
         if name in package:
             values = _masked_values(package[name], mask)
@@ -486,6 +619,19 @@ def _semantic_step_metrics(package, gt, transparent_mask):
             ("transmittance", "transmittance_contribution"),
         ) if name in package
     }
+    path_metrics = {}
+    if "front_origin_tnear_error" in package:
+        origin_error = _masked_values(package["front_origin_tnear_error"], valid)
+        normal_dot = _masked_values(package["front_normal_faceforward_dot"], valid)
+        plane = _masked_values(package["front_plane_residual"], valid)
+        back = _masked_values(package["frozen_back_distance_residual"], valid)
+        path_metrics = {
+            "origin_tnear_max_abs": float(origin_error.abs().max()) if origin_error.numel() else None,
+            "origin_tnear_mean_abs": float(origin_error.abs().mean()) if origin_error.numel() else None,
+            "normal_faceforward_min_dot": float(normal_dot.min()) if normal_dot.numel() else None,
+            "front_plane_residual_max": float(plane.max()) if plane.numel() else None,
+            "back_tfar_residual_max": float(back.max()) if back.numel() else None,
+        }
     return {
         "ain": _quantiles(ain),
         "ain_saturation_fraction_ge_0_95": float((ain >= 0.95).float().mean())
@@ -503,6 +649,12 @@ def _semantic_step_metrics(package, gt, transparent_mask):
         "cout_spatial": dict(package.get("semantic_cout_stats", {})),
         "r_filter": dict(package.get("semantic_r_filter_stats", {})),
         "cout_filter": dict(package.get("semantic_cout_filter_stats", {})),
+        "cuboid_front_path": path_metrics,
+        "transparent_ownership_modes": {
+            "path": package.get("transparent_path_mode"),
+            "direct": package.get("transparent_direct_mode"),
+            "reflection": package.get("transparent_reflection_mode"),
+        },
     }
 
 
@@ -514,6 +666,58 @@ def _set_branch_trainable(model, enabled):
         value = getattr(model, name, None)
         if torch.is_tensor(value) and value.is_floating_point():
             value.requires_grad_(bool(enabled))
+
+
+@torch.no_grad()
+def _select_transferred_d_candidates(static_cache, diffuse, cuboid, opt, count=4096):
+    """Aggregate source-bound multi-view front-ray evidence deterministically."""
+    surfel_count = int(diffuse.get_xyz.shape[0])
+    view_count = torch.zeros((surfel_count,), dtype=torch.int32)
+    weight_sum = torch.zeros((surfel_count,), dtype=torch.float64)
+    hit_count = torch.zeros((surfel_count,), dtype=torch.int64)
+    evidence_views = 0
+    for stem in sorted(static_cache.entries):
+        evidence = static_cache.load(stem, device="cpu").get("transfer_evidence")
+        if not evidence:
+            raise RuntimeError(f"ownership cache lacks transfer evidence: {stem}")
+        ids = evidence["surfel_ids"].long()
+        if ids.numel():
+            if int(ids.min()) < 0 or int(ids.max()) >= surfel_count:
+                raise RuntimeError(f"transfer evidence surfel ID is out of range: {stem}")
+            view_count[ids] += 1
+            weight_sum[ids] += evidence["weight_sum"].double()
+            hit_count[ids] += evidence["hit_count"].long()
+        evidence_views += 1
+    support = cuboid.support_masks(
+        diffuse.get_xyz.detach(), diffuse.get_rotation.detach(),
+        diffuse.get_scaling.detach(), sigma=3.0,
+    )["strict_inside_safe"].detach().cpu()
+    eligible = support & (view_count >= int(opt.transfer_min_views)) \
+        & (weight_sum >= float(opt.transfer_min_total_weight))
+    eligible_ids = eligible.nonzero(as_tuple=False)[:, 0].tolist()
+    eligible_ids.sort(key=lambda index: (
+        -int(view_count[index]), -float(weight_sum[index]), -int(hit_count[index]), int(index)
+    ))
+    selected = torch.tensor(eligible_ids[: int(count)], dtype=torch.long, device=diffuse.get_xyz.device)
+    metadata = {
+        "schema": "rtgs_d_inside_transfer_selection_v1",
+        "evidence_view_count": evidence_views,
+        "minimum_distinct_views": int(opt.transfer_min_views),
+        "minimum_total_alpha_weight": float(opt.transfer_min_total_weight),
+        "depth_safe_interval": (
+            f"[t_near+{float(opt.transfer_depth_margin)},"
+            f"t_far-{float(opt.transfer_depth_margin)}]"
+        ),
+        "support_class": "strict_inside_safe",
+        "support_sigma": 3.0,
+        "eligible_count": len(eligible_ids),
+        "selected_count": int(selected.numel()),
+        "requested_count": int(count),
+        "random_fill_count": int(count - selected.numel()),
+        "ranking": "distinct_views_desc,total_weight_desc,hit_count_desc,surfel_id_asc",
+        "fill_strategy": "random_strict_inside_same_seed_v1",
+    }
+    return selected, metadata
 
 
 def _render_formal_review_node(
@@ -854,6 +1058,14 @@ def _parity_snapshot(payload, gradients):
             "Dout": package["outside_depth"].detach().clone(),
             "Ct": package["transmittance_color"].detach().clone(),
             "At": package["transmittance_alpha"].detach().clone(),
+            **({
+                "front_position": package["front_position"].detach().clone(),
+                "front_normal": package["front_normal"].detach().clone(),
+                "frozen_camera_direction": package["frozen_camera_direction"].detach().clone(),
+                "D_direct": package["diffuse_contribution"].detach().clone(),
+                "R_contribution": package["reflection_contribution"].detach().clone(),
+                "Cout_contribution": package["cout_contribution"].detach().clone(),
+            } if "front_position" in package else {}),
         },
         "losses": {
             name: payload[name].detach().reshape(1).clone()
@@ -983,8 +1195,10 @@ def _run_cache_parity(
         "rows": rows, "failures": failures,
         "anti_veil_gradient_probe": gradient_probe,
         "status": "PASS" if not failures else (
+            "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
+            if opt.stage_d_ownership_pilot else (
             "SEMANTIC_REPAIR_PILOT_BLOCKED"
-            if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED"
+            if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")
         ),
     }
     _atomic_json(Path(target), report)
@@ -1078,6 +1292,7 @@ def training_stage_d(
             bbox_min, bbox_max, dataset.transmittance_init_count,
             dataset.transmittance_init_seed,
             transmittance_cuboid_space=semantic_cuboid,
+            transmittance_init_mode=dataset.transmittance_init_mode,
             map_location="cuda",
         )
         restored_rng_state = capture_rng_state()
@@ -1121,6 +1336,10 @@ def training_stage_d(
         dataset, opt, release, source, fresh_from_stage_b,
         saving_iterations, checkpoint_iterations,
     )
+    _validate_ownership_contract(
+        dataset, opt, release, source, fresh_from_stage_b,
+        saving_iterations, checkpoint_iterations,
+    )
     if opt.stage_d_formal_onset:
         metadata = {
             "schema": "rtgs_stage_d_formal_onset_run_v2",
@@ -1137,6 +1356,30 @@ def training_stage_d(
         Path(scene.model_path, "formal_run_metadata.json").write_text(
             json.dumps(metadata, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
         )
+    elif opt.stage_d_ownership_pilot:
+        metadata = {
+            "schema": "rtgs_stage_d_cuboid_path_ownership_arm_v4",
+            "source": source, "config": config,
+            "arm": opt.stage_d_ownership_arm,
+            "actual_transmittance_initialization": dict(transmittance.initialization),
+            "required_nodes_global": list(OWNERSHIP_NODES),
+            "required_nodes_local": [0, 100, 250, 500],
+            "review_stems": list(CACHED_STEMS),
+            "pilot_global": [15001, OWNERSHIP_ENDPOINT],
+            "mode": "cuboid_front_frozen_dr_ownership_isolation",
+            "diffuse_optimizer_updates": 0, "reflection_optimizer_updates": 0,
+            "transmittance_optimizer_updates": 500,
+            "t_topology_updates_allowed": False, "expected_t_count": 4096,
+            "cuboid_space": semantic_cuboid.metadata(),
+            "transparent_path_mode": dataset.transparent_path_mode,
+            "transparent_direct_mode": dataset.transparent_direct_mode,
+            "transparent_reflection_mode": dataset.transparent_reflection_mode,
+            "cout_ownership_mode": dataset.cout_ownership_mode,
+            "future_depth_activation_global": 40000,
+            "depth_enabled_during_run": False,
+            "bird_roi_status": "OPERATOR_EVALUATION_ONLY",
+        }
+        _atomic_json(Path(scene.model_path, "ownership_arm_metadata.json"), metadata)
     elif opt.stage_d_semantic_repair_pilot:
         metadata = {
             "schema": "rtgs_stage_d_semantic_repair_pilot_v3",
@@ -1193,6 +1436,12 @@ def training_stage_d(
         ray_checkpoint_chunks=True,
         cuboid_space=semantic_cuboid,
         semantic_repair=bool(opt.stage_d_semantic_repair_pilot),
+        transparent_path_mode=dataset.transparent_path_mode,
+        transparent_direct_mode=dataset.transparent_direct_mode,
+        transparent_reflection_mode=dataset.transparent_reflection_mode,
+        cout_ownership_mode=dataset.cout_ownership_mode,
+        support_sigma=3.0,
+        transfer_depth_margin=opt.transfer_depth_margin,
     )
     background = torch.tensor(
         [1.0, 1.0, 1.0] if dataset.white_background else [0.0, 0.0, 0.0],
@@ -1222,53 +1471,103 @@ def training_stage_d(
         cache_identity = make_identity(
             source["sha256"], release.validation["aggregate_sha256"],
             mask_manifest["manifest_file_sha256"], renderer_config,
+            cache_schema=(OWNERSHIP_CACHE_SCHEMA if opt.stage_d_ownership_pilot else None)
+            or "rtgs_stage_d_static_dr_cache_v1",
         )
-        static_cache = _build_static_dr_cache(
-            Path(scene.model_path) / "static_dr_cache", cameras, state, pipe,
-            background, cache_identity, camera_identities,
-            semantic_repair=opt.stage_d_semantic_repair_pilot,
+        cache_directory = (
+            Path(dataset.stage_d_static_cache_path)
+            if opt.stage_d_ownership_pilot else Path(scene.model_path) / "static_dr_cache"
         )
+        if opt.stage_d_ownership_pilot and opt.stage_d_reuse_static_cache:
+            static_cache = StaticDRCache(cache_directory, cache_identity, camera_identities)
+        else:
+            static_cache = _build_static_dr_cache(
+                cache_directory, cameras, state, pipe, background,
+                cache_identity, camera_identities,
+                semantic_repair=(
+                    opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
+                ),
+            )
+        if opt.stage_d_ownership_pilot and opt.stage_d_ownership_arm == "transferred_d_inside":
+            selected, selection_metadata = _select_transferred_d_candidates(
+                static_cache, diffuse, semantic_cuboid, opt, count=4096,
+            )
+            transmittance.create_transferred_from_diffuse(
+                diffuse, selected, semantic_cuboid, 4096,
+                dataset.transmittance_init_seed,
+                opacity_scale=opt.transfer_opacity_scale,
+                opacity_min=opt.transfer_opacity_min,
+                opacity_max=opt.transfer_opacity_max,
+                selection_metadata=selection_metadata,
+            )
+            transmittance.initialization["branch"] = "transmittance"
+            transmittance.training_setup(opt)
+            state.mark_transmittance_updated()
+            metadata["actual_transmittance_initialization"] = dict(
+                transmittance.initialization
+            )
         config["cached_t_warmup"].update({
             "cache_identity_sha256": cache_identity["identity_sha256"],
             "cache_aggregate_sha256": static_cache.aggregate_sha256,
             "mask_manifest_sha256": mask_manifest["manifest_file_sha256"],
             "renderer_config_sha256": cache_identity["renderer_config_sha256"],
             "phase_a_frozen_hash_before": frozen_hash_before,
+            "cache_path": str(cache_directory.resolve()),
+            "cache_reused": bool(opt.stage_d_ownership_pilot and opt.stage_d_reuse_static_cache),
         })
         _run_cache_parity(
             Path(scene.model_path) / "cache_parity_report.json", cameras,
             static_cache, state, pipe, background, opt, perceptual,
             diffuse, reflection, transmittance,
         )
-        benchmark_camera = next(
-            camera for camera in cameras
-            if Path(str(camera.image_name)).stem == "000018"
-        )
-        _run_cache_performance_benchmark(
-            Path(scene.model_path) / "cache_performance_benchmark.json",
-            benchmark_camera, static_cache, state, pipe, background, opt,
-            perceptual, diffuse, reflection, transmittance,
-        )
+        if not opt.stage_d_ownership_pilot:
+            benchmark_camera = next(
+                camera for camera in cameras
+                if Path(str(camera.image_name)).stem == "000018"
+            )
+            _run_cache_performance_benchmark(
+                Path(scene.model_path) / "cache_performance_benchmark.json",
+                benchmark_camera, static_cache, state, pipe, background, opt,
+                perceptual, diffuse, reflection, transmittance,
+            )
         frozen_hash_after_preflight = {
             "diffuse": frozen_branch_hash(diffuse),
             "reflection": frozen_branch_hash(reflection),
         }
         if frozen_hash_after_preflight != frozen_hash_before:
             verdict = (
+                "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
+                if opt.stage_d_ownership_pilot else (
                 "SEMANTIC_REPAIR_PILOT_BLOCKED"
-                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED"
+                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")
             )
             raise RuntimeError(f"{verdict}: D/R changed during cache preflight")
         metadata["cache_identity"] = cache_identity
         metadata["cache_aggregate_sha256"] = static_cache.aggregate_sha256
         metadata["phase_a_frozen_hash_before"] = frozen_hash_before
         metadata_name = (
+            "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot else (
             "semantic_repair_run_metadata.json"
-            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json"
+            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json")
         )
         _atomic_json(Path(scene.model_path, metadata_name), metadata)
         restore_rng_state(restored_rng_state)
     viewpoints, camera_indices = restore_camera_deck(cameras, runtime_state)
+    if opt.stage_d_ownership_pilot:
+        initial_checkpoint = make_stage_d_checkpoint(
+            diffuse, reflection, transmittance, 15000,
+            reflection_iteration, 0, source, config,
+            release.manifest["geometry_release_id"],
+            release.validation["aggregate_sha256"],
+            make_camera_runtime_state(camera_indices, len(cameras)),
+        )
+        torch.save(initial_checkpoint, os.path.join(scene.model_path, "chkpnt15000.pth"))
+        del initial_checkpoint
+        scene.save(15000)
+        _render_formal_review_node(
+            scene, state, pipe, background, release, 15000,
+            stems=CACHED_STEMS, static_cache=static_cache,
+        )
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage D training progress")
     telemetry_path = Path(
         opt.stage_d_telemetry_jsonl
@@ -1279,10 +1578,16 @@ def training_stage_d(
     last_record = None
     for iteration in range(global_iteration + 1, opt.iterations + 1):
         phase = (
-            _phase_for_iteration(iteration, opt.stage_d_semantic_repair_pilot)
+            _phase_for_iteration(
+                iteration, opt.stage_d_semantic_repair_pilot,
+                opt.stage_d_ownership_pilot,
+            )
             if _cached_mode(opt) else "exact_joint"
         )
-        phase_a = phase in ("cached_t_warmup", "semantic_repair_cached_t_only")
+        phase_a = phase in (
+            "cached_t_warmup", "semantic_repair_cached_t_only",
+            "cuboid_path_ownership_t_only",
+        )
         if opt.stage_d_cached_twarmup and iteration == CACHED_PHASE_A_END + 1:
             _set_branch_trainable(diffuse, True)
             _set_branch_trainable(reflection, True)
@@ -1363,10 +1668,10 @@ def training_stage_d(
                         transmittance_iteration >= opt.transmittance_prune_unhit_after
                     ),
                 )
-            if opt.stage_d_semantic_repair_pilot:
+            if opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot:
                 if int(transmittance.get_xyz.shape[0]) != 4096:
                     raise RuntimeError(
-                        "SEMANTIC_REPAIR_PILOT_BLOCKED: T count changed from 4096"
+                        "Stage D fixed-topology pilot: T count changed from 4096"
                     )
                 transmittance.assert_strictly_inside()
             if opt.stage_d_cached_twarmup and iteration == CACHED_PHASE_A_END:
@@ -1384,19 +1689,26 @@ def training_stage_d(
                 _atomic_json(
                     Path(scene.model_path, "cached_twarmup_run_metadata.json"), metadata
                 )
-            if opt.stage_d_semantic_repair_pilot and iteration == SEMANTIC_ENDPOINT:
+            if (
+                (opt.stage_d_semantic_repair_pilot and iteration == SEMANTIC_ENDPOINT)
+                or (opt.stage_d_ownership_pilot and iteration == OWNERSHIP_ENDPOINT)
+            ):
                 frozen_hash_after = {
                     "diffuse": frozen_branch_hash(diffuse),
                     "reflection": frozen_branch_hash(reflection),
                 }
                 if frozen_hash_after != frozen_hash_before:
                     raise RuntimeError(
-                        "SEMANTIC_REPAIR_PILOT_BLOCKED: D/R frozen state changed"
+                        "Stage D frozen-D/R pilot: D/R frozen state changed"
                     )
                 config["cached_t_warmup"]["phase_a_frozen_hash_after"] = frozen_hash_after
                 metadata["phase_a_frozen_hash_after"] = frozen_hash_after
                 _atomic_json(
-                    Path(scene.model_path, "semantic_repair_run_metadata.json"), metadata
+                    Path(
+                        scene.model_path,
+                        "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot
+                        else "semantic_repair_run_metadata.json",
+                    ), metadata
                 )
             finite_counts = _finite_models({
                 "diffuse": diffuse, "reflection": reflection,
@@ -1408,13 +1720,15 @@ def training_stage_d(
             wall_ms = float((time.perf_counter() - wall_start) * 1000.0)
             last_record = {
                 "schema": (
+                    "rtgs_stage_d_cuboid_path_ownership_telemetry_v4"
+                    if opt.stage_d_ownership_pilot else (
                     "rtgs_stage_d_semantic_repair_telemetry_v3"
                     if opt.stage_d_semantic_repair_pilot else (
                         "rtgs_stage_d_cached_twarmup_telemetry_v1"
                     if opt.stage_d_cached_twarmup else (
                         "rtgs_stage_d_formal_telemetry_v2" if opt.stage_d_formal_onset
                         else "rtgs_stage_d_smoke_telemetry_v1"
-                    ))
+                    )))
                 ),
                 "global_iteration": int(iteration),
                 "training_phase": phase,
@@ -1473,7 +1787,7 @@ def training_stage_d(
                 "finite_model_elements": finite_counts,
                 "nonfinite_count": 0,
             }
-            if opt.stage_d_semantic_repair_pilot:
+            if opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot:
                 last_record["semantic_metrics"] = _semantic_step_metrics(
                     package, gt, camera.specular_mask
                 )
@@ -1504,6 +1818,12 @@ def training_stage_d(
                 )
                 last_record["formal_review_node"] = True
             elif opt.stage_d_semantic_repair_pilot and iteration in SEMANTIC_NODES:
+                _render_formal_review_node(
+                    scene, state, pipe, background, release, iteration,
+                    stems=CACHED_STEMS, static_cache=static_cache,
+                )
+                last_record["formal_review_node"] = True
+            elif opt.stage_d_ownership_pilot and iteration in OWNERSHIP_NODES:
                 _render_formal_review_node(
                     scene, state, pipe, background, release, iteration,
                     stems=CACHED_STEMS, static_cache=static_cache,
@@ -1557,13 +1877,15 @@ def training_stage_d(
     final_release_validation = validate_geometry_release(dataset.geometry_release_manifest)
     summary = {
         "status": (
+            "STAGE_D_CUBOID_PATH_OWNERSHIP_ARM_COMPLETED"
+            if opt.stage_d_ownership_pilot else (
             "STAGE_D_SEMANTIC_REPAIR_PILOT_COMPLETED"
             if opt.stage_d_semantic_repair_pilot else (
                 "STAGE_D_CACHED_TWARMUP_AND_JOINT_COMPLETED"
             if opt.stage_d_cached_twarmup else (
                 "STAGE_D_FORMAL_ONSET_COMPLETED" if opt.stage_d_formal_onset
                 else "STAGE_D_SMOKE_COMPLETED"
-            ))
+            )))
         ),
         "start_checkpoint": str(Path(start_checkpoint).resolve()),
         "final_checkpoint": str(Path(scene.model_path) / f"chkpnt{opt.iterations}.pth"),
@@ -1574,7 +1896,10 @@ def training_stage_d(
             diffuse._xyz.data_ptr(), reflection._xyz.data_ptr(), transmittance._xyz.data_ptr()
         }) == 3,
         "composition": "Ct = Cin + (1 - Ain) * Cout",
-        "first_bounce": "T from D position + epsilon*d_cam",
+        "first_bounce": (
+            "T from frozen cuboid front position + epsilon*frozen_camera_direction"
+            if opt.stage_d_ownership_pilot else "T from D position + epsilon*d_cam"
+        ),
         "second_bounce": "D from frozen back_position + epsilon*d_cam",
         "phase_a_frozen_hash_before": frozen_hash_before,
         "phase_a_frozen_hash_after": frozen_hash_after,
@@ -1585,14 +1910,17 @@ def training_stage_d(
         "semantic_repair_t_topology_updates": (
             0 if opt.stage_d_semantic_repair_pilot else None
         ),
+        "ownership_arm": opt.stage_d_ownership_arm if opt.stage_d_ownership_pilot else None,
+        "ownership_t_topology_updates": 0 if opt.stage_d_ownership_pilot else None,
     }
     summary_name = (
+        "stage_d_ownership_arm_summary.json" if opt.stage_d_ownership_pilot else (
         "stage_d_semantic_repair_summary.json"
         if opt.stage_d_semantic_repair_pilot else (
         "stage_d_cached_twarmup_summary.json" if opt.stage_d_cached_twarmup else (
             "stage_d_formal_summary.json" if opt.stage_d_formal_onset
             else "stage_d_smoke_summary.json"
-        ))
+        )))
     )
     with open(os.path.join(scene.model_path, summary_name), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True, allow_nan=False)

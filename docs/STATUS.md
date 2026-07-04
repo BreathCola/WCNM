@@ -686,32 +686,43 @@ non-smoke training path, so reserved-memory headroom must remain a gating item
 for any later pilot or long run. Stage B acceptance cannot advance before that
 evidence is judged sufficient by the user.
 
-## Stage D semantic-repair v3 implementation ready (not executed)
+## Stage D cuboid-front ownership v4 implementation ready (not executed)
 
-- The completed cached warm-up v2 remains immutable and is never a resume
-  source. A new CPU-only/read-only causal audit exists at
-  `output/stage_d_tihubird_c03r8_semantic_repair_v3_audit/`. It supports the
-  black-veil and pruning chronology: final Ain saturation coverage is 0.9517,
-  high-Ain/near-black conditional-color fraction is 0.9001, and T drops from
-  4,096 to 540 across 48 count-changing events beginning at global 15,200.
-- V2 lacks class-filtered R and Cout traces, so their cuboid-class source
-  energies cannot be reconstructed. There is no independent versioned bird
-  ROI; bird-level quantitative proof is unavailable.
-- Semantic-repair v3 now provides one shared immutable-release cuboid space,
-  outside-only transparent-mask formal R and Cout paths, full class-decomposed
-  diagnostics, a strict differentiable inside-safe T parameterization, fixed
-  4,096 T topology, and the documented anti-veil engineering prior.
-- The prepared operator is fresh-only from the Stage-B global-15,000 checkpoint
-  SHA-256 `050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`
-  and geometry aggregate
+- The user-executed v3 is preserved as `SEMANTIC_REPAIR_PILOT_BLOCKED`. It
+  completed all 1,000 updates with D/R frozen and T fixed at 4,096, but final
+  transparent Ain saturation was 0.8744 and the high-Ain/near-black fraction
+  was 0.9723. Center-space outside filtering plus anti-veil did not repair the
+  D-derived first-bounce path or branch ownership. Neither v2 nor v3 is a
+  permitted resume/cache source.
+- V4 implements `cuboid_front_v1`: transparent valid R/T paths derive front
+  position, entering-face normal, direction, reflection direction, Fresnel
+  normal, T origin, and absolute Din baseline from the immutable Stage-C
+  release. Missing or inconsistent frozen geometry fails closed. Nontransparent
+  D/R rendering remains on the legacy path.
+- D/R/T share a finite 3-sigma support partition. Pilot T is support-safe
+  strict-inside, fixed at 4,096 with no densification/pruning; Cout accepts only
+  strict-outside-safe D support; transparent D direct and R contributions are
+  zero. Per-class surfel/candidate/hit/energy and path-consistency diagnostics
+  are retained. These versioned gates are permanent renderer configuration,
+  while the pilot's D/R-off choice is only an isolation diagnostic.
+- The matched A/B operator compares random strict-inside T with a copy-only,
+  evidence-filtered D-inside transfer whose opacity is reduced and capped.
+  All source, release, path, ownership, camera, loss, schedule, count, and seed
+  settings match. The transfer is an ablation hypothesis, not semantic ground
+  truth.
+- The operator is fresh-only from source SHA-256
+  `050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84`
+  and Stage-C aggregate
   `4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d`.
-  It is bounded to global 15,001--16,000 with D/R fully frozen and cached T-only
-  updates. L_depth remains disabled with future activation at global 40,000.
-- No v3 cache build, benchmark, render, GPU training, or formal pilot output has
-  been launched by Codex. The user must run the committed single operator.
-- Even a technically healthy pilot is automatically held for nine-view
-  semantic review because no independent bird ROI exists. Falling RGB loss is
-  not evidence of D/R/T semantic separation.
+  It builds an incompatible v4 cache, runs parity and two sequential 500-step
+  arms, then a CPU audit at global nodes 15,000/15,100/15,250/15,500. L_depth
+  remains disabled with its future marker at global 40,000.
+- No v4 real-scene cache, benchmark, render, GPU training, or formal output has
+  been launched or created by Codex. No independent versioned bird ROI was
+  found by the read-only repository search, so a technically healthy execution
+  must remain HOLD unless the operator finds a valid human-authored asset.
+- V4 cannot authorize joint fine-tuning or Stage E. Even PASS would establish
+  only T handoff conditions under cuboid-front/strong ownership isolation.
 
 ## Three-step formal-mask L_spec smoke
 

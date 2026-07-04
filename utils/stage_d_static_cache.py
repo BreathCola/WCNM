@@ -14,11 +14,20 @@ from geometry.geometry_release import sha256_file
 
 CACHE_SCHEMA = "rtgs_stage_d_static_dr_cache_v1"
 MANIFEST_SCHEMA = "rtgs_stage_d_static_dr_cache_manifest_v1"
+OWNERSHIP_CACHE_SCHEMA = "rtgs_stage_d_cuboid_front_cache_v4"
+OWNERSHIP_MANIFEST_SCHEMA = "rtgs_stage_d_cuboid_front_cache_manifest_v4"
 FORBIDDEN_CACHE_KEYS = {"gt", "ground_truth", "target", "target_rgb", "original_image"}
 TRAINING_PACKAGE_KEYS = {
     "alpha", "position", "normal", "surface_ks", "microfacet_F",
     "diffuse_contribution", "reflection_contribution",
     "semantic_r_stats", "semantic_r_filter_stats", "semantic_r_transparent_ray_count",
+    "front_position", "front_normal", "frozen_camera_direction",
+    "front_plane_residual", "front_face_index", "frozen_back_distance_residual",
+    "cuboid_front_valid",
+    "transparent_path_valid", "near_depth", "far_depth", "two_hit_valid",
+    "transparent_mask_hard",
+    "diffuse_unfiltered", "reflection_unfiltered",
+    "transparent_path_mode", "transparent_direct_mode", "transparent_reflection_mode",
 }
 
 
@@ -67,8 +76,13 @@ def frozen_branch_hash(model) -> str:
 
 
 def renderer_contract(dataset) -> dict:
+    ownership = bool(getattr(dataset, "transparent_path_mode", "legacy_d_gbuffer") == "cuboid_front_v1")
+    semantic = bool(getattr(dataset, "_semantic_cuboid_space_metadata", None))
     return {
-        "schema": "rtgs_stage_d_renderer_contract_v1",
+        "schema": (
+            "rtgs_stage_d_cuboid_front_renderer_contract_v4"
+            if ownership else "rtgs_stage_d_renderer_contract_v1"
+        ),
         "resolution": int(dataset.resolution),
         "ray_chunk_size": int(dataset.ray_chunk_size),
         "ray_cutoff_sigma": float(dataset.ray_cutoff_sigma),
@@ -85,20 +99,32 @@ def renderer_contract(dataset) -> dict:
         "alpha_over": "Ct=Cin+(1-Ain)*Cout;At=Ain+(1-Ain)*Aout",
         "final_composition": "D_contribution+R_contribution+T_contribution+background",
         "bsdf_weight_mode": "brdf_times_cosine",
-        "semantic_repair": bool(getattr(dataset, "_semantic_cuboid_space_metadata", None)),
+        "semantic_repair": semantic,
         "cuboid_space": getattr(dataset, "_semantic_cuboid_space_metadata", None),
         "r_transparent_spatial_filter": (
-            "outside_only" if getattr(dataset, "_semantic_cuboid_space_metadata", None) else None
+            getattr(dataset, "transparent_reflection_mode", "support_safe_outside")
+            if ownership else ("outside_only" if semantic else None)
         ),
         "cout_spatial_filter": (
-            "outside_only" if getattr(dataset, "_semantic_cuboid_space_metadata", None) else None
+            getattr(dataset, "cout_ownership_mode", "support_safe_outside")
+            if ownership else ("outside_only" if semantic else None)
+        ),
+        "transparent_path_mode": getattr(dataset, "transparent_path_mode", "legacy_d_gbuffer"),
+        "transparent_direct_mode": getattr(dataset, "transparent_direct_mode", "legacy"),
+        "transparent_reflection_mode": getattr(dataset, "transparent_reflection_mode", "legacy"),
+        "cout_ownership_mode": getattr(dataset, "cout_ownership_mode", "legacy"),
+        "support_classification": (
+            "cuboid_local_finite_3sigma_v1" if ownership else None
         ),
     }
 
 
-def make_identity(source_sha256, release_sha256, mask_manifest_sha256, renderer_config):
+def make_identity(
+    source_sha256, release_sha256, mask_manifest_sha256, renderer_config,
+    cache_schema=CACHE_SCHEMA,
+):
     identity = {
-        "cache_schema_version": CACHE_SCHEMA,
+        "cache_schema_version": str(cache_schema),
         "source_checkpoint_sha256": str(source_sha256),
         "geometry_release_aggregate_sha256": str(release_sha256),
         "mask_manifest_sha256": str(mask_manifest_sha256),
@@ -134,7 +160,7 @@ def cpu_cache_payload(static_inputs: dict, identity: dict, stem: str, camera_ide
         return value
 
     return {
-        "schema": CACHE_SCHEMA,
+        "schema": identity["cache_schema_version"],
         "identity_sha256": identity["identity_sha256"],
         "camera_stem": str(stem),
         "camera_identity_sha256": str(camera_identity),
@@ -146,7 +172,11 @@ def cpu_cache_payload(static_inputs: dict, identity: dict, stem: str, camera_ide
 def write_manifest(directory: Path, identity: dict, entries: list[dict]) -> Path:
     directory = Path(directory)
     manifest = {
-        "schema": MANIFEST_SCHEMA,
+        "schema": (
+            OWNERSHIP_MANIFEST_SCHEMA
+            if identity.get("cache_schema_version") == OWNERSHIP_CACHE_SCHEMA
+            else MANIFEST_SCHEMA
+        ),
         "identity": identity,
         "entries": sorted(entries, key=lambda row: row["camera_stem"]),
     }
@@ -170,7 +200,12 @@ class StaticDRCache:
         self.camera_identities = dict(camera_identities)
         path = self.directory / "manifest.json"
         self.manifest = json.loads(path.read_text(encoding="utf-8"))
-        if self.manifest.get("schema") != MANIFEST_SCHEMA:
+        expected_manifest_schema = (
+            OWNERSHIP_MANIFEST_SCHEMA
+            if self.expected_identity.get("cache_schema_version") == OWNERSHIP_CACHE_SCHEMA
+            else MANIFEST_SCHEMA
+        )
+        if self.manifest.get("schema") != expected_manifest_schema:
             raise ValueError("unsupported static D/R cache manifest schema")
         if self.manifest.get("identity") != self.expected_identity:
             raise ValueError("static D/R cache identity mismatch")
@@ -211,7 +246,7 @@ class StaticDRCache:
             raise ValueError(f"static D/R cache mutated after validation: {stem}")
         payload = torch.load(path, map_location="cpu")
         if (
-            payload.get("schema") != CACHE_SCHEMA
+            payload.get("schema") != self.expected_identity["cache_schema_version"]
             or payload.get("identity_sha256") != self.expected_identity["identity_sha256"]
             or payload.get("camera_stem") != stem
             or payload.get("camera_identity_sha256") != self.camera_identities[stem]
@@ -223,6 +258,7 @@ class StaticDRCache:
         if training_only:
             static_inputs = dict(static_inputs)
             static_inputs.pop("semantic_cout_components", None)
+            static_inputs.pop("transfer_evidence", None)
             package = static_inputs.get("package", {})
             static_inputs["package"] = {
                 key: value for key, value in package.items()
