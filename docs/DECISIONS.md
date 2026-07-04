@@ -3106,3 +3106,48 @@ derivative; raw log-scale remains within `2e-6`, is projected after every step,
 and remains the only scale optimizer parameter. This makes migration forward
 values exact without freezing scale gradients or changing non-scale state. The
 fresh retry uses the v2 output names above.
+
+## D-014 — Unify Transmittance LBVH and exact-intersection scale semantics
+
+Question: Why did the exact-active v2 migration still fail fixed-view parity
+when both active scale and decoded T world position compared bit-for-bit equal?
+
+Observed evidence: The preserved v2 preflight stopped before global 16,001.
+Its migration report has zero maximum and mean difference for active scale and
+world position, unchanged D/R hashes, and isolated scaling-Adam surgery, but
+final RGB still differs by mean/max `0.00942879/0.70809591`. Code inspection
+shows two raytracer scale consumers with incompatible semantics: LBVH support
+AABBs use `model.get_scaling`, while the fused exact-intersection candidate
+table hard-coded `model._scaling` and decoded it with `exp`. Legacy T therefore
+used cuboid-capped active scale for candidate bounds but escaped raw scale for
+the actual Gaussian radius and opacity. Projection changed that hidden raw
+consumer even though the declared forward geometry was identical.
+
+Chosen implementation: Preserve the 13-channel fused CUDA gather/reduce and
+its decoder. Add a model-level decoder-form scale contract. Reflection returns
+its unchanged stored raw log-scale. Support-safe Transmittance returns
+`log(get_scaling)`, so candidate decoding reconstructs the same active scale
+used by LBVH AABBs, decoded T position, telemetry, and legality checks. The
+projected exact-active buffer and straight-through bounded derivative remain;
+raw projection and affected scaling-Adam row reset remain unchanged. A CUDA
+regression uses an off-axis ray whose opacity depends on scale and requires
+candidate-decoded T scale/position plus pre/post migration raytrace outputs to
+match.
+
+Alternatives: Treat v2 as proof that global 16,000 is unmigratable; enlarge
+parity tolerances; preserve the accidental raw-scale exact intersection; or
+replace the fused gather with a T-only slow path. The first three accept a
+contradictory forward contract, and the last needlessly changes the production
+gradient-reduction architecture.
+
+Paper fidelity: This removes an implementation inconsistency. It adds no loss
+and changes no cuboid-front path, ownership gate, composition, topology, depth
+schedule, or D/R formula. R candidate packing remains exactly as before.
+
+Impact: V1 and v2 preflight directories remain immutable blocked evidence. A
+fresh real retry uses
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v3`;
+its possible user-launched continuation is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v3`.
+The same zero-update parity gate and all 50-step recovery guards remain
+fail-closed.

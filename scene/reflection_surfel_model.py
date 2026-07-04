@@ -60,6 +60,16 @@ class ReflectionSurfelModel:
         return torch.exp(self._scaling)
 
     @property
+    def raytrace_scaling_raw(self):
+        """Raw-form scale consumed by the shared candidate decoder.
+
+        R stores exactly the log scale expected by the decoder.  Models with a
+        bounded forward scale may override this without changing the fused
+        gather/reduce layout.
+        """
+        return self._scaling
+
+    @property
     def scaling_2d(self):
         return self.get_scaling
 

@@ -66,13 +66,13 @@ def profile_contract(profile):
             "endpoint": TSCALE_RECOVERY_PREFLIGHT_ENDPOINT,
             "nodes": TSCALE_RECOVERY_PREFLIGHT_NODES,
             "flag": "--stage_d_tscale_recovery_preflight",
-            "experiment": "TiHuBird C03-r8 Stage D T-scale recovery preflight50 v2",
+            "experiment": "TiHuBird C03-r8 Stage D T-scale recovery preflight50 v3",
         }
     return {
         "source": PREFLIGHT_OUTPUT / "chkpnt16050.pth", "output": LONG_OUTPUT,
         "endpoint": TSCALE_RECOVERY_LONG_ENDPOINT, "nodes": TSCALE_RECOVERY_LONG_NODES,
         "flag": "--stage_d_tscale_recovery_long",
-        "experiment": "TiHuBird C03-r8 Stage D projected T-scale recovery long v2",
+        "experiment": "TiHuBird C03-r8 Stage D projected T-scale recovery long v3",
     }
 
 
@@ -224,7 +224,7 @@ def main():
     environment.update({
         "CUDA_VISIBLE_DEVICES": "0", "PYTHONHASHSEED": "0",
         "PYTORCH_CUDA_ALLOC_CONF": "max_split_size_mb:128,garbage_collection_threshold:0.8",
-        "RTGS_BVH_JIT_ROOT": f"/tmp/rtgs-stage-d-tscale-{profile}-v2-jit",
+        "RTGS_BVH_JIT_ROOT": f"/tmp/rtgs-stage-d-tscale-{profile}-v3-jit",
     })
     log = output / "tscale_recovery.log"
     exit_code = 2

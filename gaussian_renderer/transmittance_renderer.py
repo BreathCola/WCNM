@@ -38,6 +38,8 @@ class DiffuseRaytraceAdapter:
     def get_rotation(self): return self.diffuse.get_rotation
     @property
     def get_scaling(self): return self.diffuse.get_scaling
+    @property
+    def raytrace_scaling_raw(self): return self.diffuse._scaling
 
 
 @dataclass

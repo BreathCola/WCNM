@@ -33,7 +33,13 @@ support candidate boundaries amplified that into final-RGB mean/max differences
 `0.00943/0.70810`. Its v1 preflight directory is preserved. The corrected v2
 stores the exact active scale as checkpointed non-optimizer state and uses a
 straight-through bounded derivative, while retaining projected raw log-scale
-and scale-only Adam surgery. The retry output is uniquely suffixed `_v2`.
+and scale-only Adam surgery. The v2 retry also stopped before any update:
+active scale and decoded world position were exactly equal, yet final RGB had
+the same large difference. The root cause was a split raytracer contract: LBVH
+bounds used `get_scaling`, while exact candidate intersection hard-coded
+`exp(_scaling)`. V3 makes T candidate intersection encode the actual active
+forward scale; R retains its original path. Both blocked attempts remain
+preserved, and the fresh retry is uniquely suffixed `_v3`.
 
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both

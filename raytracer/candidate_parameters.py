@@ -11,12 +11,12 @@ PARAMETER_CHANNELS = 13
 
 
 def pack_reflection_parameters(model) -> torch.Tensor:
-    """Pack raw R parameters once without changing their parameterization."""
+    """Pack decoder-form parameters using each field's forward-scale contract."""
     return torch.cat(
         (
             model.get_xyz,
             model._rotation,
-            model._scaling,
+            model.raytrace_scaling_raw,
             model._opacity,
             model._color,
         ),

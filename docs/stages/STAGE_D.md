@@ -351,4 +351,9 @@ gate: tiny log/exp geometry round-off changed finite-support candidates and was
 not acceptable as a lossless migration. V1 is preserved BLOCKED evidence. The
 v2 retry checkpoints the exact active scale as non-optimizer state with a
 straight-through bounded derivative, retains raw log-scale projection and
-scale-only Adam surgery, and uses unique v2 preflight/continuation outputs.
+scale-only Adam surgery. The real v2 zero-update retry proved active geometry
+was exactly equal but rendering still changed because LBVH AABBs consumed
+active scale while exact candidate intersection decoded raw `_scaling`. V2 is
+preserved BLOCKED evidence. V3 makes T candidate intersection consume the same
+active scale used by its AABB and forward contract; R remains unchanged. The
+fresh v3 output is required before any continuation.

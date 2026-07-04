@@ -5,6 +5,9 @@ import torch
 
 from geometry.cuboid_space import CuboidSpace, SUPPORT_STRICT_INSIDE
 from raytracer.acceleration_structure import CudaLBVH
+from raytracer.candidate_parameters import (
+    decode_candidate_parameters, pack_reflection_parameters,
+)
 from raytracer.tracer import raytrace
 from scene.transmittance_surfel_model import TransmittanceSurfelModel
 from stage_d_training import (
@@ -121,12 +124,22 @@ def test_cuda_raytrace_forward_is_invariant_across_scale_projection():
         model._xyz.zero_(); model._rotation[:] = torch.tensor([1., 0., 0., 0.], device=device)
         model._scaling[:] = torch.log(torch.tensor([[20., 10.]], device=device, dtype=dtype))
         model._opacity.zero_(); model._color[:] = torch.tensor([[0.2, -0.1, 0.3]], device=device)
-    origins = torch.tensor([[0., 0., -2.]], device=device, dtype=dtype)
+    # An off-axis ray makes opacity depend on scale.  The old candidate pack
+    # decoded exp(_scaling), so this case caught the raw/active split that a
+    # center ray (radius=0) could not observe.
+    origins = torch.tensor([[0.35, 0., -2.]], device=device, dtype=dtype)
     directions = torch.tensor([[0., 0., 1.]], device=device, dtype=dtype)
+    packed_before = decode_candidate_parameters(pack_reflection_parameters(model))
+    assert torch.equal(packed_before["scaling"], model.get_scaling)
+    assert torch.equal(packed_before["xyz"], model.get_xyz)
     before = raytrace(
         model, origins, directions, acceleration=CudaLBVH(), chunk_size=1
     )[:3]
     model.project_raw_scaling_to_active_(migrate_legacy=True)
+    packed_after = decode_candidate_parameters(pack_reflection_parameters(model))
+    assert torch.equal(packed_after["scaling"], model.get_scaling)
+    assert torch.equal(packed_before["scaling"], packed_after["scaling"])
+    assert torch.equal(packed_before["xyz"], packed_after["xyz"])
     after = raytrace(
         model, origins, directions, acceleration=CudaLBVH(), chunk_size=1
     )[:3]

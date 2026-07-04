@@ -56,6 +56,15 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             return bounded
         return scaling
 
+    @property
+    def raytrace_scaling_raw(self):
+        """Encode the actual T forward scale for the shared raytrace decoder."""
+        if self.position_parameterization == "cuboid_inside_support_sigmoid_v2":
+            return torch.log(
+                self.get_scaling.clamp_min(torch.finfo(self._scaling.dtype).tiny)
+            )
+        return super().raytrace_scaling_raw
+
     def create_random_inside_cuboid(
         self, cuboid_space: CuboidSpace, count: int, seed: int,
     ) -> None:
