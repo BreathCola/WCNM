@@ -227,6 +227,49 @@ class CuboidSpace:
             raise ValueError("surfel support is too large for the strict cuboid interior")
         return lower, upper
 
+    def constrain_support_scaling(
+        self,
+        rotation: torch.Tensor,
+        scaling_2d: torch.Tensor,
+        sigma: float = 3.0,
+    ) -> torch.Tensor:
+        """Uniformly cap active tangent scales so a strict-inside center exists."""
+        from utils.surfel_utils import quaternion_to_rotation_matrix
+
+        rotation = torch.as_tensor(rotation)
+        scaling_2d = torch.as_tensor(
+            scaling_2d, device=rotation.device, dtype=rotation.dtype,
+        )
+        if rotation.shape[:-1] != scaling_2d.shape[:-1] \
+                or rotation.shape[-1] != 4 or scaling_2d.shape[-1] != 2:
+            raise ValueError("support scale-cap rotation/scaling shapes do not match")
+        if sigma <= 0 or not torch.isfinite(rotation).all() \
+                or not torch.isfinite(scaling_2d).all() \
+                or not torch.all(scaling_2d > 0):
+            raise ValueError("support scale-cap inputs must be finite and positive")
+        matrix = quaternion_to_rotation_matrix(rotation)
+        axes = self.axes.to(rotation)
+        local_u = matrix[..., :, 0] @ axes
+        local_v = matrix[..., :, 1] @ axes
+        radius = float(sigma) * (
+            local_u.abs() * scaling_2d[..., 0:1]
+            + local_v.abs() * scaling_2d[..., 1:2]
+        )
+        padding = float(self.interface_margin + 4.0 * self.epsilon)
+        capacity = (
+            (self.upper.to(rotation) - self.lower.to(rotation)) * 0.5
+            - padding - float(4.0 * self.epsilon)
+        )
+        if not torch.all(capacity > 0):
+            raise ValueError("cuboid has no capacity for strict-inside surfel support")
+        tiny = torch.finfo(scaling_2d.dtype).tiny
+        per_axis = torch.where(
+            radius > tiny, capacity / radius.clamp_min(tiny),
+            torch.full_like(radius, torch.inf),
+        )
+        factor = per_axis.amin(dim=-1, keepdim=True).clamp(max=1.0)
+        return scaling_2d * factor
+
     def decode_inside_support_latent(
         self,
         latent: torch.Tensor,

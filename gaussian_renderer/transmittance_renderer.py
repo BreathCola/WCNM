@@ -577,6 +577,18 @@ def render_from_static_dr(
             name: int((t_classes == index).sum())
             for index, name in enumerate(t_names)
         }
+        if state.transparent_path_mode == "cuboid_front_v1":
+            raw_scaling = torch.exp(state.transmittance._scaling.detach())
+            active_scaling = state.transmittance.get_scaling.detach()
+            scale_ratio = active_scaling / raw_scaling.clamp_min(1e-30)
+            capped = scale_ratio.amin(dim=-1).lt(1.0 - 1e-7)
+            package["t_support_scale_cap"] = {
+                "schema": "cuboid_support_uniform_cap_v1",
+                "capped_count": int(capped.sum()),
+                "minimum_factor": float(scale_ratio.min()),
+                "raw_scale_max": float(raw_scaling.max()),
+                "active_scale_max": float(active_scaling.max()),
+            }
         package["t_support_legal"] = t_map
     if state.transparent_path_mode == "cuboid_front_v1":
         hard_domain = package["transparent_mask_hard"] > 0.5

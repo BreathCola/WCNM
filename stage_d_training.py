@@ -234,7 +234,12 @@ def _config(dataset, opt, release, source):
                 "cout_ownership_mode": dataset.cout_ownership_mode,
                 "support_classification": "cuboid_local_finite_3sigma_v1",
                 "support_sigma": 3.0,
-                "t_topology": {"densification": False, "pruning": False, "required_count": 4096},
+                "t_topology": {
+                    "densification": False, "pruning": False,
+                    "required_count": 4096,
+                    "position_parameterization": "cuboid_inside_support_sigmoid_v2",
+                    "scaling_parameterization": "cuboid_support_uniform_cap_v1",
+                },
                 "arm": opt.stage_d_ownership_arm,
                 "transfer_selection": {
                     "minimum_views": int(opt.transfer_min_views),
@@ -654,6 +659,7 @@ def _semantic_step_metrics(package, gt, transparent_mask):
         "spatial_frequency_energy": frequency,
         "transparent_rgb_l1": float(glass_error.mean()) if glass_error.numel() else 0.0,
         "t_spatial_counts": dict(package.get("t_spatial_counts", {})),
+        "t_support_scale_cap": dict(package.get("t_support_scale_cap", {})),
         "r_spatial": dict(package.get("semantic_r_stats", {})),
         "cout_spatial": dict(package.get("semantic_cout_stats", {})),
         "r_filter": dict(package.get("semantic_r_filter_stats", {})),

@@ -2915,3 +2915,52 @@ boundary are unchanged. Codex does not launch the retry.
 
 Required ablation: None; unit tests cover both ownership cuboid construction
 eligibility and the exact zero-step archival guard.
+
+## D-011 — Bound active T support scale and restart the matched v4 A/B
+
+Date: 2026-07-04
+
+Question: How should the ownership pilot preserve strict 3-sigma legality when
+the transferred arm's scale optimizer grows a surfel beyond cuboid capacity?
+
+Observed evidence: The user retry on commit `17d2663` built all 111 v4 caches,
+passed parity, and completed Arm A through global 15,500. Arm B passed parity
+and the 15,000/15,100 nodes, then stopped after telemetry global 15,114 when
+`support_safe_local_bounds` found no feasible center for the updated raw scale.
+The last saved 15,100 checkpoint has all 4,096 supports strict-inside and needs
+no cap; the failure appeared during later scale growth. Source and release
+hashes remain exact. Missing endpoint hashes/files and camera-deck mismatch in
+the final audit are consequences of the interrupted Arm B, not evidence that
+D/R actually changed.
+
+Chosen implementation: Keep `_scaling` as the copied/optimized raw log-scale,
+including exact D raw-scale transfer at initialization. For
+`cuboid_inside_support_sigmoid_v2`, derive active positive 2D scale by computing
+the local-axis 3-sigma radii for the current quaternion, comparing them with
+the cuboid half-extents after interface/epsilon padding, and applying one common
+factor in `(0,1]` to both tangent scales. Feasible values are exactly unchanged;
+only a would-be infeasible support is uniformly reduced, preserving anisotropy.
+An additional 4-epsilon capacity reserve keeps the center interval strictly
+positive. The operation is tensor-native and differentiable almost everywhere;
+raw optimizer state is neither projected nor rewritten.
+
+Checkpoint identity records `cuboid_support_uniform_cap_v1`. Telemetry/debug
+record capped count, minimum factor, and raw/active maximum scale. The CPU audit
+reconstructs active scale with the same rule before checking all 4,096 supports.
+This bound enforces representational legality; it does not assert semantic
+correctness or change D/R/Cout ownership.
+
+Alternatives: Allow T support to cross the cuboid; prune the large surfel;
+project raw scale after every update; resume the interrupted Arm B; or reuse
+Arm A from a different code commit. These violate the fixed-support, fresh-state,
+or matched-code contracts.
+
+Impact: The exact `17d2663` failure is preserved under suffix
+`_failed_scale_17d2663`. The canonical v4 directory is rebuilt from global
+15,000 and both arms rerun under one new commit; no cache, checkpoint, optimizer,
+or Arm-A result from the interrupted attempt is reused. All renderer, loss,
+schedule, A/B-variable, and verdict contracts remain unchanged.
+
+Required ablation: The already required matched A/B; synthetic tests additionally
+force extreme raw scale and verify finite strict-inside active support without
+changing copied feasible raw scales.

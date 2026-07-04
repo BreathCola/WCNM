@@ -137,6 +137,10 @@ def audit_arm(output, arm, cuboid, errors):
     for key, expected in required_modes.items():
         if config.get(key) != expected:
             errors.append(f"{arm} config {key} mismatch")
+    t_topology = config.get("ownership_handoff", {}).get("t_topology", {})
+    if t_topology.get("scaling_parameterization") \
+            != "cuboid_support_uniform_cap_v1":
+        errors.append(f"{arm} config T scale parameterization mismatch")
     before = metadata.get("phase_a_frozen_hash_before")
     after = metadata.get("phase_a_frozen_hash_after")
     if not before or before != after:
@@ -160,6 +164,8 @@ def audit_arm(output, arm, cuboid, errors):
             t = checkpoint["transmittance"]
             if t.get("position_parameterization") != "cuboid_inside_support_sigmoid_v2":
                 errors.append(f"{arm} checkpoint {node} T parameterization mismatch")
+            if t.get("scaling_parameterization") != "cuboid_support_uniform_cap_v1":
+                errors.append(f"{arm} checkpoint {node} T scale parameterization mismatch")
             initialization = t.get("initialization", {})
             if initialization.get("mode") != arm:
                 errors.append(f"{arm} checkpoint {node} initialization provenance mismatch")
@@ -178,7 +184,10 @@ def audit_arm(output, arm, cuboid, errors):
                 errors.append(f"{arm} checkpoint {node} T count {count}")
             if count:
                 rotation = torch.nn.functional.normalize(t["rotation"].double(), dim=-1)
-                scaling = torch.exp(t["scaling_2d"].double())
+                raw_scaling = torch.exp(t["scaling_2d"].double())
+                scaling = cuboid.constrain_support_scaling(
+                    rotation, raw_scaling, sigma=3.0,
+                )
                 world = cuboid.decode_inside_support_latent(
                     t["xyz"].double(), rotation, scaling, sigma=3.0,
                 )

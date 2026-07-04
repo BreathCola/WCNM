@@ -731,6 +731,15 @@ evidence is judged sufficient by the user.
   this exact zero-step failure under the `_failed_preflight_b697c25` suffix;
   all other existing-output cases remain fail-closed. No retry was launched by
   Codex.
+- The user retry on `17d2663` completed the 111-view v4 cache, parity, and all
+  500 Arm-A updates. Arm B reached global 15,114, then correctly stopped when
+  an optimized raw tangent scale became too large for any strict-inside 3-sigma
+  support center. V4 now keeps copied/optimized raw scale unchanged but applies
+  a rotation-aware uniform active-scale cap only at cuboid capacity, recording
+  cap telemetry and auditing the same decode rule. The next same-command retry
+  archives this attempt as `_failed_scale_17d2663` and rebuilds both arms from
+  global 15,000 under one commit; no partial result is resumed or reused. Codex
+  has not launched that retry.
 
 ## Three-step formal-mask L_spec smoke
 

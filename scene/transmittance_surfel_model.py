@@ -34,6 +34,17 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             return self.cuboid_space.decode_inside_latent(self._xyz)
         return self._xyz
 
+    @property
+    def get_scaling(self):
+        scaling = super().get_scaling
+        if self.position_parameterization == "cuboid_inside_support_sigmoid_v2":
+            if self.cuboid_space is None:
+                raise RuntimeError("support-safe cuboid T scaling is missing its space")
+            return self.cuboid_space.constrain_support_scaling(
+                self.get_rotation, scaling, sigma=3.0,
+            )
+        return scaling
+
     def create_random_inside_cuboid(
         self, cuboid_space: CuboidSpace, count: int, seed: int,
     ) -> None:
@@ -68,6 +79,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             "mode": "random_cuboid_inside_safe",
             "count": int(count), "seed": int(seed),
             "position_parameterization": self.position_parameterization,
+            "scaling_parameterization": "exp_v1",
             "cuboid_space": self.cuboid_space.metadata(),
             "initial_opacity": 0.01, "initial_color": 0.5,
             "initial_scale": float(scale.detach().cpu()),
@@ -112,6 +124,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         self.initialization = {
             "mode": "random_strict_inside", "count": int(count), "seed": int(seed),
             "position_parameterization": self.position_parameterization,
+            "scaling_parameterization": "cuboid_support_uniform_cap_v1",
             "support_sigma": 3.0, "cuboid_space": self.cuboid_space.metadata(),
             "initial_opacity": 0.01, "initial_color": 0.5,
             "initial_scale": float(scale.detach().cpu()),
@@ -189,6 +202,11 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
     def capture(self):
         state = super().capture()
         state["position_parameterization"] = self.position_parameterization
+        state["scaling_parameterization"] = (
+            "cuboid_support_uniform_cap_v1"
+            if self.position_parameterization == "cuboid_inside_support_sigmoid_v2"
+            else "exp_v1"
+        )
         state["cuboid_space"] = (
             self.cuboid_space.metadata() if self.cuboid_space is not None else None
         )
@@ -196,6 +214,12 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
 
     def restore(self, state, args) -> None:
         mode = state.get("position_parameterization", "world")
+        scaling_mode = state.get("scaling_parameterization", "exp_v1")
+        if mode == "cuboid_inside_support_sigmoid_v2" \
+                and scaling_mode != "cuboid_support_uniform_cap_v1":
+            raise ValueError(
+                "support-safe T checkpoint has incompatible scale parameterization"
+            )
         self.position_parameterization = mode
         metadata = state.get("cuboid_space")
         if mode in ("cuboid_inside_sigmoid_v1", "cuboid_inside_support_sigmoid_v2"):

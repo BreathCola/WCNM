@@ -33,6 +33,8 @@ LOGS = OUTPUT / "logs"
 ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
 RETRYABLE_PREFLIGHT_COMMIT = "b697c2507ffdd236fac6603ea7ff1d20ff530ac8"
 RETRYABLE_PREFLIGHT_ARCHIVE_SUFFIX = "_failed_preflight_b697c25"
+RETRYABLE_SCALE_COMMIT = "17d2663c1bae82407d8b12b3d29adf60b6ff771d"
+RETRYABLE_SCALE_ARCHIVE_SUFFIX = "_failed_scale_17d2663"
 
 
 def git(*args):
@@ -90,45 +92,79 @@ def independent_bird_roi():
     }
 
 
-def archive_retryable_preflight_failure(output):
-    """Preserve the known zero-step b697c25 failure before one canonical retry."""
+def retryable_ownership_archive_path(output):
+    """Validate an exact known failure and return its unused evidence archive path."""
     output = Path(output)
     if not output.exists():
         return None
     if not output.is_dir():
         raise FileExistsError(f"ownership output exists and is not a directory: {output}")
     record_path = output / "ownership_operator_record.json"
-    log_path = output / "logs/random_strict_inside.log"
     try:
         record = json.loads(record_path.read_text(encoding="utf-8"))
-        log = log_path.read_text(encoding="utf-8")
     except Exception as exc:
         raise FileExistsError(
             f"refusing to replace unrecognized ownership output: {output}: {exc}"
         ) from exc
-    arm = record.get("arms", {}).get("random_strict_inside", {})
-    exact_known_failure = (
+    arm_a = record.get("arms", {}).get("random_strict_inside", {})
+    arm_b = record.get("arms", {}).get("transferred_d_inside", {})
+    source_release_unchanged = (
+        record.get("source_sha256_before") == FORMAL_SOURCE_SHA256
+        and record.get("source_sha256_after") == FORMAL_SOURCE_SHA256
+        and record.get("release_aggregate_before") == FORMAL_RELEASE_SHA256
+        and record.get("release_aggregate_after") == FORMAL_RELEASE_SHA256
+    )
+    preflight_log = output / "logs/random_strict_inside.log"
+    exact_preflight_failure = (
         record.get("status") == "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
         and record.get("git_commit") == RETRYABLE_PREFLIGHT_COMMIT
         and record.get("operator_error")
         == "RuntimeError: ownership arm failed: random_strict_inside exit=1"
-        and arm.get("exit_code") == 1
-        and "support-safe T initialization requires cuboid space" in log
-        and record.get("source_sha256_before") == FORMAL_SOURCE_SHA256
-        and record.get("source_sha256_after") == FORMAL_SOURCE_SHA256
-        and record.get("release_aggregate_before") == FORMAL_RELEASE_SHA256
-        and record.get("release_aggregate_after") == FORMAL_RELEASE_SHA256
+        and arm_a.get("exit_code") == 1
+        and preflight_log.is_file()
+        and "support-safe T initialization requires cuboid space"
+        in preflight_log.read_text(encoding="utf-8")
+        and source_release_unchanged
         and not (output / "cuboid_front_cache_v4/manifest.json").exists()
         and not any(output.rglob("chkpnt*.pth"))
         and not any(output.rglob("stage_d_telemetry.jsonl"))
     )
-    if not exact_known_failure:
+    scale_log = output / "logs/transferred_d_inside.log"
+    exact_scale_failure = (
+        record.get("status") == "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
+        and record.get("git_commit") == RETRYABLE_SCALE_COMMIT
+        and record.get("operator_error")
+        == "RuntimeError: ownership arm failed: transferred_d_inside exit=1"
+        and arm_a.get("exit_code") == 0 and arm_b.get("exit_code") == 1
+        and scale_log.is_file()
+        and "surfel support is too large for the strict cuboid interior"
+        in scale_log.read_text(encoding="utf-8")
+        and source_release_unchanged
+        and (output / "cuboid_front_cache_v4/manifest.json").is_file()
+        and (output / "arm_a_random_strict_inside/chkpnt15500.pth").is_file()
+        and (output / "arm_a_random_strict_inside/stage_d_telemetry.jsonl").is_file()
+        and not (output / "arm_b_transferred_d_inside/chkpnt15500.pth").exists()
+    )
+    if exact_preflight_failure:
+        suffix = RETRYABLE_PREFLIGHT_ARCHIVE_SUFFIX
+    elif exact_scale_failure:
+        suffix = RETRYABLE_SCALE_ARCHIVE_SUFFIX
+    else:
         raise FileExistsError(
             f"refusing to overwrite non-retryable ownership output: {output}"
         )
-    archive = output.with_name(output.name + RETRYABLE_PREFLIGHT_ARCHIVE_SUFFIX)
+    archive = output.with_name(output.name + suffix)
     if archive.exists():
         raise FileExistsError(f"retry evidence archive already exists: {archive}")
+    return archive
+
+
+def archive_retryable_ownership_failure(output):
+    """Atomically preserve an exact known failure before a fresh matched retry."""
+    output = Path(output)
+    archive = retryable_ownership_archive_path(output)
+    if archive is None:
+        return None
     os.replace(output, archive)
     return archive
 
@@ -237,7 +273,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         raise SystemExit("refusing to run without --execute")
-    prior_failed_output = archive_retryable_preflight_failure(OUTPUT)
+    prior_failed_output = archive_retryable_ownership_failure(OUTPUT)
     OUTPUT.mkdir(parents=True); LOGS.mkdir()
     record = {
         "schema": "rtgs_stage_d_cuboid_path_ownership_operator_v4",

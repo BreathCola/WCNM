@@ -19,7 +19,8 @@ from raytracer.differentiable_raytrace import trace_candidates
 from scene.reflection_surfel_model import ReflectionSurfelModel
 from scene.transmittance_surfel_model import TransmittanceSurfelModel
 from tools.run_stage_d_ownership_ab import (
-    CACHE, RETRYABLE_PREFLIGHT_COMMIT, archive_retryable_preflight_failure,
+    CACHE, RETRYABLE_PREFLIGHT_COMMIT, RETRYABLE_SCALE_COMMIT,
+    archive_retryable_ownership_failure,
     common_training_contract, training_command,
 )
 from stage_d_training import _requires_cuboid_space
@@ -168,12 +169,15 @@ def test_support_safe_t_parameterization_survives_extreme_latents():
     model.create_random_support_safe_inside_cuboid(cuboid, count=128, seed=7)
     with torch.no_grad():
         model._xyz[0] = torch.tensor([1e6, -1e6, 1e6])
+        model._scaling[0] = torch.log(torch.tensor([10.0, 20.0]))
     model.assert_strictly_inside()
     classes = cuboid.classify_support(
         model.get_xyz, model.get_rotation, model.get_scaling, sigma=3.0,
     )
     assert torch.all(classes == SUPPORT_STRICT_INSIDE)
     assert model.capture()["position_parameterization"] == "cuboid_inside_support_sigmoid_v2"
+    assert model.capture()["scaling_parameterization"] == "cuboid_support_uniform_cap_v1"
+    assert torch.all(model.get_scaling[0] < torch.exp(model._scaling[0]))
 
 
 def test_transferred_initialization_copies_geometry_color_and_caps_opacity():
@@ -192,6 +196,8 @@ def test_transferred_initialization_copies_geometry_color_and_caps_opacity():
     )
     assert torch.allclose(model.get_xyz[:2], diffuse._xyz, atol=1e-5)
     assert torch.equal(model._color[:2], diffuse._base_color)
+    assert torch.equal(model._scaling[:2], diffuse._scaling)
+    assert torch.allclose(model.get_scaling[:2], torch.exp(diffuse._scaling))
     opacity = torch.sigmoid(model._opacity[:2])
     assert float(opacity.max()) <= 0.050001 and float(opacity.min()) >= 0.004999
     assert model.initialization["transferred_count"] == 2
@@ -246,12 +252,45 @@ def test_operator_archives_only_the_known_zero_step_preflight_failure(tmp_path):
         }),
         encoding="utf-8",
     )
-    archive = archive_retryable_preflight_failure(output)
+    archive = archive_retryable_ownership_failure(output)
     assert not output.exists()
     assert archive.is_dir()
     with pytest.raises(FileExistsError, match="not a directory"):
         output.write_text("occupied", encoding="utf-8")
-        archive_retryable_preflight_failure(output)
+        archive_retryable_ownership_failure(output)
+
+
+def test_operator_archives_known_scale_failure_but_never_resumes_it(tmp_path):
+    output = tmp_path / "pilot"
+    (output / "logs").mkdir(parents=True)
+    (output / "cuboid_front_cache_v4").mkdir()
+    (output / "cuboid_front_cache_v4/manifest.json").write_text("{}", encoding="utf-8")
+    arm_a = output / "arm_a_random_strict_inside"
+    arm_b = output / "arm_b_transferred_d_inside"
+    arm_a.mkdir(); arm_b.mkdir()
+    (arm_a / "chkpnt15500.pth").write_bytes(b"evidence")
+    (arm_a / "stage_d_telemetry.jsonl").write_text("{}\n", encoding="utf-8")
+    (output / "logs/transferred_d_inside.log").write_text(
+        "ValueError: surfel support is too large for the strict cuboid interior\n",
+        encoding="utf-8",
+    )
+    (output / "ownership_operator_record.json").write_text(json.dumps({
+        "status": "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED",
+        "git_commit": RETRYABLE_SCALE_COMMIT,
+        "operator_error": "RuntimeError: ownership arm failed: transferred_d_inside exit=1",
+        "arms": {
+            "random_strict_inside": {"exit_code": 0},
+            "transferred_d_inside": {"exit_code": 1},
+        },
+        "source_sha256_before": "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84",
+        "source_sha256_after": "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84",
+        "release_aggregate_before": "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d",
+        "release_aggregate_after": "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d",
+    }), encoding="utf-8")
+    archive = archive_retryable_ownership_failure(output)
+    assert archive.name.endswith("_failed_scale_17d2663")
+    assert (archive / "arm_b_transferred_d_inside").is_dir()
+    assert not output.exists()
 
 
 def test_renderer_contract_uses_incompatible_v4_cache_identity():

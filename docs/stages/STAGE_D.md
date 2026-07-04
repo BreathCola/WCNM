@@ -276,3 +276,21 @@ hashes match and cache, checkpoint, and telemetry are all absent. No partial
 run may be resumed or overwritten; every other pre-existing output remains a
 hard refusal. All v4 renderer, A/B, schedule, and verdict requirements above
 remain unchanged.
+
+### V4 transferred-scale correction
+
+The `17d2663` retry completed cache/parity and Arm A, but Arm B stopped after
+global 15,114 when an optimizer update made raw T scale too large for a feasible
+strict-inside 3-sigma support. The strict failure is preserved evidence; it is
+not resumed. The corrected T representation retains raw log-scale storage and
+exact feasible D raw-scale transfer, while active scale uses a current-rotation
+cuboid-capacity factor shared by both tangent axes. The factor is one for every
+feasible support and only contracts a would-be infeasible support, so anisotropy
+is retained and raw optimizer state is not projected.
+
+Checkpoint, telemetry, debug, and audit identify this rule as
+`cuboid_support_uniform_cap_v1` and report its activation. The existing v4
+strict-support and fixed-count requirements remain mandatory. For matched-code
+integrity, the next retry archives the entire `17d2663` output with suffix
+`_failed_scale_17d2663`, rebuilds the cache, and reruns both arms fresh from
+global 15,000. Reusing completed Arm A or resuming partial Arm B is forbidden.

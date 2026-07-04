@@ -235,6 +235,7 @@ def save_transmittance_debug_maps(
         ).sum(dim=-1, keepdim=True)[hard]
         metadata["semantic_repair"] = {
             "t_spatial_counts": output["t_spatial_counts"],
+            "t_support_scale_cap": output.get("t_support_scale_cap", {}),
             "r_spatial": output.get("semantic_r_stats", {}),
             "cout_spatial": output.get("semantic_cout_stats", {}),
             "r_filter": output.get("semantic_r_filter_stats", {}),
