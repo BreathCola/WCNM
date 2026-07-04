@@ -723,6 +723,14 @@ evidence is judged sufficient by the user.
   must remain HOLD unless the operator finds a valid human-authored asset.
 - V4 cannot authorize joint fine-tuning or Stage E. Even PASS would establish
   only T handoff conditions under cuboid-front/strong ownership isolation.
+- The first user launch from commit `b697c25` stopped before cache construction
+  or any training step because ownership mode was omitted from the cuboid-space
+  construction gate. Source/release hashes stayed unchanged and there are no
+  checkpoints or telemetry. The fix now shares the cuboid requirement across
+  semantic and ownership modes. A same-command retry atomically preserves only
+  this exact zero-step failure under the `_failed_preflight_b697c25` suffix;
+  all other existing-output cases remain fail-closed. No retry was launched by
+  Codex.
 
 ## Three-step formal-mask L_spec smoke
 

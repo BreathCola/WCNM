@@ -2879,3 +2879,39 @@ the cuboid-front path and strong ownership isolation, not final D/R/T separation
 
 Required ablation: The two matched 500-step arms above; no conclusion may be
 drawn from one arm alone or from RGB loss alone.
+
+## D-010 — Preserve the zero-step v4 launch failure and retry the canonical output
+
+Date: 2026-07-04
+
+Question: How should the v4 operator recover after its first user launch failed
+before cache construction or any optimizer update?
+
+Observed evidence: Commit `b697c25` guarded support-safe T initialization on a
+non-null release cuboid, but `training_stage_d` constructed that cuboid only for
+`stage_d_semantic_repair_pilot`, omitting `stage_d_ownership_pilot`. Arm A
+therefore stopped during source-checkpoint initialization with
+`support-safe T initialization requires cuboid space`. The failed output has no
+cache manifest, checkpoint, telemetry, debug node, or training update; source
+and release before/after hashes remain exact. Its audit is correctly BLOCKED
+but its many missing-file errors are downstream consequences, not additional
+runtime failures.
+
+Chosen implementation: Define one tested cuboid-requirement predicate shared by
+semantic-repair and ownership modes, use it before Stage-D initialization, and
+make ownership contract validation require `rtgs_cuboid_space_v1` metadata.
+The canonical output name remains unchanged. On the next identical operator
+invocation only, the wrapper may atomically rename this exact known b697c25
+zero-step failure to
+`stage_d_tihubird_c03r8_cuboid_path_ownership_ab500_v4_failed_preflight_b697c25`
+before creating a fresh canonical directory. Eligibility binds the commit,
+exception, Arm-A exit, source/release hashes, and absence of cache/checkpoint/
+telemetry. Any other existing output, or an existing archive, still fails
+closed. Nothing is deleted, resumed, or overwritten.
+
+Impact: This is a launch-gate correction only. Cuboid-front formulas, ownership
+policy, A/B variables, schedule, cache schema, losses, nodes, and acceptance
+boundary are unchanged. Codex does not launch the retry.
+
+Required ablation: None; unit tests cover both ownership cuboid construction
+eligibility and the exact zero-step archival guard.

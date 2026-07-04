@@ -96,6 +96,11 @@ def _cached_mode(opt):
     )
 
 
+def _requires_cuboid_space(opt):
+    """Stage D modes whose renderer/initialization contract requires the release cuboid."""
+    return bool(opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot)
+
+
 def _required_nodes(opt):
     if opt.stage_d_ownership_pilot:
         return OWNERSHIP_NODES
@@ -527,6 +532,10 @@ def _validate_ownership_contract(
         "direct_off": dataset.transparent_direct_mode == "off",
         "reflection_off": dataset.transparent_reflection_mode == "off",
         "cout_safe": dataset.cout_ownership_mode == "support_safe_outside",
+        "cuboid_space": (
+            getattr(dataset, "_semantic_cuboid_space_metadata", {}).get("schema")
+            == "rtgs_cuboid_space_v1"
+        ),
         "cache_path": Path(dataset.stage_d_static_cache_path).name == "cuboid_front_cache_v4",
         "source_specular_contract": (
             source_config.get("lambda_spec") == 0.2
@@ -1256,7 +1265,7 @@ def training_stage_d(
     _validate_args(dataset, opt, start_checkpoint)
     release = GeometryRelease(Path(dataset.geometry_release_manifest))
     semantic_cuboid = None
-    if opt.stage_d_semantic_repair_pilot:
+    if _requires_cuboid_space(opt):
         semantic_cuboid = CuboidSpace.from_metadata(
             release.root / "mesh_metadata.json",
             interface_margin=opt.transparent_interface_margin,

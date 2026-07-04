@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -18,8 +19,10 @@ from raytracer.differentiable_raytrace import trace_candidates
 from scene.reflection_surfel_model import ReflectionSurfelModel
 from scene.transmittance_surfel_model import TransmittanceSurfelModel
 from tools.run_stage_d_ownership_ab import (
-    CACHE, common_training_contract, training_command,
+    CACHE, RETRYABLE_PREFLIGHT_COMMIT, archive_retryable_preflight_failure,
+    common_training_contract, training_command,
 )
+from stage_d_training import _requires_cuboid_space
 from utils.stage_d_static_cache import OWNERSHIP_CACHE_SCHEMA, renderer_contract
 
 
@@ -209,6 +212,46 @@ def test_v4_operator_arms_differ_only_by_t_initialization_and_cache_reuse():
         assert command[command.index("--stage_d_static_cache_path") + 1] == str(CACHE)
     assert "--stage_d_reuse_static_cache" not in arm_a
     assert "--stage_d_reuse_static_cache" in arm_b
+
+
+def test_ownership_mode_requires_release_cuboid_space():
+    assert _requires_cuboid_space(SimpleNamespace(
+        stage_d_semantic_repair_pilot=False, stage_d_ownership_pilot=True,
+    ))
+    assert _requires_cuboid_space(SimpleNamespace(
+        stage_d_semantic_repair_pilot=True, stage_d_ownership_pilot=False,
+    ))
+    assert not _requires_cuboid_space(SimpleNamespace(
+        stage_d_semantic_repair_pilot=False, stage_d_ownership_pilot=False,
+    ))
+
+
+def test_operator_archives_only_the_known_zero_step_preflight_failure(tmp_path):
+    output = tmp_path / "pilot"
+    (output / "logs").mkdir(parents=True)
+    (output / "logs/random_strict_inside.log").write_text(
+        "ValueError: support-safe T initialization requires cuboid space\n",
+        encoding="utf-8",
+    )
+    (output / "ownership_operator_record.json").write_text(
+        json.dumps({
+            "status": "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED",
+            "git_commit": RETRYABLE_PREFLIGHT_COMMIT,
+            "operator_error": "RuntimeError: ownership arm failed: random_strict_inside exit=1",
+            "arms": {"random_strict_inside": {"exit_code": 1}},
+            "source_sha256_before": "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84",
+            "source_sha256_after": "050500d607e1910ca088049ae73619949ad183e23c85354a8408bb29571fbe84",
+            "release_aggregate_before": "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d",
+            "release_aggregate_after": "4fedb22dc2f2e6415a3d3948ab26fba54df91ba06b66d951a09b3dc5f761188d",
+        }),
+        encoding="utf-8",
+    )
+    archive = archive_retryable_preflight_failure(output)
+    assert not output.exists()
+    assert archive.is_dir()
+    with pytest.raises(FileExistsError, match="not a directory"):
+        output.write_text("occupied", encoding="utf-8")
+        archive_retryable_preflight_failure(output)
 
 
 def test_renderer_contract_uses_incompatible_v4_cache_identity():

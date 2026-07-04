@@ -260,3 +260,19 @@ currently exists, so RGB improvement cannot be called semantic success and the
 run must HOLD or BLOCKED. Even PASS means only that T has demonstrated handoff
 conditions under strong ownership isolation; it cannot authorize joint
 fine-tuning, final separation claims, or Stage E.
+
+### V4 zero-step launch correction
+
+The first v4 invocation from commit `b697c25` failed before cache construction
+and before any optimizer update because the ownership flag did not activate
+release-cuboid construction. This is a launch-gate defect, not pilot evidence.
+The corrected implementation requires the cuboid for both semantic-repair and
+ownership modes and validates its schema before the run contract proceeds.
+
+The next operator invocation preserves the exact known zero-step directory by
+atomically renaming it with suffix `_failed_preflight_b697c25`, then recreates
+the canonical v4 output. This exception is allowed only when source/release
+hashes match and cache, checkpoint, and telemetry are all absent. No partial
+run may be resumed or overwritten; every other pre-existing output remains a
+hard refusal. All v4 renderer, A/B, schedule, and verdict requirements above
+remain unchanged.

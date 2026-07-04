@@ -31,6 +31,8 @@ OUTPUT = ROOT / "output" / OWNERSHIP_OUTPUT_NAME
 CACHE = OUTPUT / "cuboid_front_cache_v4"
 LOGS = OUTPUT / "logs"
 ALLOWED_DISPLAY_COMPUTE = {"/usr/libexec/gnome-remote-desktop-daemon": 512}
+RETRYABLE_PREFLIGHT_COMMIT = "b697c2507ffdd236fac6603ea7ff1d20ff530ac8"
+RETRYABLE_PREFLIGHT_ARCHIVE_SUFFIX = "_failed_preflight_b697c25"
 
 
 def git(*args):
@@ -86,6 +88,49 @@ def independent_bird_roi():
         "manifest": valid[0] if valid else None,
         "searched_candidates": [str(path.resolve()) for path in candidates],
     }
+
+
+def archive_retryable_preflight_failure(output):
+    """Preserve the known zero-step b697c25 failure before one canonical retry."""
+    output = Path(output)
+    if not output.exists():
+        return None
+    if not output.is_dir():
+        raise FileExistsError(f"ownership output exists and is not a directory: {output}")
+    record_path = output / "ownership_operator_record.json"
+    log_path = output / "logs/random_strict_inside.log"
+    try:
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        log = log_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        raise FileExistsError(
+            f"refusing to replace unrecognized ownership output: {output}: {exc}"
+        ) from exc
+    arm = record.get("arms", {}).get("random_strict_inside", {})
+    exact_known_failure = (
+        record.get("status") == "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
+        and record.get("git_commit") == RETRYABLE_PREFLIGHT_COMMIT
+        and record.get("operator_error")
+        == "RuntimeError: ownership arm failed: random_strict_inside exit=1"
+        and arm.get("exit_code") == 1
+        and "support-safe T initialization requires cuboid space" in log
+        and record.get("source_sha256_before") == FORMAL_SOURCE_SHA256
+        and record.get("source_sha256_after") == FORMAL_SOURCE_SHA256
+        and record.get("release_aggregate_before") == FORMAL_RELEASE_SHA256
+        and record.get("release_aggregate_after") == FORMAL_RELEASE_SHA256
+        and not (output / "cuboid_front_cache_v4/manifest.json").exists()
+        and not any(output.rglob("chkpnt*.pth"))
+        and not any(output.rglob("stage_d_telemetry.jsonl"))
+    )
+    if not exact_known_failure:
+        raise FileExistsError(
+            f"refusing to overwrite non-retryable ownership output: {output}"
+        )
+    archive = output.with_name(output.name + RETRYABLE_PREFLIGHT_ARCHIVE_SUFFIX)
+    if archive.exists():
+        raise FileExistsError(f"retry evidence archive already exists: {archive}")
+    os.replace(output, archive)
+    return archive
 
 
 def training_command(arm):
@@ -192,8 +237,7 @@ def main():
     args = parser.parse_args()
     if not args.execute:
         raise SystemExit("refusing to run without --execute")
-    if OUTPUT.exists():
-        raise FileExistsError(f"refusing to overwrite ownership A/B output: {OUTPUT}")
+    prior_failed_output = archive_retryable_preflight_failure(OUTPUT)
     OUTPUT.mkdir(parents=True); LOGS.mkdir()
     record = {
         "schema": "rtgs_stage_d_cuboid_path_ownership_operator_v4",
@@ -202,6 +246,9 @@ def main():
         "cache": str(CACHE), "arms": {},
         "commands": {arm: training_command(arm) for arm in OWNERSHIP_ARM_NAMES},
         "bird_roi": independent_bird_roi(),
+        "prior_failed_output_archive": (
+            str(prior_failed_output.resolve()) if prior_failed_output else None
+        ),
     }
     common = {
         arm: common_training_contract(command)
