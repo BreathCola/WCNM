@@ -3161,3 +3161,104 @@ difference is `3.07e-8`. Fixed-nine Ain and Cin rise without saturation,
 near-black, Cin, or T-contribution guard failure; transparent L1 improves. This
 result authorizes only the separately launched v3 T-only continuation and is
 not Stage D acceptance.
+
+## D-015 — Zero-update semantic-renderer repair ablation
+
+Date: 2026-07-04
+
+Question: Can the black holes and branch omissions in the ownership T-only
+HOLD be repaired at image-formation time before authorizing any further
+optimization?
+
+Observed evidence: The projected-scale long endpoint is numerically healthy
+but remains `TSCALE_RECOVERY_LONG_HOLD`. In the hard transparent mask, formal
+D direct and R are exactly zero. T and Cout exist only where the immutable
+two-hit cache is valid; invalid pixels therefore retain only the residual scene
+background term. Existing fixed-nine 8-bit diagnostics show approximately
+10.54% near-black transparent pixels, but their quantization is not admissible
+as the final ablation measurement. Strict-outside Cout discards complete-support
+interface/crossing D surfels and has a large filtered/unfiltered difference.
+
+Chosen implementation: Run a zero-optimizer-update, fixed-nine renderer
+ablation with two read-only source groups. The reproduction group loads the
+complete global-20,000 D/R/T checkpoint only for diagnostic forward rendering;
+it may never be a training source and no derived checkpoint is written. The
+fresh-start group loads only the immutable Branch-A Stage-B global-15,000 D/R
+checkpoint and constructs one deterministic fresh support-safe T state with
+count 4,096 and seed 20260703. That exact captured T state is reused bit-for-bit
+across its four arms. Both groups use the immutable Stage-C v1 mesh/release and
+111 two-hit caches without generation or mutation.
+
+Let `H` be `mask_hard`, `V` be `valid_two_hit`, `B` the scene background,
+`Wt=alpha*ks*(1-F)`, and `Ct(Cout)=Cin+(1-Ain)*Cout`. Outside `H`, every arm's
+D, R, and final tensors must be bitwise equal to Arm 0.
+
+- Arm 0 retains transparent D-off, R-off, and complete-support
+  strict-outside-safe Cout. On `H & V`, final is
+  `Wt*Ct(Cout_strict)+(1-alpha)*B`; on `H & !V`, no cuboid-front T/R/Cout path
+  exists and final remains the Arm-0 residual.
+- Arm 1 keeps D-off. Only on `H & V`, it restores formal R using the immutable
+  cuboid-front position and normal, reflected direction, front-derived Fresnel
+  and microfacet weight, and complete-support strict-outside-safe R candidates.
+  `H & !V` remains exactly Arm 0 because it has no reliable cuboid front.
+- Arm 2 is Arm 1 on valid pixels. On `H & !V`, it replaces final with the exact
+  original Stage-B legacy D/R compositor result. The fallback must be obtained
+  by executing or strictly reusing that compositor, not by a separately
+  reimplemented approximation, and must compare bitwise equal on the fallback
+  domain. Its D, R, final, mask, fraction, and error are separately named; it
+  is never counted as T evidence.
+- Arm 3 is Arm 2 with an experimental valid-pixel Cout handoff. It retains and
+  exports `Cout_strict`, while a second trace admits strict-outside-safe D plus
+  interface/crossing candidates only when their individual exact intersection
+  point lies beyond the frozen exit face. Candidate admission happens before
+  opacity sorting/compositing so accepted classes share the true depth order.
+
+Exit-side sign contract: Cuboid local signed clearance is positive strictly
+inside, zero on a face, and negative outside. Let `b=back_position`, let
+`n_exit` be the outward normal of the frozen cuboid face containing `b`, and
+let `p` be an exact candidate intersection. An experimental interface/crossing
+hit is accepted only when `dot(p-b,n_exit)>delta` and
+`clearance(p)<-delta`, where positive `delta` is a checkpointed numerical
+tolerance. Hits inside (`clearance>0`), on-plane (within `[-delta,+delta]`),
+before/at the exit half-space, and every strict-inside-support candidate are
+rejected. Accepted and rejected candidate/hit counts, alpha, energy, and maps
+remain separate. This handoff is an ablation and never a semantic claim.
+
+Float audit contract: Near-black is diagnostic Rec.709 final luminance below
+0.10. Multi-label causes are invalid two-hit, unavailable D term under D-off,
+unavailable R term under R-off, T miss/low Ain, Cout miss/low Aout, and their
+bitmask combinations. All verdict tables use live float renderer tensors, not
+PNG values. Export D/R/Cin/Cout raw or premultiplied values, conditional RGB,
+alpha and final weights; final float luminance; formal/unfiltered R energy;
+fallback masks; and strict/handoff Cout differences. PNGs are human-only.
+Neither gates nor attribution may consult GT, a bird ROI, or target color.
+
+Transparent D direct remains off in every arm. No interface D color, Arm 4,
+optimizer step, checkpoint save, 250--500-step pilot, joint training, release
+rewrite, Stage E work, or semantic separation claim is authorized. RGB L1 is
+descriptive only. The only verdicts are `AWAITING_USER_REVIEW`, `HOLD`, or
+`BLOCKED` after human inspection of bird, reflection, background, and holes.
+
+Alternatives: Continue the global-20,000 checkpoint; test only fresh T; hand
+compose an approximate legacy fallback; use cuboid-front R without a valid
+front hit; restore all interface D; gate handoff by surfel center; or infer
+causes from 8-bit PNGs. These either violate the frozen diagnostic boundary,
+hide the existing failure, change legacy semantics, admit undefined geometry,
+or provide insufficient evidence.
+
+Paper fidelity: Cuboid-front and back-face handoff are project-specific
+thin-shell engineering ablations. Arm 1 restores the master-plan reflected
+environment term; Arm 2 is explicitly labeled compatibility fallback; Arm 3
+tests a candidate-level ownership handoff. No loss, target-derived gate,
+training schedule, field merge, mesh, or cache is changed.
+
+Impact: The unique output is
+`output/stage_d_tihubird_c03r8_semantic_renderer_repair_zero_step_ablation_v1`.
+It contains no training checkpoint and cannot be resumed. A favorable human
+review may authorize a separate fresh global-15,000 250--500-step T-only pilot,
+but this ablation cannot authorize it automatically.
+
+Required ablation: Both source groups and all four arms are mandatory. Synthetic
+cuboid tests must prove the exit-side sign cases; CUDA tests must prove
+candidate admission before compositing; real audit must prove legacy-fallback
+equality, outside-mask equality, immutable hashes, and zero optimizer updates.

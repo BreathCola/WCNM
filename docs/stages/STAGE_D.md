@@ -366,3 +366,32 @@ D/R hashes are unchanged; T remains 4,096 and entirely strict-inside-safe. At
 `0.999999875`, and the fixed-nine transparent L1 improved from `0.126823` to
 `0.118399` without Cin or T-contribution collapse. Only the guarded user-run
 16,050--20,000 T-only continuation is now authorized.
+
+## Authorized D-015 zero-update semantic-renderer ablation
+
+The global-20,000 continuation is retained as numerical scale-repair success
+but visual/semantic HOLD. It is a read-only render source and is permanently
+forbidden as a training resume point. D-015 runs fixed-nine, zero-update Arms
+0--3 for both that complete D/R/T state and the original Branch-A global-15,000
+D/R source with one captured fresh 4,096-T initialization reused across arms.
+No new checkpoint may be written.
+
+Arm 0 reproduces D-off/R-off/strict-outside Cout. Arm 1 restores R only for
+`mask_hard & valid_two_hit` using cuboid-front geometry and complete-support
+strict-outside-safe R; invalid pixels remain Arm 0. Arm 2 replaces only
+hard-mask invalid pixels with an exact invocation/reuse of the original Stage-B
+legacy D/R compositor and labels every fallback pixel. Arm 3 retains the strict
+Cout result and separately admits interface/crossing D candidates only when
+their individual exact hit lies beyond the frozen back face. Positive cuboid
+clearance is inside, zero is on-plane, and negative is outside; accepted hits
+require both positive outward exit-plane distance and clearance below the
+negative tolerance. Strict-inside candidates are always rejected.
+
+All formal metrics are computed from float tensors. Required products include
+raw/conditional/alpha/weight D, R, Cin, and Cout; formal/unfiltered R energy;
+final luminance; multi-label black-hole attribution; fallback maps; strict and
+handoff Cout maps/differences; accepted/rejected handoff diagnostics; Arm
+contact sheets; outside-mask bitwise parity; source/release/cache immutability;
+and zero-update proof. PNG is visual evidence only. Transparent D direct stays
+off and no Arm 4 is implemented. Verdict is only `AWAITING_USER_REVIEW`,
+`HOLD`, or `BLOCKED`; no training or Stage E action follows automatically.

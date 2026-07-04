@@ -4,6 +4,19 @@ Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `feature/stage-d-transmittance`
 
+The current authorized task is D-015, a zero-update semantic-renderer repair
+ablation only. The completed global-20,000 ownership result is preserved as
+scale-repair success but visual/semantic HOLD; it is a read-only reproduction
+source and may never be resumed for training. A second group starts from the
+immutable Branch-A global-15,000 D/R source with one deterministic fresh T
+snapshot reused across Arms 0--3. The ablation tests cuboid-front safe R,
+exact legacy D/R fallback only on two-hit-invalid hard-mask pixels, and an
+experimental exact-hit back-face Cout handoff. Transparent D direct remains
+off. Final metrics must come from float tensors. No optimizer update,
+checkpoint output, short pilot, joint training, Stage E action, or separation
+claim is authorized. The unique planned output is
+`output/stage_d_tihubird_c03r8_semantic_renderer_repair_zero_step_ablation_v1`.
+
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and
 stopped on the intended minimum scale-factor guard: active scale and all 4,096
