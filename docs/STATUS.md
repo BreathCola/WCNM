@@ -41,6 +41,19 @@ bounds used `get_scaling`, while exact candidate intersection hard-coded
 forward scale; R retains its original path. Both blocked attempts remain
 preserved, and the fresh retry is uniquely suffixed `_v3`.
 
+The committed v3 repair (`62280ac`) passed its real recovery gate. The exact
+global-16,000 source migrated with zero fixed-view difference in active scale,
+decoded position, every audited raytrace output, and every audited loss. The
+50 authorized updates completed through global 16,050 with 4,096/4,096 T
+supports strict-inside-safe, zero capped supports at the final checkpoint,
+raw/active maximum difference `3.07e-8`, and unchanged D/R hashes. Fixed-nine
+means from 16,000 to 16,050 changed as follows: Ain `0.25543 -> 0.29633`, Cin
+energy `0.11896 -> 0.13450`, T contribution `0.28242 -> 0.28690`, and
+transparent L1 `0.12682 -> 0.11840`. The CPU verdict is
+`TSCALE_RECOVERY_PREFLIGHT_PASS`. This authorizes only the user-operated v3
+T-only continuation from global 16,050; it is not Stage D acceptance and does
+not authorize joint tuning or Stage E.
+
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
 branches at global 15,000: Branch A started Reflection at global 3,000 and

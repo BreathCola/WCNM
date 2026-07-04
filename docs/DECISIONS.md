@@ -3151,3 +3151,13 @@ its possible user-launched continuation is
 `output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v3`.
 The same zero-update parity gate and all 50-step recovery guards remain
 fail-closed.
+
+Result: Commit `62280ac` passed all 192 repository tests and the fresh v3 real
+preflight returned `TSCALE_RECOVERY_PREFLIGHT_PASS` with no audit errors. The
+zero-update migration comparisons are all exactly zero. Through global 16,050,
+D/R hashes remain unchanged, T count remains 4,096, every T 3-sigma support is
+strict-inside-safe, final capped count is zero, and final raw/active maximum
+difference is `3.07e-8`. Fixed-nine Ain and Cin rise without saturation,
+near-black, Cin, or T-contribution guard failure; transparent L1 improves. This
+result authorizes only the separately launched v3 T-only continuation and is
+not Stage D acceptance.

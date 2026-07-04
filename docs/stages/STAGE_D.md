@@ -357,3 +357,12 @@ active scale while exact candidate intersection decoded raw `_scaling`. V2 is
 preserved BLOCKED evidence. V3 makes T candidate intersection consume the same
 active scale used by its AABB and forward contract; R remains unchanged. The
 fresh v3 output is required before any continuation.
+
+The v3 recovery preflight subsequently passed. Migration parity is exactly
+zero for active scale, decoded position, all audited outputs, and all losses.
+All required 16,000/16,001/16,010/16,025/16,050 checkpoints and audits exist;
+D/R hashes are unchanged; T remains 4,096 and entirely strict-inside-safe. At
+16,050, raw/active maximum scale difference is `3.07e-8`, the minimum factor is
+`0.999999875`, and the fixed-nine transparent L1 improved from `0.126823` to
+`0.118399` without Cin or T-contribution collapse. Only the guarded user-run
+16,050--20,000 T-only continuation is now authorized.
