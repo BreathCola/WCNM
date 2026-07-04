@@ -581,13 +581,19 @@ def render_from_static_dr(
             raw_scaling = torch.exp(state.transmittance._scaling.detach())
             active_scaling = state.transmittance.get_scaling.detach()
             scale_ratio = active_scaling / raw_scaling.clamp_min(1e-30)
-            capped = scale_ratio.amin(dim=-1).lt(1.0 - 1e-7)
+            scale_mode = getattr(
+                state.transmittance, "scaling_parameterization",
+                "cuboid_support_uniform_cap_v1",
+            )
+            cap_tolerance = 2e-6 if scale_mode == "cuboid_support_projected_cap_v2" else 1e-7
+            capped = scale_ratio.amin(dim=-1).lt(1.0 - cap_tolerance)
             package["t_support_scale_cap"] = {
-                "schema": "cuboid_support_uniform_cap_v1",
+                "schema": scale_mode,
                 "capped_count": int(capped.sum()),
                 "minimum_factor": float(scale_ratio.min()),
                 "raw_scale_max": float(raw_scaling.max()),
                 "active_scale_max": float(active_scaling.max()),
+                "raw_active_max_abs": float((raw_scaling - active_scaling).abs().max()),
             }
         package["t_support_legal"] = t_map
     if state.transparent_path_mode == "cuboid_front_v1":

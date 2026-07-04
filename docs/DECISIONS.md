@@ -3022,3 +3022,74 @@ verdict is `OWNERSHIP_T_LONG_BLOCKED`.
 Required ablation: None beyond the completed matched A/B that selected Arm B.
 Any later change to D/R ownership or joint tuning requires a new decision and
 review of this long-run evidence.
+
+## D-013 — Forward-preserving projected T scale and global-16,000 recovery
+
+Date: 2026-07-04
+
+Question: Can the guarded long run's complete global-16,000 checkpoint be
+continued without returning to global 15,500 after raw T scale escaped while
+active scale remained cuboid-capped?
+
+Observed evidence: The preserved v1 run stopped at global 16,774 / T-local
+1,774 when its rolling minimum active/raw factor crossed 0.02. It remained
+finite, support-safe, and ownership-isolated, but raw maximum scale grew from
+2.29 at global 15,501 to 5.32 at 16,000 and 18.47 at 16,774. At global 16,000,
+24/4,096 supports are capped and the minimum factor is 0.07048. A CPU migration
+of the exact checkpoint SHA-256
+`52d1368dfb2a729240265e27f7696b0d230522af3fae795049c70932a673158e`
+sets only those 24 raw log-scales to their already-used active values. Active
+scale changes by at most `2.98e-8`, decoded world position by `8.94e-8`, raw
+maximum becomes the active maximum 0.40683, and all 4,096 complete 3-sigma
+supports remain strict-inside-safe.
+
+Chosen implementation: Introduce `cuboid_support_projected_cap_v2`. The
+existing cuboid cap remains the differentiable forward fail-safe. Immediately
+after every T optimizer step, compute the active two-axis scale under the
+current rotation. For each meaningfully capped support, replace its raw
+log-scale with `log(active_scale)` using the same common factor for both axes.
+Zero only the affected rows of the scaling parameter's Adam `exp_avg`,
+`exp_avg_sq`, and optional `max_exp_avg_sq`; preserve its scalar step and every
+xyz/color/opacity/rotation parameter and optimizer state. Assert finite
+raw/active equality within `2e-6` and complete strict-inside support after each
+projection. The old v1 checkpoint is migrated once under a fixed-view
+pre/post active-geometry, raytrace-output, Ct, loss, and non-scaling-optimizer
+parity report. New checkpoints store the v2 identity and reload with the same
+contract.
+
+Recovery protocol: Preserve the blocked v1 tree byte-for-byte. Resume only its
+formal global-16,000 checkpoint into the new preflight output and run global
+16,001--16,050 / T-local 1,001--1,050. D/R and all their state remain frozen at
+R-local 12,000. Reuse the validated v4 cache; retain cuboid-front, transparent
+D-direct off, transparent R off, support-safe-outside Cout, T=4,096, frozen T
+topology, full-frame RGB, and disabled L_depth. Full checkpoint/PLY/fixed-nine/
+hash-audit nodes are 16,000, 16,001, 16,010, 16,025, and 16,050. Any scale,
+support, hash, path, ownership, finite, OOM, Ain/black, Cin/T-energy, file, or
+telemetry failure returns `TSCALE_RECOVERY_PREFLIGHT_BLOCKED`.
+
+If and only if the preflight returns `TSCALE_RECOVERY_PREFLIGHT_PASS`, a
+separate user-launched operator may resume its global-16,050 checkpoint through
+20,000. It writes checkpoint/PLY/fixed-nine/hash audits at global 16,050 and
+then every 250 global steps, with the same runtime guards. It cannot enter joint
+training or Stage E.
+
+Alternatives: Restart from 15,500; remove the cap guard; keep v1 raw state and
+only relax its threshold; add a scale loss; reset the complete T optimizer; or
+change rays/ownership/depth/topology. Restarting discards a demonstrably
+forward-preservable full checkpoint; the other choices either retain the null
+escape direction or change more training semantics than required.
+
+Paper fidelity: Optimizer-state projection is a project-specific numerical
+stability mechanism. It adds no loss and changes no represented active support,
+ray, path, BRDF/BTDF, composition, ownership gate, cache, RGB domain, or depth
+schedule at migration time.
+
+Impact: The recovery preflight output is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v1`.
+The possible continuation output is
+`output/stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v1`.
+Neither result is Stage D acceptance or semantic separation proof.
+
+Required ablation: None. CPU active/world parity and synthetic CUDA raytrace
+parity are mandatory implementation tests; the real 50-step run is the
+required recovery gate.

@@ -51,7 +51,8 @@ from utils.transmittance_debug import (
 )
 from utils.stage_d_static_cache import (
     TRAINING_PACKAGE_KEYS, StaticDRCache, cpu_cache_payload, frozen_branch_hash,
-    make_identity, renderer_contract, write_manifest, OWNERSHIP_CACHE_SCHEMA,
+    make_identity, renderer_contract, state_sha256, write_manifest,
+    OWNERSHIP_CACHE_SCHEMA,
 )
 from utils.semantic_repair import (
     anti_veil_config, anti_veil_loss, smooth_ramp, spatial_frequency_energy,
@@ -100,6 +101,28 @@ OWNERSHIP_T_LONG_SATURATION_LIMIT = 0.50
 OWNERSHIP_T_LONG_BLACK_LIMIT = 0.10
 OWNERSHIP_T_LONG_CAPPED_FRACTION_LIMIT = 0.10
 OWNERSHIP_T_LONG_MIN_SCALE_FACTOR = 0.02
+TSCALE_RECOVERY_PREFLIGHT_OUTPUT_NAME = (
+    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16000_preflight50_v1"
+)
+TSCALE_RECOVERY_LONG_OUTPUT_NAME = (
+    "stage_d_tihubird_c03r8_cuboid_path_ownership_trecover16050_g20000_v1"
+)
+TSCALE_RECOVERY_SOURCE_SHA256 = (
+    "52d1368dfb2a729240265e27f7696b0d230522af3fae795049c70932a673158e"
+)
+TSCALE_RECOVERY_PREFLIGHT_NODES = (16000, 16001, 16010, 16025, 16050)
+TSCALE_RECOVERY_LONG_NODES = (16050,) + tuple(range(16250, 20001, 250))
+TSCALE_RECOVERY_PREFLIGHT_ENDPOINT = 16050
+TSCALE_RECOVERY_LONG_ENDPOINT = 20000
+TSCALE_RECOVERY_SCALE_FACTOR_LIMIT = 0.90
+TSCALE_RECOVERY_RAW_ACTIVE_ATOL = 2e-6
+
+
+def _tscale_recovery_mode(opt):
+    return bool(
+        getattr(opt, "stage_d_tscale_recovery_preflight", False)
+        or getattr(opt, "stage_d_tscale_recovery_long", False)
+    )
 
 
 def _cached_mode(opt):
@@ -107,6 +130,7 @@ def _cached_mode(opt):
         opt.stage_d_cached_twarmup or opt.stage_d_semantic_repair_pilot
         or opt.stage_d_ownership_pilot
         or getattr(opt, "stage_d_ownership_t_long", False)
+        or _tscale_recovery_mode(opt)
     )
 
 
@@ -115,15 +139,36 @@ def _requires_cuboid_space(opt):
     return bool(
         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
         or getattr(opt, "stage_d_ownership_t_long", False)
+        or _tscale_recovery_mode(opt)
     )
 
 
 def _required_nodes(opt):
+    if getattr(opt, "stage_d_tscale_recovery_preflight", False):
+        return TSCALE_RECOVERY_PREFLIGHT_NODES
+    if getattr(opt, "stage_d_tscale_recovery_long", False):
+        return TSCALE_RECOVERY_LONG_NODES
     if opt.stage_d_ownership_t_long:
         return OWNERSHIP_T_LONG_NODES
     if opt.stage_d_ownership_pilot:
         return OWNERSHIP_NODES
     return SEMANTIC_NODES if opt.stage_d_semantic_repair_pilot else FORMAL_NODES
+
+
+def _telemetry_schema(opt):
+    if _tscale_recovery_mode(opt):
+        return "rtgs_stage_d_tscale_recovery_telemetry_v1"
+    if opt.stage_d_ownership_t_long:
+        return "rtgs_stage_d_ownership_t_long_telemetry_v1"
+    if opt.stage_d_ownership_pilot:
+        return "rtgs_stage_d_cuboid_path_ownership_telemetry_v4"
+    if opt.stage_d_semantic_repair_pilot:
+        return "rtgs_stage_d_semantic_repair_telemetry_v3"
+    if opt.stage_d_cached_twarmup:
+        return "rtgs_stage_d_cached_twarmup_telemetry_v1"
+    if opt.stage_d_formal_onset:
+        return "rtgs_stage_d_formal_telemetry_v2"
+    return "rtgs_stage_d_smoke_telemetry_v1"
 
 
 def _mesh_bounds(path: Path, device):
@@ -165,6 +210,17 @@ def _finite_models(models):
 
 
 def _config(dataset, opt, release, source):
+    recovery_preflight = bool(
+        getattr(opt, "stage_d_tscale_recovery_preflight", False)
+    )
+    recovery_long = bool(getattr(opt, "stage_d_tscale_recovery_long", False))
+    recovery = recovery_preflight or recovery_long
+    recovery_start = 16001 if recovery_preflight else 16051
+    recovery_endpoint = (
+        TSCALE_RECOVERY_PREFLIGHT_ENDPOINT
+        if recovery_preflight else TSCALE_RECOVERY_LONG_ENDPOINT
+    )
+    recovery_updates = 50 if recovery_preflight else 3950
     return {
         "stage": "stage_d", "model_type": "surfel",
         "experiment": dataset.experiment, "resolution": int(dataset.resolution),
@@ -190,6 +246,8 @@ def _config(dataset, opt, release, source):
         "stage_d_ownership_pilot": bool(opt.stage_d_ownership_pilot),
         "stage_d_ownership_arm": str(opt.stage_d_ownership_arm),
         "stage_d_ownership_t_long": bool(opt.stage_d_ownership_t_long),
+        "stage_d_tscale_recovery_preflight": recovery_preflight,
+        "stage_d_tscale_recovery_long": recovery_long,
         "transparent_path_mode": str(dataset.transparent_path_mode),
         "transparent_direct_mode": str(dataset.transparent_direct_mode),
         "transparent_reflection_mode": str(dataset.transparent_reflection_mode),
@@ -197,32 +255,36 @@ def _config(dataset, opt, release, source):
         "cached_t_warmup": (
             {
                 "phase_a_global": [
-                    15501 if opt.stage_d_ownership_t_long else 15001,
-                    OWNERSHIP_T_LONG_ENDPOINT if opt.stage_d_ownership_t_long else (
+                    recovery_start if recovery else (
+                        15501 if opt.stage_d_ownership_t_long else 15001
+                    ),
+                    recovery_endpoint if recovery else (
+                        OWNERSHIP_T_LONG_ENDPOINT if opt.stage_d_ownership_t_long else (
                     OWNERSHIP_ENDPOINT if opt.stage_d_ownership_pilot else (
                     SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot
                     else CACHED_PHASE_A_END
-                    ))
+                    )))
                 ],
                 "phase_a_updates": {
                     "diffuse": 0, "reflection": 0,
                     "transmittance": (
+                        recovery_updates if recovery else (
                         4500 if opt.stage_d_ownership_t_long else (
                         500 if opt.stage_d_ownership_pilot else (
                         1000 if opt.stage_d_semantic_repair_pilot else 3000)
-                    )),
+                    ))),
                 },
                 "phase_b_global": (
                     None if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or opt.stage_d_ownership_t_long
+                        or opt.stage_d_ownership_t_long or recovery
                     )
                     else [CACHED_PHASE_A_END + 1, 20000]
                 ),
                 "phase_b_mode": (
                     None if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or opt.stage_d_ownership_t_long
+                        or opt.stage_d_ownership_t_long or recovery
                     )
                     else "exact_uncached_joint_d_r_t"
                 ),
@@ -230,13 +292,13 @@ def _config(dataset, opt, release, source):
                     "R-local remains 12000 for the entire ownership/semantic pilot; no Phase B"
                     if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or opt.stage_d_ownership_t_long
+                        or opt.stage_d_ownership_t_long or recovery
                     ) else
                     "R-local remains 12000 in Phase A and advances only for Phase-B optimizer updates"
                 ),
                 "cache_schema": (
                     OWNERSHIP_CACHE_SCHEMA
-                    if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+                    if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long or recovery)
                     else "rtgs_stage_d_static_dr_cache_v1"
                 ),
                 "cache_fp": "float32",
@@ -270,7 +332,10 @@ def _config(dataset, opt, release, source):
                     "densification": False, "pruning": False,
                     "required_count": 4096,
                     "position_parameterization": "cuboid_inside_support_sigmoid_v2",
-                    "scaling_parameterization": "cuboid_support_uniform_cap_v1",
+                    "scaling_parameterization": (
+                        "cuboid_support_projected_cap_v2"
+                        if recovery else "cuboid_support_uniform_cap_v1"
+                    ),
                 },
                 "arm": opt.stage_d_ownership_arm,
                 "transfer_selection": {
@@ -285,7 +350,8 @@ def _config(dataset, opt, release, source):
                 "depth_enabled": False,
                 "diagnostic_isolation_not_final_physics": True,
             }
-            if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long) else None
+            if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long or recovery)
+            else None
         ),
         "ownership_t_long": (
             {
@@ -308,6 +374,29 @@ def _config(dataset, opt, release, source):
                 "semantic_claim": False,
             }
             if opt.stage_d_ownership_t_long else None
+        ),
+        "tscale_recovery": (
+            {
+                "schema": "rtgs_stage_d_tscale_recovery_v1",
+                "profile": "preflight50" if recovery_preflight else "long",
+                "source_checkpoint_sha256": getattr(
+                    dataset, "_stage_d_start_checkpoint_sha256", None,
+                ),
+                "global": [recovery_start, recovery_endpoint],
+                "t_local": [recovery_start - 15000, recovery_endpoint - 15000],
+                "updates": {"diffuse": 0, "reflection": 0,
+                            "transmittance": recovery_updates},
+                "review_nodes": list(
+                    TSCALE_RECOVERY_PREFLIGHT_NODES
+                    if recovery_preflight else TSCALE_RECOVERY_LONG_NODES
+                ),
+                "scaling_parameterization": "cuboid_support_projected_cap_v2",
+                "projection": "raw_log_scale_equals_forward_active_scale_after_each_update",
+                "affected_adam_state": "zero_exp_avg_exp_avg_sq_rows_only",
+                "depth_enabled": False,
+                "semantic_claim": False,
+            }
+            if recovery else None
         ),
         "transmittance_initialization": {
             "mode": dataset.transmittance_init_mode,
@@ -357,7 +446,8 @@ def _validate_args(dataset, opt, start_checkpoint):
     if not dataset.geometry_release_manifest:
         raise ValueError("Stage D requires --geometry_release_manifest")
     allowed_t_init = {"random_bbox"}
-    if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long:
+    if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long \
+            or _tscale_recovery_mode(opt):
         allowed_t_init = {"random_strict_inside", "transferred_d_inside"}
     if dataset.transmittance_init_mode not in allowed_t_init:
         raise ValueError(f"Stage D T initialization must be one of {sorted(allowed_t_init)}")
@@ -380,14 +470,23 @@ def _validate_args(dataset, opt, start_checkpoint):
     modes = sum(bool(value) for value in (
         opt.stage_d_cached_twarmup, opt.stage_d_semantic_repair_pilot,
         opt.stage_d_ownership_pilot, opt.stage_d_ownership_t_long,
+        getattr(opt, "stage_d_tscale_recovery_preflight", False),
+        getattr(opt, "stage_d_tscale_recovery_long", False),
     ))
     if modes > 1:
         raise ValueError("Stage D cached/semantic/ownership modes are mutually exclusive")
-    expected_phase_end = (
-        OWNERSHIP_T_LONG_ENDPOINT if opt.stage_d_ownership_t_long else (
-        OWNERSHIP_ENDPOINT if opt.stage_d_ownership_pilot else (
-        SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot else CACHED_PHASE_A_END)
-    ))
+    if getattr(opt, "stage_d_tscale_recovery_preflight", False):
+        expected_phase_end = TSCALE_RECOVERY_PREFLIGHT_ENDPOINT
+    elif getattr(opt, "stage_d_tscale_recovery_long", False):
+        expected_phase_end = TSCALE_RECOVERY_LONG_ENDPOINT
+    elif opt.stage_d_ownership_t_long:
+        expected_phase_end = OWNERSHIP_T_LONG_ENDPOINT
+    elif opt.stage_d_ownership_pilot:
+        expected_phase_end = OWNERSHIP_ENDPOINT
+    elif opt.stage_d_semantic_repair_pilot:
+        expected_phase_end = SEMANTIC_ENDPOINT
+    else:
+        expected_phase_end = CACHED_PHASE_A_END
     if int(opt.stage_d_phase_a_end_iteration) != expected_phase_end:
         raise ValueError(f"cached T warm-up Phase A must end at global {expected_phase_end}")
     if opt.stage_d_cache_parity_atol <= 0 or opt.stage_d_cache_parity_mean_atol <= 0:
@@ -428,6 +527,21 @@ def _validate_args(dataset, opt, start_checkpoint):
         if failures:
             raise ValueError(
                 "ownership T-long configuration mismatch: " + ", ".join(failures)
+            )
+    if _tscale_recovery_mode(opt):
+        required = {
+            "path": dataset.transparent_path_mode == "cuboid_front_v1",
+            "direct": dataset.transparent_direct_mode == "off",
+            "reflection": dataset.transparent_reflection_mode == "off",
+            "cout": dataset.cout_ownership_mode == "support_safe_outside",
+            "init_identity": dataset.transmittance_init_mode == "transferred_d_inside",
+            "reuse_cache": bool(opt.stage_d_reuse_static_cache),
+            "depth": int(opt.stage_d_depth_start_iteration) == 40000,
+        }
+        failures = [name for name, passed in required.items() if not passed]
+        if failures:
+            raise ValueError(
+                "T-scale recovery configuration mismatch: " + ", ".join(failures)
             )
 
 
@@ -673,9 +787,86 @@ def _validate_ownership_t_long_contract(
         )
 
 
+def _validate_tscale_recovery_contract(
+    dataset, opt, release, source, fresh_from_stage_b, saved_config,
+    global_iteration, reflection_iteration, transmittance_iteration,
+    saving_iterations, checkpoint_iterations,
+):
+    if not _tscale_recovery_mode(opt):
+        return
+    preflight = bool(opt.stage_d_tscale_recovery_preflight)
+    prior = (saved_config or {}).get("ownership_handoff", {})
+    prior_recovery = (saved_config or {}).get("tscale_recovery")
+    expected_cache = Path(
+        "output/stage_d_tihubird_c03r8_cuboid_path_ownership_ab500_v4/"
+        "cuboid_front_cache_v4"
+    ).resolve()
+    expected_start = 16000 if preflight else 16050
+    expected_t_local = expected_start - 15000
+    expected_endpoint = (
+        TSCALE_RECOVERY_PREFLIGHT_ENDPOINT if preflight else TSCALE_RECOVERY_LONG_ENDPOINT
+    )
+    expected_output = (
+        TSCALE_RECOVERY_PREFLIGHT_OUTPUT_NAME if preflight else TSCALE_RECOVERY_LONG_OUTPUT_NAME
+    )
+    expected_nodes = (
+        TSCALE_RECOVERY_PREFLIGHT_NODES if preflight else TSCALE_RECOVERY_LONG_NODES
+    )
+    source_path = Path(dataset._stage_d_start_checkpoint_path).resolve() \
+        if getattr(dataset, "_stage_d_start_checkpoint_path", "") else None
+    preflight_source = Path(
+        "output", TSCALE_RECOVERY_PREFLIGHT_OUTPUT_NAME, "chkpnt16050.pth"
+    ).resolve()
+    required = {
+        "stage_d_resume": not fresh_from_stage_b,
+        "start_hash": (
+            getattr(dataset, "_stage_d_start_checkpoint_sha256", None)
+            == TSCALE_RECOVERY_SOURCE_SHA256
+            if preflight else True
+        ),
+        "long_source_path": preflight or source_path == preflight_source,
+        "start_global": int(global_iteration) == expected_start,
+        "start_r_local": int(reflection_iteration) == 12000,
+        "start_t_local": int(transmittance_iteration) == expected_t_local,
+        "source_sha256": source.get("sha256") == FORMAL_SOURCE_SHA256,
+        "release_id": release.manifest.get("geometry_release_id") == FORMAL_RELEASE_ID,
+        "release_sha256": release.validation.get("aggregate_sha256") == FORMAL_RELEASE_SHA256,
+        "endpoint": int(opt.iterations) == expected_endpoint,
+        "phase_end": int(opt.stage_d_phase_a_end_iteration) == expected_endpoint,
+        "depth_off": int(opt.stage_d_depth_start_iteration) == 40000,
+        "resolution": int(dataset.resolution) == 8,
+        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
+        "output": Path(dataset.model_path).name == expected_output,
+        "cache": Path(dataset.stage_d_static_cache_path).resolve() == expected_cache,
+        "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations))) == expected_nodes,
+        "ply_nodes": tuple(sorted(set(saving_iterations))) == expected_nodes,
+        "prior_path": prior.get("transparent_path_mode") == "cuboid_front_v1",
+        "prior_direct": prior.get("transparent_direct_mode") == "off",
+        "prior_reflection": prior.get("transparent_reflection_mode") == "off",
+        "prior_cout": prior.get("cout_ownership_mode") == "support_safe_outside",
+        "prior_arm": prior.get("arm") == "transferred_d_inside",
+        "prior_scale": prior.get("t_topology", {}).get("scaling_parameterization")
+        in ("cuboid_support_uniform_cap_v1", "cuboid_support_projected_cap_v2"),
+        "long_recovery_source": preflight or (
+            isinstance(prior_recovery, dict)
+            and prior_recovery.get("profile") == "preflight50"
+            and prior_recovery.get("scaling_parameterization")
+            == "cuboid_support_projected_cap_v2"
+        ),
+    }
+    failures = [name for name, passed in required.items() if not passed]
+    if failures:
+        raise ValueError(
+            "T-scale recovery contract mismatch: " + ", ".join(failures)
+        )
+
+
 def _phase_for_iteration(
     iteration, semantic_repair=False, ownership=False, ownership_t_long=False,
+    tscale_recovery=False,
 ):
+    if tscale_recovery:
+        return "cuboid_path_ownership_tscale_recovery"
     if ownership_t_long:
         return "cuboid_path_ownership_t_long"
     if ownership:
@@ -689,7 +880,7 @@ def _transmittance_topology_update_allowed(opt, transmittance_iteration):
     """Keep the semantic pilot's fixed-cardinality T contract fail closed."""
     if (
         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-        or opt.stage_d_ownership_t_long
+        or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
     ):
         return False
     return (
@@ -827,6 +1018,48 @@ def _ownership_long_guard_result(window):
         failures.append("support-scale cap coverage")
     if minimum_factor <= OWNERSHIP_T_LONG_MIN_SCALE_FACTOR:
         failures.append("support-scale minimum factor")
+    return summary, failures
+
+
+def _tscale_recovery_guard_result(window):
+    if not window:
+        return {}, []
+    means = {
+        name: sum(row[name] for row in window) / len(window)
+        for name in (
+            "saturation", "black", "capped_fraction",
+            "projection_affected_fraction", "t_energy", "cin_energy",
+        )
+    }
+    summary = {
+        "window": len(window), **means,
+        "minimum_forward_factor": min(row["minimum_forward_factor"] for row in window),
+        "minimum_pre_projection_factor": min(
+            row["minimum_pre_projection_factor"] for row in window
+        ),
+        "maximum_post_projection_raw_active_abs": max(
+            row["post_projection_raw_active_abs"] for row in window
+        ),
+    }
+    failures = []
+    if means["saturation"] >= OWNERSHIP_T_LONG_SATURATION_LIMIT:
+        failures.append("Ain saturation")
+    if means["black"] >= OWNERSHIP_T_LONG_BLACK_LIMIT:
+        failures.append("high-Ain near-black collapse")
+    if means["capped_fraction"] > 0:
+        failures.append("post-projection capped support")
+    if summary["minimum_forward_factor"] < 1.0 - TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
+        failures.append("forward raw/active scale mismatch")
+    if summary["minimum_pre_projection_factor"] < TSCALE_RECOVERY_SCALE_FACTOR_LIMIT:
+        failures.append("single-update raw scale escape")
+    if summary["maximum_post_projection_raw_active_abs"] > TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
+        failures.append("post-update raw/active scale mismatch")
+    if means["projection_affected_fraction"] >= OWNERSHIP_T_LONG_CAPPED_FRACTION_LIMIT:
+        failures.append("scale projection coverage")
+    if means["t_energy"] < 0.05:
+        failures.append("T contribution collapse")
+    if means["cin_energy"] < 0.03:
+        failures.append("Cin collapse")
     return summary, failures
 
 
@@ -1098,6 +1331,85 @@ def _atomic_json(path: Path, value):
     os.replace(temporary, path)
 
 
+@torch.no_grad()
+def _tscale_state_metrics(transmittance):
+    raw = torch.exp(transmittance._scaling.detach())
+    active = transmittance.get_scaling.detach()
+    ratio = active / raw.clamp_min(torch.finfo(raw.dtype).tiny)
+    classes = transmittance.cuboid_space.classify_support(
+        transmittance.get_xyz.detach(), transmittance.get_rotation.detach(),
+        active, sigma=3.0,
+    )
+    difference = (active - raw).abs()
+    return {
+        "schema": "cuboid_support_projected_cap_v2",
+        "parameterization": transmittance.scaling_parameterization,
+        "raw_scale_max": float(raw.max()),
+        "active_scale_max": float(active.max()),
+        "minimum_factor": float(ratio.min()),
+        "capped_count": int(
+            ratio.amin(dim=-1).lt(1.0 - TSCALE_RECOVERY_RAW_ACTIVE_ATOL).sum()
+        ),
+        "raw_active_max_abs": float(difference.max()),
+        "raw_active_mean_abs": float(difference.mean()),
+        "strict_inside_safe_count": int((classes == SUPPORT_STRICT_INSIDE).sum()),
+        "count": int(raw.shape[0]),
+    }
+
+
+def _write_tscale_checkpoint_audit(
+    model_path, checkpoint_path, checkpoint, frozen_hashes,
+):
+    branch_hashes = {
+        branch: state_sha256(checkpoint[branch])
+        for branch in ("diffuse", "reflection", "transmittance")
+    }
+    node = int(checkpoint["global_iteration"])
+    record = {
+        "schema": "rtgs_stage_d_tscale_checkpoint_audit_v1",
+        "global_iteration": node,
+        "reflection_iteration": int(checkpoint["reflection_iteration"]),
+        "transmittance_iteration": int(checkpoint["transmittance_iteration"]),
+        "checkpoint": str(Path(checkpoint_path).resolve()),
+        "checkpoint_sha256": sha256_file(checkpoint_path),
+        "branch_hashes": branch_hashes,
+        "frozen_hashes": dict(frozen_hashes),
+        "diffuse_frozen": branch_hashes["diffuse"] == frozen_hashes["diffuse"],
+        "reflection_frozen": branch_hashes["reflection"] == frozen_hashes["reflection"],
+        "transmittance_scaling_parameterization": checkpoint["transmittance"].get(
+            "scaling_parameterization"
+        ),
+        "geometry_release_id": checkpoint["geometry_release_id"],
+        "geometry_release_aggregate_sha256": checkpoint[
+            "geometry_release_aggregate_sha256"
+        ],
+    }
+    target = Path(model_path) / "checkpoint_audits" / f"iteration_{node:06d}.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    _atomic_json(target, record)
+    if not record["diffuse_frozen"] or not record["reflection_frozen"]:
+        raise RuntimeError("T-scale checkpoint audit detected frozen D/R drift")
+    return record
+
+
+def _write_tscale_abort_hashes(
+    model_path, iteration, diffuse, reflection, transmittance, failures,
+):
+    record = {
+        "schema": "rtgs_stage_d_tscale_abort_hashes_v1",
+        "global_iteration": int(iteration),
+        "failures": list(failures),
+        "branch_hashes": {
+            "diffuse": frozen_branch_hash(diffuse),
+            "reflection": frozen_branch_hash(reflection),
+            "transmittance": frozen_branch_hash(transmittance),
+        },
+        "t_scale": _tscale_state_metrics(transmittance),
+    }
+    _atomic_json(Path(model_path) / "tscale_recovery_abort_hashes.json", record)
+    return record
+
+
 def _cacheable_static_inputs(value):
     if torch.is_tensor(value):
         return value
@@ -1243,6 +1555,113 @@ def _parity_snapshot(payload, gradients):
     }
 
 
+def _optimizer_group_hashes(model, *, include_parameter=True):
+    result = {}
+    for group in model.optimizer.param_groups:
+        parameter = group["params"][0]
+        payload = {"state": model.optimizer.state.get(parameter, {})}
+        if include_parameter:
+            payload["parameter"] = parameter
+        result[group["name"]] = state_sha256(payload)
+    return result
+
+
+def _run_tscale_migration_parity(
+    target, cameras, static_cache, state, pipe, background, opt, perceptual,
+    diffuse, reflection, transmittance,
+):
+    """Migrate legacy capped scale while proving fixed-input forward parity."""
+    by_stem = {Path(str(camera.image_name)).stem: camera for camera in cameras}
+    stem = "000039"
+    camera = by_stem[stem]
+    static_inputs = static_cache.load(stem, training_only=True)
+    _zero_stage_d_gradients(diffuse, reflection, transmittance)
+    d_hash_before = frozen_branch_hash(diffuse)
+    r_hash_before = frozen_branch_hash(reflection)
+    optimizer_before = _optimizer_group_hashes(transmittance)
+    active_before = transmittance.get_scaling.detach().clone()
+    world_before = transmittance.get_xyz.detach().clone()
+    pre_payload = _forward_backward_stage_d(
+        camera, state, pipe, background, opt, perceptual, 16001,
+        static_inputs=static_inputs,
+    )
+    pre = _parity_snapshot(pre_payload, _t_gradients(transmittance))
+    _zero_stage_d_gradients(diffuse, reflection, transmittance)
+
+    migration = transmittance.project_raw_scaling_to_active_(migrate_legacy=True)
+    state.mark_transmittance_updated()
+    active_after = transmittance.get_scaling.detach().clone()
+    world_after = transmittance.get_xyz.detach().clone()
+    post_payload = _forward_backward_stage_d(
+        camera, state, pipe, background, opt, perceptual, 16001,
+        static_inputs=static_inputs,
+    )
+    post = _parity_snapshot(post_payload, _t_gradients(transmittance))
+    _zero_stage_d_gradients(diffuse, reflection, transmittance)
+    optimizer_after = _optimizer_group_hashes(transmittance)
+    d_hash_after = frozen_branch_hash(diffuse)
+    r_hash_after = frozen_branch_hash(reflection)
+
+    comparisons = {
+        "active_scale": _absolute_difference(active_before, active_after),
+        "world_position": _absolute_difference(world_before, world_after),
+        "outputs": {
+            name: _absolute_difference(pre["outputs"][name], post["outputs"][name])
+            for name in pre["outputs"]
+        },
+        "losses": {
+            name: _absolute_difference(pre["losses"][name], post["losses"][name])
+            for name in pre["losses"]
+        },
+    }
+    failures = []
+    for name in ("active_scale", "world_position"):
+        difference = comparisons[name]
+        if difference["max_abs"] > TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
+            failures.append(name)
+    for group in ("outputs", "losses"):
+        for name, difference in comparisons[group].items():
+            if (
+                difference["max_abs"] > float(opt.stage_d_cache_parity_atol)
+                or difference["mean_abs"] > float(opt.stage_d_cache_parity_mean_atol)
+            ):
+                failures.append(f"{group}:{name}")
+    unchanged_optimizer_groups = {
+        name: optimizer_before[name] == optimizer_after[name]
+        for name in optimizer_before if name != "scaling"
+    }
+    if not all(unchanged_optimizer_groups.values()):
+        failures.append("non-scaling Adam state changed")
+    if d_hash_before != d_hash_after or r_hash_before != r_hash_after:
+        failures.append("D/R state changed during T scale migration")
+    if migration["affected_count"] <= 0:
+        failures.append("legacy checkpoint did not expose expected capped scales")
+    if migration["raw_active_max_abs_after"] > TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
+        failures.append("post-migration raw/active mismatch")
+
+    report = {
+        "schema": "rtgs_stage_d_tscale_migration_parity_v1",
+        "status": "PASS" if not failures else "TSCALE_RECOVERY_PREFLIGHT_BLOCKED",
+        "camera_stem": stem,
+        "optimizer_updates": 0,
+        "migration": migration,
+        "comparisons": comparisons,
+        "optimizer_group_hashes_before": optimizer_before,
+        "optimizer_group_hashes_after": optimizer_after,
+        "unchanged_non_scaling_optimizer_groups": unchanged_optimizer_groups,
+        "diffuse_hash_before": d_hash_before,
+        "diffuse_hash_after": d_hash_after,
+        "reflection_hash_before": r_hash_before,
+        "reflection_hash_after": r_hash_after,
+        "failures": failures,
+    }
+    _atomic_json(Path(target), report)
+    del static_inputs, pre_payload, post_payload, pre, post
+    if failures:
+        raise RuntimeError("T-scale migration parity failed: " + ", ".join(failures))
+    return report
+
+
 def _run_cache_parity(
     target, cameras, static_cache, state, pipe, background, opt, perceptual,
     diffuse, reflection, transmittance,
@@ -1357,10 +1776,13 @@ def _run_cache_parity(
         "rows": rows, "failures": failures,
         "anti_veil_gradient_probe": gradient_probe,
         "status": "PASS" if not failures else (
+            "TSCALE_RECOVERY_PREFLIGHT_BLOCKED"
+            if _tscale_recovery_mode(opt) else (
             "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
             if opt.stage_d_ownership_pilot else (
             "SEMANTIC_REPAIR_PILOT_BLOCKED"
             if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")
+            )
         ),
     }
     _atomic_json(Path(target), report)
@@ -1416,6 +1838,7 @@ def training_stage_d(
 ):
     del testing_iterations, debug_from
     _validate_args(dataset, opt, start_checkpoint)
+    dataset._stage_d_start_checkpoint_path = str(Path(start_checkpoint).resolve())
     dataset._stage_d_start_checkpoint_sha256 = sha256_file(start_checkpoint)
     release = GeometryRelease(Path(dataset.geometry_release_manifest))
     semantic_cuboid = None
@@ -1509,6 +1932,11 @@ def training_stage_d(
         global_iteration, reflection_iteration, transmittance_iteration,
         saving_iterations, checkpoint_iterations,
     )
+    _validate_tscale_recovery_contract(
+        dataset, opt, release, source, fresh_from_stage_b, saved_config,
+        global_iteration, reflection_iteration, transmittance_iteration,
+        saving_iterations, checkpoint_iterations,
+    )
     if opt.stage_d_formal_onset:
         metadata = {
             "schema": "rtgs_stage_d_formal_onset_run_v2",
@@ -1573,6 +2001,40 @@ def training_stage_d(
             "semantic_claim": False,
         }
         _atomic_json(Path(scene.model_path, "ownership_t_long_metadata.json"), metadata)
+    elif _tscale_recovery_mode(opt):
+        preflight = bool(opt.stage_d_tscale_recovery_preflight)
+        metadata = {
+            "schema": "rtgs_stage_d_tscale_recovery_run_v1",
+            "profile": "preflight50" if preflight else "long",
+            "source": source, "config": config,
+            "start_checkpoint": str(Path(start_checkpoint).resolve()),
+            "start_checkpoint_sha256": dataset._stage_d_start_checkpoint_sha256,
+            "required_nodes_global": list(
+                TSCALE_RECOVERY_PREFLIGHT_NODES
+                if preflight else TSCALE_RECOVERY_LONG_NODES
+            ),
+            "global": [16001, 16050] if preflight else [16051, 20000],
+            "transmittance_local": [1001, 1050] if preflight else [1051, 5000],
+            "mode": "cuboid_front_frozen_dr_projected_tscale_recovery",
+            "diffuse_optimizer_updates": 0,
+            "reflection_optimizer_updates": 0,
+            "transmittance_optimizer_updates": 50 if preflight else 3950,
+            "t_topology_updates_allowed": False,
+            "expected_t_count": 4096,
+            "cuboid_space": semantic_cuboid.metadata(),
+            "scale_repair": {
+                "schema": "cuboid_support_projected_cap_v2",
+                "raw_equals_active_after_every_optimizer_update": True,
+                "affected_optimizer_state": ["exp_avg", "exp_avg_sq", "max_exp_avg_sq"],
+                "unaffected_optimizer_groups_preserved": [
+                    "xyz", "color", "opacity", "rotation",
+                ],
+            },
+            "future_depth_activation_global": 40000,
+            "depth_enabled_during_run": False,
+            "semantic_claim": False,
+        }
+        _atomic_json(Path(scene.model_path, "tscale_recovery_metadata.json"), metadata)
     elif opt.stage_d_semantic_repair_pilot:
         metadata = {
             "schema": "rtgs_stage_d_semantic_repair_pilot_v3",
@@ -1666,18 +2128,27 @@ def training_stage_d(
             mask_manifest["manifest_file_sha256"], renderer_config,
             cache_schema=(
                 OWNERSHIP_CACHE_SCHEMA
-                if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+                if (
+                    opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                    or _tscale_recovery_mode(opt)
+                )
                 else None
             )
             or "rtgs_stage_d_static_dr_cache_v1",
         )
         cache_directory = (
             Path(dataset.stage_d_static_cache_path)
-            if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+            if (
+                opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                or _tscale_recovery_mode(opt)
+            )
             else Path(scene.model_path) / "static_dr_cache"
         )
         if (
-            (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+            (
+                opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                or _tscale_recovery_mode(opt)
+            )
             and opt.stage_d_reuse_static_cache
         ):
             static_cache = StaticDRCache(cache_directory, cache_identity, camera_identities)
@@ -1715,16 +2186,40 @@ def training_stage_d(
             "phase_a_frozen_hash_before": frozen_hash_before,
             "cache_path": str(cache_directory.resolve()),
             "cache_reused": bool(
-                (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+                (
+                    opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                    or _tscale_recovery_mode(opt)
+                )
                 and opt.stage_d_reuse_static_cache
             ),
         })
+        if opt.stage_d_tscale_recovery_preflight:
+            migration_report = _run_tscale_migration_parity(
+                Path(scene.model_path) / "tscale_migration_parity.json", cameras,
+                static_cache, state, pipe, background, opt, perceptual,
+                diffuse, reflection, transmittance,
+            )
+            metadata["scale_migration"] = migration_report
+        elif opt.stage_d_tscale_recovery_long:
+            source_scale = _tscale_state_metrics(transmittance)
+            if source_scale["parameterization"] \
+                    != "cuboid_support_projected_cap_v2" \
+                    or source_scale["capped_count"] \
+                    or source_scale["raw_active_max_abs"] \
+                    > TSCALE_RECOVERY_RAW_ACTIVE_ATOL:
+                raise RuntimeError(
+                    "TSCALE_RECOVERY_LONG_BLOCKED: source raw/active scale mismatch"
+                )
+            metadata["scale_source_validation"] = source_scale
         _run_cache_parity(
             Path(scene.model_path) / "cache_parity_report.json", cameras,
             static_cache, state, pipe, background, opt, perceptual,
             diffuse, reflection, transmittance,
         )
-        if not (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long):
+        if not (
+            opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+            or _tscale_recovery_mode(opt)
+        ):
             benchmark_camera = next(
                 camera for camera in cameras
                 if Path(str(camera.image_name)).stem == "000018"
@@ -1740,28 +2235,35 @@ def training_stage_d(
         }
         if frozen_hash_after_preflight != frozen_hash_before:
             verdict = (
+                "TSCALE_RECOVERY_PREFLIGHT_BLOCKED"
+                if _tscale_recovery_mode(opt) else (
                 "OWNERSHIP_T_LONG_BLOCKED"
                 if opt.stage_d_ownership_t_long else (
                 "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
                 if opt.stage_d_ownership_pilot else (
                 "SEMANTIC_REPAIR_PILOT_BLOCKED"
-                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED"))
+                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")))
             )
             raise RuntimeError(f"{verdict}: D/R changed during cache preflight")
         metadata["cache_identity"] = cache_identity
         metadata["cache_aggregate_sha256"] = static_cache.aggregate_sha256
         metadata["phase_a_frozen_hash_before"] = frozen_hash_before
         metadata_name = (
+            "tscale_recovery_metadata.json" if _tscale_recovery_mode(opt) else (
             "ownership_t_long_metadata.json" if opt.stage_d_ownership_t_long else (
             "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot else (
             "semantic_repair_run_metadata.json"
-            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json"))
+            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json")))
         )
         _atomic_json(Path(scene.model_path, metadata_name), metadata)
         restore_rng_state(restored_rng_state)
     viewpoints, camera_indices = restore_camera_deck(cameras, runtime_state)
-    if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long:
-        initial_iteration = 15500 if opt.stage_d_ownership_t_long else 15000
+    if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long \
+            or _tscale_recovery_mode(opt):
+        initial_iteration = (
+            global_iteration if _tscale_recovery_mode(opt)
+            else (15500 if opt.stage_d_ownership_t_long else 15000)
+        )
         initial_checkpoint = make_stage_d_checkpoint(
             diffuse, reflection, transmittance, initial_iteration,
             reflection_iteration, transmittance_iteration, source, config,
@@ -1769,16 +2271,45 @@ def training_stage_d(
             release.validation["aggregate_sha256"],
             make_camera_runtime_state(camera_indices, len(cameras)),
         )
-        torch.save(
-            initial_checkpoint,
-            os.path.join(scene.model_path, f"chkpnt{initial_iteration}.pth"),
+        initial_checkpoint_path = os.path.join(
+            scene.model_path, f"chkpnt{initial_iteration}.pth"
         )
+        torch.save(initial_checkpoint, initial_checkpoint_path)
+        if _tscale_recovery_mode(opt):
+            initial_hash_audit = _write_tscale_checkpoint_audit(
+                scene.model_path, initial_checkpoint_path,
+                initial_checkpoint, frozen_hash_before,
+            )
         del initial_checkpoint
         scene.save(initial_iteration)
         _render_formal_review_node(
             scene, state, pipe, background, release, initial_iteration,
             stems=CACHED_STEMS, static_cache=static_cache,
         )
+        if _tscale_recovery_mode(opt):
+            node_telemetry = {
+                "schema": "rtgs_stage_d_tscale_recovery_node_telemetry_v1",
+                "global_iteration": int(initial_iteration),
+                "reflection_local_iteration": int(reflection_iteration),
+                "transmittance_local_iteration": int(transmittance_iteration),
+                "optimizer_updates_this_step": {
+                    "diffuse": 0, "reflection": 0, "transmittance": 0,
+                },
+                "counts": {
+                    "diffuse": int(diffuse.get_xyz.shape[0]),
+                    "reflection": int(reflection.get_xyz.shape[0]),
+                    "transmittance": int(transmittance.get_xyz.shape[0]),
+                },
+                "t_scale": _tscale_state_metrics(transmittance),
+                "checkpoint_audit": initial_hash_audit,
+                "formal_review_node": True,
+            }
+            node_directory = Path(scene.model_path) / "review_node_telemetry"
+            node_directory.mkdir(parents=True, exist_ok=True)
+            _atomic_json(
+                node_directory / f"iteration_{initial_iteration:06d}.json",
+                node_telemetry,
+            )
     progress = tqdm(range(global_iteration, opt.iterations), desc="Stage D training progress")
     telemetry_path = Path(
         opt.stage_d_telemetry_jsonl
@@ -1788,19 +2319,24 @@ def training_stage_d(
         raise FileExistsError(f"refusing to append a fresh Stage D run to {telemetry_path}")
     last_record = None
     ownership_long_guard = []
+    tscale_recovery_guard = []
     for iteration in range(global_iteration + 1, opt.iterations + 1):
         ownership_long_failures = []
+        tscale_recovery_failures = []
+        scale_projection = None
         phase = (
             _phase_for_iteration(
                 iteration, opt.stage_d_semantic_repair_pilot,
                 opt.stage_d_ownership_pilot,
                 opt.stage_d_ownership_t_long,
+                _tscale_recovery_mode(opt),
             )
             if _cached_mode(opt) else "exact_joint"
         )
         phase_a = phase in (
             "cached_t_warmup", "semantic_repair_cached_t_only",
             "cuboid_path_ownership_t_only", "cuboid_path_ownership_t_long",
+            "cuboid_path_ownership_tscale_recovery",
         )
         if opt.stage_d_cached_twarmup and iteration == CACHED_PHASE_A_END + 1:
             _set_branch_trainable(diffuse, True)
@@ -1867,7 +2403,10 @@ def training_stage_d(
                 diffuse.exposure_optimizer.zero_grad(set_to_none=True)
                 diffuse.optimizer.step(); diffuse.optimizer.zero_grad(set_to_none=True)
                 reflection.optimizer.step(); reflection.optimizer.zero_grad(set_to_none=True)
-            transmittance.optimizer.step(); transmittance.optimizer.zero_grad(set_to_none=True)
+            transmittance.optimizer.step()
+            if _tscale_recovery_mode(opt):
+                scale_projection = transmittance.project_raw_scaling_to_active_()
+            transmittance.optimizer.zero_grad(set_to_none=True)
             if phase_a:
                 state.mark_transmittance_updated()
             else:
@@ -1884,7 +2423,7 @@ def training_stage_d(
                 )
             if (
                 opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                or opt.stage_d_ownership_t_long
+                or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
             ):
                 if int(transmittance.get_xyz.shape[0]) != 4096:
                     raise RuntimeError(
@@ -1910,6 +2449,14 @@ def training_stage_d(
                 (opt.stage_d_semantic_repair_pilot and iteration == SEMANTIC_ENDPOINT)
                 or (opt.stage_d_ownership_pilot and iteration == OWNERSHIP_ENDPOINT)
                 or (opt.stage_d_ownership_t_long and iteration == OWNERSHIP_T_LONG_ENDPOINT)
+                or (
+                    opt.stage_d_tscale_recovery_preflight
+                    and iteration == TSCALE_RECOVERY_PREFLIGHT_ENDPOINT
+                )
+                or (
+                    opt.stage_d_tscale_recovery_long
+                    and iteration == TSCALE_RECOVERY_LONG_ENDPOINT
+                )
             ):
                 frozen_hash_after = {
                     "diffuse": frozen_branch_hash(diffuse),
@@ -1926,8 +2473,10 @@ def training_stage_d(
                         scene.model_path,
                         "ownership_t_long_metadata.json"
                         if opt.stage_d_ownership_t_long else (
+                        "tscale_recovery_metadata.json"
+                        if _tscale_recovery_mode(opt) else (
                         "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot
-                        else "semantic_repair_run_metadata.json"),
+                        else "semantic_repair_run_metadata.json")),
                     ), metadata
                 )
             finite_counts = _finite_models({
@@ -1939,19 +2488,7 @@ def training_stage_d(
             depth_order = package["inside_depth"][valid] <= package["far_depth"][valid]
             wall_ms = float((time.perf_counter() - wall_start) * 1000.0)
             last_record = {
-                "schema": (
-                    "rtgs_stage_d_ownership_t_long_telemetry_v1"
-                    if opt.stage_d_ownership_t_long else (
-                    "rtgs_stage_d_cuboid_path_ownership_telemetry_v4"
-                    if opt.stage_d_ownership_pilot else (
-                    "rtgs_stage_d_semantic_repair_telemetry_v3"
-                    if opt.stage_d_semantic_repair_pilot else (
-                        "rtgs_stage_d_cached_twarmup_telemetry_v1"
-                    if opt.stage_d_cached_twarmup else (
-                        "rtgs_stage_d_formal_telemetry_v2" if opt.stage_d_formal_onset
-                        else "rtgs_stage_d_smoke_telemetry_v1"
-                    ))))
-                ),
+                "schema": _telemetry_schema(opt),
                 "global_iteration": int(iteration),
                 "training_phase": phase,
                 "static_dr_cache_enabled": bool(phase_a),
@@ -2011,7 +2548,7 @@ def training_stage_d(
             }
             if (
                 opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                or opt.stage_d_ownership_t_long
+                or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
             ):
                 last_record["semantic_metrics"] = _semantic_step_metrics(
                     package, gt, camera.specular_mask
@@ -2037,6 +2574,36 @@ def training_stage_d(
                     if failures:
                         ownership_long_failures = failures
                         last_record["ownership_long_guard"]["failures"] = failures
+            if _tscale_recovery_mode(opt):
+                metrics = last_record["semantic_metrics"]
+                cap = metrics.get("t_support_scale_cap", {})
+                energy = metrics["contribution_energy"]
+                last_record["t_scale_projection"] = scale_projection
+                tscale_recovery_guard.append({
+                    "saturation": metrics["ain_saturation_fraction_ge_0_95"],
+                    "black": metrics["high_ain_near_black_conditional_fraction"],
+                    "capped_fraction": float(cap.get("capped_count", 0)) / 4096.0,
+                    "minimum_forward_factor": float(cap.get("minimum_factor", 1.0)),
+                    "projection_affected_fraction": float(
+                        scale_projection["affected_fraction"]
+                    ),
+                    "minimum_pre_projection_factor": float(
+                        scale_projection["minimum_factor_before"]
+                    ),
+                    "post_projection_raw_active_abs": float(
+                        scale_projection["raw_active_max_abs_after"]
+                    ),
+                    "t_energy": float(energy["transmittance_contribution"]),
+                    "cin_energy": float(metrics["cin_energy"]),
+                })
+                tscale_recovery_guard = tscale_recovery_guard[-OWNERSHIP_T_LONG_GUARD_WINDOW:]
+                guard_summary, failures = _tscale_recovery_guard_result(
+                    tscale_recovery_guard
+                )
+                last_record["tscale_recovery_guard"] = guard_summary
+                if failures:
+                    tscale_recovery_failures = failures
+                    last_record["tscale_recovery_guard"]["failures"] = failures
 
             checkpoint_due = iteration in checkpoint_iterations or iteration == opt.iterations
             if checkpoint_due:
@@ -2047,7 +2614,15 @@ def training_stage_d(
                     release.validation["aggregate_sha256"],
                     make_camera_runtime_state(camera_indices, len(cameras)),
                 )
-                torch.save(checkpoint, os.path.join(scene.model_path, f"chkpnt{iteration}.pth"))
+                checkpoint_path = os.path.join(
+                    scene.model_path, f"chkpnt{iteration}.pth"
+                )
+                torch.save(checkpoint, checkpoint_path)
+                if _tscale_recovery_mode(opt):
+                    last_record["checkpoint_audit"] = _write_tscale_checkpoint_audit(
+                        scene.model_path, checkpoint_path, checkpoint,
+                        frozen_hash_before,
+                    )
                 del checkpoint
             if iteration in saving_iterations or iteration == opt.iterations:
                 scene.save(iteration)
@@ -2081,6 +2656,12 @@ def training_stage_d(
                     stems=CACHED_STEMS, static_cache=static_cache,
                 )
                 last_record["formal_review_node"] = True
+            elif _tscale_recovery_mode(opt) and iteration in _required_nodes(opt):
+                _render_formal_review_node(
+                    scene, state, pipe, background, release, iteration,
+                    stems=CACHED_STEMS, static_cache=static_cache,
+                )
+                last_record["formal_review_node"] = True
             else:
                 last_record["formal_review_node"] = False
             if writer:
@@ -2100,11 +2681,28 @@ def training_stage_d(
         last_record["allocator_cache_released"] = bool(cache_released)
         last_record["device_free_before_cache_release_bytes"] = int(device_free_before_release)
         last_record["whole_step_wall_ms"] = float((time.perf_counter() - wall_start) * 1000.0)
+        if _tscale_recovery_mode(opt) and iteration in _required_nodes(opt):
+            node_directory = Path(scene.model_path) / "review_node_telemetry"
+            node_directory.mkdir(parents=True, exist_ok=True)
+            _atomic_json(
+                node_directory / f"iteration_{iteration:06d}.json", last_record,
+            )
         _write_jsonl(telemetry_path, last_record)
         if ownership_long_failures:
             raise RuntimeError(
                 "OWNERSHIP_T_LONG_BLOCKED: " + ", ".join(ownership_long_failures)
             )
+        if tscale_recovery_failures:
+            _write_tscale_abort_hashes(
+                scene.model_path, iteration, diffuse, reflection, transmittance,
+                tscale_recovery_failures,
+            )
+            verdict = (
+                "TSCALE_RECOVERY_PREFLIGHT_BLOCKED"
+                if opt.stage_d_tscale_recovery_preflight
+                else "TSCALE_RECOVERY_LONG_BLOCKED"
+            )
+            raise RuntimeError(verdict + ": " + ", ".join(tscale_recovery_failures))
 
     if opt.stage_d_formal_onset or _cached_mode(opt):
         directory = os.path.join(scene.model_path, "debug", f"iteration_{opt.iterations:06d}")
@@ -2133,6 +2731,10 @@ def training_stage_d(
     final_release_validation = validate_geometry_release(dataset.geometry_release_manifest)
     summary = {
         "status": (
+            "STAGE_D_TSCALE_RECOVERY_PREFLIGHT_COMPLETED"
+            if opt.stage_d_tscale_recovery_preflight else (
+            "STAGE_D_TSCALE_RECOVERY_LONG_COMPLETED"
+            if opt.stage_d_tscale_recovery_long else (
             "STAGE_D_OWNERSHIP_T_LONG_COMPLETED"
             if opt.stage_d_ownership_t_long else (
             "STAGE_D_CUBOID_PATH_OWNERSHIP_ARM_COMPLETED"
@@ -2143,7 +2745,7 @@ def training_stage_d(
             if opt.stage_d_cached_twarmup else (
                 "STAGE_D_FORMAL_ONSET_COMPLETED" if opt.stage_d_formal_onset
                 else "STAGE_D_SMOKE_COMPLETED"
-            ))))
+            ))))))
         ),
         "start_checkpoint": str(Path(start_checkpoint).resolve()),
         "final_checkpoint": str(Path(scene.model_path) / f"chkpnt{opt.iterations}.pth"),
@@ -2156,7 +2758,10 @@ def training_stage_d(
         "composition": "Ct = Cin + (1 - Ain) * Cout",
         "first_bounce": (
             "T from frozen cuboid front position + epsilon*frozen_camera_direction"
-            if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long)
+            if (
+                opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                or _tscale_recovery_mode(opt)
+            )
             else "T from D position + epsilon*d_cam"
         ),
         "second_bounce": "D from frozen back_position + epsilon*d_cam",
@@ -2171,12 +2776,26 @@ def training_stage_d(
         ),
         "ownership_arm": opt.stage_d_ownership_arm if opt.stage_d_ownership_pilot else None,
         "ownership_t_topology_updates": (
-            0 if (opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long) else None
+            0 if (
+                opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
+                or _tscale_recovery_mode(opt)
+            ) else None
         ),
         "ownership_t_long": bool(opt.stage_d_ownership_t_long),
         "ownership_t_long_updates": 4500 if opt.stage_d_ownership_t_long else None,
+        "tscale_recovery": bool(_tscale_recovery_mode(opt)),
+        "tscale_recovery_updates": (
+            50 if opt.stage_d_tscale_recovery_preflight else (
+                3950 if opt.stage_d_tscale_recovery_long else None
+            )
+        ),
+        "final_t_scale": (
+            _tscale_state_metrics(transmittance)
+            if _tscale_recovery_mode(opt) else None
+        ),
     }
     summary_name = (
+        "stage_d_tscale_recovery_summary.json" if _tscale_recovery_mode(opt) else (
         "stage_d_ownership_t_long_summary.json" if opt.stage_d_ownership_t_long else (
         "stage_d_ownership_arm_summary.json" if opt.stage_d_ownership_pilot else (
         "stage_d_semantic_repair_summary.json"
@@ -2184,7 +2803,7 @@ def training_stage_d(
         "stage_d_cached_twarmup_summary.json" if opt.stage_d_cached_twarmup else (
             "stage_d_formal_summary.json" if opt.stage_d_formal_onset
             else "stage_d_smoke_summary.json"
-        ))))
+        )))))
     )
     with open(os.path.join(scene.model_path, summary_name), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True, allow_nan=False)

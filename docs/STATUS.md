@@ -4,6 +4,28 @@ Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `feature/stage-d-transmittance`
 
+The user-executed ownership T-long v1 is now preserved
+`OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and
+stopped on the intended minimum scale-factor guard: active scale and all 4,096
+supports remained legal, but raw maximum scale escaped to 18.47 while the
+minimum active/raw factor fell to 0.019987. Its global-16,000 checkpoint is the
+last formal recovery point and has SHA-256
+`52d1368dfb2a729240265e27f7696b0d230522af3fae795049c70932a673158e`.
+
+The current task implements `cuboid_support_projected_cap_v2`. A CPU audit of
+that exact checkpoint projects 24 affected raw scales to their active values
+with maximum active-scale/world-position differences `2.98e-8/8.94e-8`, leaves
+all 4,096 complete supports strict-inside, and changes only the scaling
+parameter plus affected scaling-Adam rows. CPU and synthetic CUDA tests cover
+forward/raytrace parity, optimizer isolation, support legality, and checkpoint
+round-trip. The complete GPU-enabled repository suite passes 192/192. One
+same-tick static-cache `touch` check failed once, then passed its isolated rerun
+and the complete rerun; this is recorded as a timestamp test flake, not a cache
+or scale-repair failure. After commit, the implementation agent is authorized
+to run only the new global 16,001--16,050 real recovery preflight. No 16,051+ training,
+joint tuning, or Stage E action is authorized until that audit passes and the
+user manually launches the returned continuation command.
+
 Stage B was formally accepted and closed by explicit user authorization on
 2026-07-03. The matched `C03-r8 Tier 2 onset study` v4 run completed both
 branches at global 15,000: Branch A started Reflection at global 3,000 and

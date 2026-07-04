@@ -18,6 +18,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
     def __init__(self):
         super().__init__()
         self.position_parameterization = "world"
+        self.scaling_parameterization = "exp_v1"
         self.cuboid_space = None
 
     @property
@@ -73,6 +74,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         self._opacity = nn.Parameter(_raw_from_unit(torch.full((count, 1), 0.01, device=device, dtype=dtype)))
         self._color = nn.Parameter(_raw_from_unit(torch.full((count, 3), 0.5, device=device, dtype=dtype)))
         self.position_parameterization = "cuboid_inside_sigmoid_v1"
+        self.scaling_parameterization = "exp_v1"
         self._reset_stats(count, device)
         self.topology_version = 0
         self.initialization = {
@@ -120,6 +122,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             _raw_from_unit(torch.full((count, 3), 0.5, device=device, dtype=dtype))
         )
         self.position_parameterization = "cuboid_inside_support_sigmoid_v2"
+        self.scaling_parameterization = "cuboid_support_uniform_cap_v1"
         self._reset_stats(count, device); self.topology_version = 0
         self.initialization = {
             "mode": "random_strict_inside", "count": int(count), "seed": int(seed),
@@ -202,11 +205,7 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
     def capture(self):
         state = super().capture()
         state["position_parameterization"] = self.position_parameterization
-        state["scaling_parameterization"] = (
-            "cuboid_support_uniform_cap_v1"
-            if self.position_parameterization == "cuboid_inside_support_sigmoid_v2"
-            else "exp_v1"
-        )
+        state["scaling_parameterization"] = self.scaling_parameterization
         state["cuboid_space"] = (
             self.cuboid_space.metadata() if self.cuboid_space is not None else None
         )
@@ -216,11 +215,15 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
         mode = state.get("position_parameterization", "world")
         scaling_mode = state.get("scaling_parameterization", "exp_v1")
         if mode == "cuboid_inside_support_sigmoid_v2" \
-                and scaling_mode != "cuboid_support_uniform_cap_v1":
+                and scaling_mode not in (
+                    "cuboid_support_uniform_cap_v1",
+                    "cuboid_support_projected_cap_v2",
+                ):
             raise ValueError(
                 "support-safe T checkpoint has incompatible scale parameterization"
             )
         self.position_parameterization = mode
+        self.scaling_parameterization = scaling_mode
         metadata = state.get("cuboid_space")
         if mode in ("cuboid_inside_sigmoid_v1", "cuboid_inside_support_sigmoid_v2"):
             if not isinstance(metadata, dict):
@@ -239,6 +242,88 @@ class TransmittanceSurfelModel(ReflectionSurfelModel):
             raise ValueError(f"unsupported T position parameterization: {mode}")
         super().restore(state, args)
         self.assert_strictly_inside()
+
+    @torch.no_grad()
+    def project_raw_scaling_to_active_(self, *, migrate_legacy: bool = False) -> dict:
+        """Canonicalize support-safe raw scale and only its affected Adam rows.
+
+        The cuboid cap remains a fail-safe in the forward path, but projected-v2
+        checkpoints require the stored raw scale to equal that active scale after
+        every optimizer update.  Multiplying both tangent axes by the same cap
+        factor preserves anisotropy and the complete forward geometry.
+        """
+        if self.position_parameterization != "cuboid_inside_support_sigmoid_v2" \
+                or self.cuboid_space is None:
+            raise RuntimeError("T scale projection requires support-safe cuboid mode")
+        allowed = {
+            "cuboid_support_uniform_cap_v1", "cuboid_support_projected_cap_v2",
+        }
+        if self.scaling_parameterization not in allowed:
+            raise RuntimeError("T scale projection received an incompatible parameterization")
+        if self.optimizer is None:
+            raise RuntimeError("T scale projection requires initialized optimizer state")
+
+        raw_before = torch.exp(self._scaling)
+        active_before = self.cuboid_space.constrain_support_scaling(
+            self.get_rotation, raw_before, sigma=3.0,
+        )
+        ratio_before = active_before / raw_before.clamp_min(torch.finfo(raw_before.dtype).tiny)
+        factor_before = ratio_before.amin(dim=-1)
+        cap_tolerance = (
+            2e-6 if self.scaling_parameterization == "cuboid_support_projected_cap_v2"
+            else 1e-7
+        )
+        affected = factor_before.lt(1.0 - cap_tolerance)
+        affected_count = int(affected.sum())
+
+        state = self.optimizer.state.get(self._scaling, {})
+        state_rows_zeroed = []
+        if affected_count:
+            self._scaling[affected] = torch.log(active_before[affected])
+            for name in ("exp_avg", "exp_avg_sq", "max_exp_avg_sq"):
+                value = state.get(name)
+                if torch.is_tensor(value):
+                    if value.shape != self._scaling.shape:
+                        raise RuntimeError(f"T scaling Adam {name} shape mismatch")
+                    value[affected] = 0
+                    state_rows_zeroed.append(name)
+
+        raw_after = torch.exp(self._scaling)
+        active_after = self.cuboid_space.constrain_support_scaling(
+            self.get_rotation, raw_after, sigma=3.0,
+        )
+        ratio_after = active_after / raw_after.clamp_min(torch.finfo(raw_after.dtype).tiny)
+        factor_after = ratio_after.amin(dim=-1)
+        difference = (active_after - raw_after).abs()
+        tolerance = 8.0 * torch.finfo(raw_after.dtype).eps
+        if not torch.isfinite(raw_after).all() or not torch.isfinite(active_after).all():
+            raise FloatingPointError("T scale projection produced non-finite scale")
+        if float(difference.max()) > tolerance * max(1.0, float(active_after.abs().max())):
+            raise RuntimeError("T scale projection failed raw/active consistency")
+
+        self.scaling_parameterization = "cuboid_support_projected_cap_v2"
+        self.assert_strictly_inside()
+        step = state.get("step")
+        step_preserved = (
+            True if step is None else (
+                bool(torch.isfinite(step).all()) if torch.is_tensor(step) else True
+            )
+        )
+        return {
+            "schema": "cuboid_support_projected_cap_v2",
+            "legacy_migration": bool(migrate_legacy),
+            "affected_count": affected_count,
+            "affected_fraction": affected_count / max(int(self._scaling.shape[0]), 1),
+            "minimum_factor_before": float(factor_before.min()),
+            "minimum_factor_after": float(factor_after.min()),
+            "raw_scale_max_before": float(raw_before.max()),
+            "active_scale_max_before": float(active_before.max()),
+            "raw_scale_max_after": float(raw_after.max()),
+            "active_scale_max_after": float(active_after.max()),
+            "raw_active_max_abs_after": float(difference.max()),
+            "adam_state_rows_zeroed": state_rows_zeroed,
+            "adam_step_preserved": step_preserved,
+        }
 
     def training_setup(self, args) -> None:
         if self.get_xyz.numel() == 0:

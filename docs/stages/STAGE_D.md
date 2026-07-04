@@ -323,3 +323,25 @@ The unique output is
 Verdict is only `OWNERSHIP_T_LONG_HOLD` or `OWNERSHIP_T_LONG_BLOCKED`. HOLD does
 not authorize joint fine-tuning, final glass physics, Stage D acceptance, or
 Stage E.
+
+## Authorized global-16,000 projected-scale recovery
+
+The v1 long run is preserved blocked evidence. Its only recovery source is the
+complete global-16,000 / R-local-12,000 / T-local-1,000 checkpoint with SHA-256
+`52d1368dfb2a729240265e27f7696b0d230522af3fae795049c70932a673158e`.
+It may be migrated to `cuboid_support_projected_cap_v2`: raw T scale is replaced
+by the numerically identical active scale for capped rows, and only those rows'
+scaling Adam moments are cleared. Fixed-input active geometry, raytrace/Ct, and
+loss parity plus save/load legality are mandatory.
+
+The implementation agent is authorized to run exactly 50 real steps,
+16,001--16,050, in a new output. D/R remain fully frozen, T remains 4,096 with
+no topology updates, cuboid-front and all ownership gates remain unchanged,
+and L_depth remains off. Required complete nodes are 16,000, 16,001, 16,010,
+16,025, and 16,050. Verdict is only
+`TSCALE_RECOVERY_PREFLIGHT_PASS` or `TSCALE_RECOVERY_PREFLIGHT_BLOCKED`.
+
+PASS authorizes only a user-operated T-only continuation from the new 16,050
+checkpoint to 20,000. That continuation must keep the projected-scale repair,
+write checkpoint/PLY/fixed-nine/hash audits at least every 250 steps, stop on
+any guard, and never enter joint tuning or Stage E.

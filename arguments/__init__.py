@@ -174,6 +174,8 @@ class OptimizationParams(ParamGroup):
         self.stage_d_ownership_arm = ""
         self.stage_d_reuse_static_cache = False
         self.stage_d_ownership_t_long = False
+        self.stage_d_tscale_recovery_preflight = False
+        self.stage_d_tscale_recovery_long = False
         self.stage_d_phase_a_end_iteration = 18_000
         self.stage_d_cache_parity_atol = 2e-5
         self.stage_d_cache_parity_mean_atol = 2e-6
