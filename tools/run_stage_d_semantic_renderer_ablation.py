@@ -403,6 +403,7 @@ def main():
         raise SystemExit("refusing to run the real operator without --execute")
     if not torch.cuda.is_available():
         raise RuntimeError("D-015 fixed-nine renderer operator requires CUDA")
+    torch.set_grad_enabled(False)
     output = args.output.resolve()
     if output.exists():
         raise FileExistsError(f"refusing to overwrite D-015 output: {output}")
