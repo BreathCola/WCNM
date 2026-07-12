@@ -274,14 +274,22 @@ def exit_face_normals(cuboid, back_points: torch.Tensor):
 def make_back_face_candidate_filter(cuboid, candidate_classes, back_points, delta: float):
     normals = exit_face_normals(cuboid, back_points)
     delta = float(delta)
+    cursor = {"start": 0}
 
     def _filter(candidate_ids, exact_valid, points, distance, origins, directions):
+        start = cursor["start"]
+        end = start + int(origins.shape[0])
+        if end > back_points.shape[0]:
+            raise RuntimeError("Arm 3 candidate filter received more rays than back-face references")
+        chunk_back_points = back_points[start:end].to(points)
+        chunk_normals = normals[start:end].to(points)
+        cursor["start"] = end
         safe_ids = candidate_ids.clamp_min(0)
         classes = candidate_classes.to(candidate_ids.device)[safe_ids]
         strict_outside = classes == SUPPORT_STRICT_OUTSIDE
         handoff_class = (classes == SUPPORT_INTERFACE) | (classes == SUPPORT_CROSSING)
         clearance = cuboid.signed_clearance(points)
-        exit_distance = ((points - back_points[:, None, :]) * normals[:, None, :]).sum(dim=-1)
+        exit_distance = ((points - chunk_back_points[:, None, :]) * chunk_normals[:, None, :]).sum(dim=-1)
         accepted_handoff = handoff_class & (exit_distance > delta) & (clearance < -delta)
         strict_inside = classes == SUPPORT_STRICT_INSIDE
         return (strict_outside | accepted_handoff) & ~strict_inside

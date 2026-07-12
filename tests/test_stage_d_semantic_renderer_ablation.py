@@ -10,7 +10,7 @@ from utils.semantic_renderer_ablation import (
     black_pixel_attribution, make_back_face_candidate_filter,
     mask_boundary_diagnostics, overbright_diagnostics,
 )
-from geometry.cuboid_space import CuboidSpace, SUPPORT_STRICT_INSIDE
+from geometry.cuboid_space import CuboidSpace, SUPPORT_INTERFACE, SUPPORT_STRICT_INSIDE
 from tools.audit_stage_d_semantic_renderer_ablation import main as audit_main
 
 
@@ -113,6 +113,21 @@ def test_arm3_back_face_filter_rejects_strict_inside_candidate():
     points = torch.tensor([[[0.0, 0.0, 1.2]]], dtype=torch.float64)
     accepted = filt(ids, exact, points, torch.ones((1, 1)), points, points)
     assert accepted.tolist() == [[False]]
+
+
+def test_arm3_back_face_filter_advances_across_chunks():
+    cuboid = _space()
+    candidate_classes = torch.tensor([SUPPORT_INTERFACE])
+    back = torch.tensor([[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]], dtype=torch.float64)
+    filt = make_back_face_candidate_filter(cuboid, candidate_classes, back, 1e-5)
+    ids = torch.tensor([[0]])
+    exact = torch.tensor([[True]])
+    outside_point = torch.tensor([[[0.0, 0.0, 1.2]]], dtype=torch.float64)
+    inside_point = torch.tensor([[[0.0, 0.0, 0.9]]], dtype=torch.float64)
+    accepted_first = filt(ids, exact, outside_point, torch.ones((1, 1)), outside_point, outside_point)
+    accepted_second = filt(ids, exact, inside_point, torch.ones((1, 1)), inside_point, inside_point)
+    assert accepted_first.tolist() == [[True]]
+    assert accepted_second.tolist() == [[False]]
 
 
 def test_black_boundary_and_overbright_metrics_are_float_tensor_based():
