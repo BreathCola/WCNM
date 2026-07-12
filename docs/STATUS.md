@@ -17,6 +17,13 @@ checkpoint output, short pilot, joint training, Stage E action, or separation
 claim is authorized. The unique planned output is
 `output/stage_d_tihubird_c03r8_semantic_renderer_repair_zero_step_ablation_v1`.
 
+D-015 implementation is now present as a dedicated zero-update operator and
+CPU audit path. It has not been launched on the real fixed-nine views by the
+implementation agent. The operator is intentionally separate from the ordinary
+Stage D training loop and is required to write no checkpoint, PLY, or resume
+state; its formal output verdict remains `AWAITING_USER_REVIEW`, `HOLD`, or
+`BLOCKED` only after the user explicitly runs it.
+
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and
 stopped on the intended minimum scale-factor guard: active scale and all 4,096

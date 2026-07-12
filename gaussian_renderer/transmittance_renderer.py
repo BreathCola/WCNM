@@ -153,7 +153,7 @@ def cuboid_front_transmission_inputs(front_position, direction, t_near, epsilon)
 
 def _trace(
     model, origins, directions, acceleration, state, return_aux, diagnostics,
-    surfel_filter=None,
+    surfel_filter=None, candidate_hit_filter=None,
 ):
     traced = raytrace(
         model, origins, directions, acceleration=acceleration,
@@ -162,6 +162,7 @@ def _trace(
         return_diagnostics=diagnostics,
         checkpoint_chunks=bool(state.ray_checkpoint_chunks and not diagnostics),
         surfel_filter=surfel_filter,
+        candidate_hit_filter=candidate_hit_filter,
     )
     if return_aux and diagnostics:
         outputs, aux, diagnostic = traced
@@ -367,6 +368,7 @@ def build_static_dr_inputs(
         "package": package,
         "height": int(height), "width": int(width), "indices": indices,
         "first_origin": first_origin, "direction": direction,
+        "second_origin": second_origin, "back_position_selected": flat_back,
         "first_distance": first_distance,
         "far": t_far.reshape(-1, 1)[indices],
         "outside_raw": outside_raw, "outside_alpha": outside_alpha,

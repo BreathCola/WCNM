@@ -61,6 +61,7 @@ def trace_candidates(
     return_diagnostics: bool = False,
     candidate_parameter_table: torch.Tensor = None,
     surfel_filter: torch.Tensor = None,
+    candidate_hit_filter=None,
 ):
     ray_count = origins.shape[0]
     counts = offsets[1:] - offsets[:-1]
@@ -119,6 +120,13 @@ def trace_candidates(
     local_v = (relative * tangent_v).sum(dim=-1) / scaling[..., 1]
     radius2 = local_u.square() + local_v.square()
     exact_valid = candidate_valid & (~parallel) & (distance > 0.0) & (radius2 <= float(cutoff_sigma) ** 2)
+    if candidate_hit_filter is not None:
+        extra_valid = candidate_hit_filter(
+            padded, exact_valid, point, distance, origins, directions
+        )
+        if extra_valid.shape != exact_valid.shape:
+            raise ValueError("candidate_hit_filter must return the exact candidate matrix shape")
+        exact_valid = exact_valid & extra_valid.to(device=exact_valid.device, dtype=torch.bool)
     exact_intersection_counts = exact_valid.sum(dim=1) if return_diagnostics else None
     opacity = candidate_parameters["opacity"][..., 0] * torch.exp(-0.5 * radius2)
     opacity = torch.where(exact_valid, opacity.clamp(0.0, 1.0 - 1e-6), torch.zeros_like(opacity))

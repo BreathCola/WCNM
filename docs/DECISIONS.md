@@ -3262,3 +3262,20 @@ Required ablation: Both source groups and all four arms are mandatory. Synthetic
 cuboid tests must prove the exit-side sign cases; CUDA tests must prove
 candidate admission before compositing; real audit must prove legacy-fallback
 equality, outside-mask equality, immutable hashes, and zero optimizer updates.
+
+Observability-only extension: The D-015 implementation may additionally export
+three diagnostic families without changing any image-formation formula, loss,
+optimizer, scheduler, checkpoint, field representation, mesh/cache, branch
+ownership contract, or verdict semantics. The first is multi-label near-black
+attribution using live float tensors with labels `two_hit_invalid`, `T_no_hit`,
+`Cin_low_energy`, `Ain_high_and_Cin_dark`, `strict_Cout_low`,
+`unfiltered_Cout_high_but_strict_low`,
+`safe_R_has_energy_but_formal_R_off`, and residual/unattributed. The second is
+mask-boundary observability: distance to the hard-mask boundary, 1/2/4/8-pixel
+band near-black fractions, banded `mask_hard & !valid_two_hit` ratios, boundary
+maps, validity-disagreement maps, and overlays. The third is unclamped
+over-bright observability: pre-clamp final RGB over-1 fraction/max, branch
+contribution energy, R/Cin/Cout nonzero overlap, positive energy delta from Arm
+0, and dominant branch labels for over-bright pixels. These fields are audit
+evidence only; they cannot tune gates, read GT/ROI for decisions, authorize
+training, or claim semantic separation.

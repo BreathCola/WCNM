@@ -395,3 +395,8 @@ contact sheets; outside-mask bitwise parity; source/release/cache immutability;
 and zero-update proof. PNG is visual evidence only. Transparent D direct stays
 off and no Arm 4 is implemented. Verdict is only `AWAITING_USER_REVIEW`,
 `HOLD`, or `BLOCKED`; no training or Stage E action follows automatically.
+
+Implementation note: D-015 uses a dedicated zero-update operator rather than
+the ordinary Stage D training loop. It may construct models for read-only
+forward rendering, but it must not call backward, optimizer/scheduler steps, or
+write checkpoint/PLY/resume artifacts.

@@ -45,6 +45,7 @@ def raytrace(
     return_diagnostics: bool = False,
     checkpoint_chunks: bool = False,
     surfel_filter: torch.Tensor = None,
+    candidate_hit_filter=None,
 ):
     if not (return_alpha and return_depth and return_hit_mask):
         raise ValueError("Stage B raytrace currently requires alpha, depth, and hit-mask outputs")
@@ -120,6 +121,7 @@ def raytrace(
                     return_diagnostics=False,
                     candidate_parameter_table=parameter_table,
                     surfel_filter=surfel_filter,
+                    candidate_hit_filter=candidate_hit_filter,
                 )
                 if return_aux:
                     retry_outputs, retry_aux = retry_result
@@ -160,6 +162,7 @@ def raytrace(
                 return_diagnostics=return_diagnostics,
                 candidate_parameter_table=candidate_parameter_table,
                 surfel_filter=surfel_filter,
+                candidate_hit_filter=candidate_hit_filter,
             )
         if return_aux and return_diagnostics:
             outputs, aux, trace_diagnostics = result
