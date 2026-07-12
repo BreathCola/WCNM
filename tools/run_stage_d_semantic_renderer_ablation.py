@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import gc
 import json
 import os
 import subprocess
@@ -111,7 +112,7 @@ def default_args(model_path: Path):
     dataset.transparent_reflection_mode = "off"
     dataset.cout_ownership_mode = "support_safe_outside"
     dataset.ray_background = "scene"
-    dataset.ray_chunk_size = 2048
+    dataset.ray_chunk_size = 128
     opt.iterations = 15000
     opt.lambda_spec = 0.2
     opt.specular_k0 = 0.9
@@ -215,7 +216,7 @@ def render_arms(context, camera, background):
     arm1 = with_final_linear(render_stage_d(camera, state1, pipe, background, return_ray_diagnostics=True), background)
     legacy_state = StageBRenderState(
         diffuse=context["diffuse"], reflection=context["reflection"],
-        scene_radius=context["scene"].cameras_extent, ray_chunk_size=2048,
+        scene_radius=context["scene"].cameras_extent, ray_chunk_size=context["dataset"].ray_chunk_size,
         ray_checkpoint_chunks=False,
     )
     legacy = with_final_linear(render_stage_b(camera, legacy_state, pipe, background), background)
@@ -290,41 +291,79 @@ def run_group(group: str, checkpoint: Path, output: Path):
     cameras = camera_by_stem(context["scene"])
     rows = []
     t_snapshot_hashes = {}
+
+    def record_package(stem: str, arm: str, package: dict, arm0: dict, hard: torch.Tensor):
+        black, black_maps = black_pixel_attribution(package, hard)
+        boundary, boundary_maps = mask_boundary_diagnostics(
+            hard, package["two_hit_valid"], package["final"]
+        )
+        over = overbright_diagnostics(package, arm0 if arm != "arm_0" else None)
+        parity = assert_outside_mask_bitwise_parity(arm0, package, hard)
+        view_dir = group_output / arm / stem
+        save_tensor_products(package, view_dir, maps={**black_maps, **boundary_maps})
+        record = {
+            "schema": SCHEMA,
+            "group": group,
+            "stem": stem,
+            "arm": arm,
+            "black_attribution": black,
+            "mask_boundary": boundary,
+            "overbright": over,
+            "outside_mask_parity": parity,
+            "fallback_validation": package.get("fallback_validation"),
+            "handoff_metadata": package.get("handoff_metadata"),
+            "tensor_hashes": {
+                name: tensor_sha256(value)
+                for name, value in package.items() if torch.is_tensor(value)
+            },
+        }
+        atomic_json(view_dir / "stats.json", record)
+        rows.append(record)
+
     for stem in FORMAL_STEMS:
         camera = cameras[stem]
-        arms = render_arms(context, camera, background)
         t_snapshot_hashes[stem] = before_hash["transmittance"]
-        arm0 = arms["arm_0"]
         hard = camera.specular_mask
-        for arm, package in arms.items():
-            black, black_maps = black_pixel_attribution(package, hard)
-            boundary, boundary_maps = mask_boundary_diagnostics(
-                hard, package["two_hit_valid"], package["final"]
-            )
-            over = overbright_diagnostics(package, arm0 if arm != "arm_0" else None)
-            parity = assert_outside_mask_bitwise_parity(arm0, package, hard)
-            view_dir = group_output / arm / stem
-            save_tensor_products(package, view_dir, maps={**black_maps, **boundary_maps})
-            record = {
-                "schema": SCHEMA,
-                "group": group,
-                "stem": stem,
-                "arm": arm,
-                "black_attribution": black,
-                "mask_boundary": boundary,
-                "overbright": over,
-                "outside_mask_parity": parity,
-                "fallback_validation": package.get("fallback_validation"),
-                "handoff_metadata": package.get("handoff_metadata"),
-                "tensor_hashes": {
-                    name: tensor_sha256(value)
-                    for name, value in package.items() if torch.is_tensor(value)
-                },
-            }
-            atomic_json(view_dir / "stats.json", record)
-            rows.append(record)
-            del package
-        del arms
+        pipe = context["pipe"]
+        state0 = make_state(context, "off")
+        arm0 = with_final_linear(
+            render_stage_d(camera, state0, pipe, background, return_ray_diagnostics=True),
+            background,
+        )
+        record_package(stem, "arm_0", arm0, arm0, hard)
+
+        state1 = make_state(context, "support_safe_outside")
+        arm1 = with_final_linear(
+            render_stage_d(camera, state1, pipe, background, return_ray_diagnostics=True),
+            background,
+        )
+        record_package(stem, "arm_1", arm1, arm0, hard)
+        del arm1, state1
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        legacy_state = StageBRenderState(
+            diffuse=context["diffuse"], reflection=context["reflection"],
+            scene_radius=context["scene"].cameras_extent,
+            ray_chunk_size=context["dataset"].ray_chunk_size,
+            ray_checkpoint_chunks=False,
+        )
+        legacy = with_final_linear(render_stage_b(camera, legacy_state, pipe, background), background)
+        arm2 = with_final_linear(apply_legacy_fallback(arm0, legacy, hard), background)
+        record_package(stem, "arm_2", arm2, arm0, hard)
+        del legacy, arm2, legacy_state
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        static_inputs = build_static_dr_inputs(
+            camera, state0, pipe, background,
+            return_ray_aux=False, return_ray_diagnostics=True,
+        )
+        arm3 = with_final_linear(render_arm3_with_handoff(state0, background, static_inputs), background)
+        record_package(stem, "arm_3", arm3, arm0, hard)
+        del static_inputs, arm3, arm0, state0
+        torch.cuda.empty_cache()
+        gc.collect()
     after_hash = {
         "diffuse": nested_tensor_hash(context["diffuse"].capture()),
         "reflection": nested_tensor_hash(context["reflection"].capture()),
