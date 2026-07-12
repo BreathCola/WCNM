@@ -41,6 +41,7 @@ from utils.semantic_renderer_ablation import (
     overbright_diagnostics, render_arm3_with_handoff, save_tensor_products,
     tensor_sha256, write_aggregate,
 )
+from utils.specular_mask import validate_specular_mask_set
 
 
 SOURCE_15000 = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15000.pth"
@@ -133,6 +134,9 @@ def load_group(group: str, checkpoint: Path, group_output: Path):
         epsilon=1e-6, device="cuda", dtype=torch.float32,
     )
     dataset._semantic_cuboid_space_metadata = cuboid.metadata()
+    dataset._validated_specular_mask_manifest = validate_specular_mask_set(
+        dataset.source_path, dataset.images, dataset.specular_masks
+    )
     scene = Scene(dataset, diffuse, shuffle=False, initialize_model=False, write_metadata=False)
     header = torch.load(checkpoint, map_location="cpu")
     if header.get("format") == "rtgs_stage_b":
