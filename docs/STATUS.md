@@ -9,15 +9,18 @@ T ownership. It replaces any continuation of D-015 Arms 0--3. D-015 code and
 historical outputs remain read-only evidence and must not be deleted,
 overwritten, resumed, or repaired as part of D-016.
 
-D-016 introduces an engineering supervision path for TiHuBird bird/base masks.
-Grounded-SAM2 may create proposal masks and human-review materials, but proposal
-outputs are not formal training supervision. Stage D training may only consume a
-separate reviewed internal-object manifest that records 111 approved stems,
-RGB/mask hashes, provenance, and a canonical payload hash. The glass mask still
-defines the T/Cout ray domain (`mask_hard & valid_two_hit`); the internal-object
-mask only filters transferred-D to T initialization and adds an explicitly
-enabled `Ain` occupancy loss. Full-frame RGB loss and Cout remain active, and
-novel-view rendering must not require object masks.
+D-016 introduces an engineering supervision path for TiHuBird `bird`,
+`bird_support`, and `union = bird | bird_support` masks. The former vague
+`base` wording is now only a legacy manifest alias for `bird_support`; the
+semantic version is `tihubird_bird_and_support_v2`. Grounded-SAM2 may create
+proposal masks and human-review materials, but proposal outputs are not formal
+training supervision. Stage D training may only consume a separate reviewed
+internal-object manifest that records 111 approved stems, RGB/mask hashes,
+provenance, and a canonical payload hash. The glass mask still defines the
+T/Cout ray domain (`mask_hard & valid_two_hit`); the internal-object mask only
+filters transferred-D to T initialization and adds an explicitly enabled `Ain`
+occupancy loss. Full-frame RGB loss and Cout remain active, and novel-view
+rendering must not require object masks.
 
 The bounded D-016 pilot, when explicitly launched by the user, must start fresh
 from the immutable Branch-A global-15,000 D/R checkpoint and immutable Stage-C
@@ -36,11 +39,24 @@ GroundingDINO checkpoint SHA-256
 `3b3ca2563c77c69f651d7bd133e97139c186df06231157a64c507099c52bc799`.
 The implementation agent ran only a fixed-nine independent-frame proposal probe
 at `output/stage_d_tihubird_internal_object_mask_proposal_fixednine_probe_v1`.
-It is not formal supervision. The probe is `BLOCKED_BY_MASK_QUALITY`: several
-base masks fill nearly the whole glass region and views 000028, 000055, 000069,
-and 000110 have large outside-glass removal fractions, including 0.6623 and
-0.8270. The 111-view proposal, formal promotion, D-016 pilot, D-015, and Stage E
-were not run.
+It is not formal supervision. That probe is invalid for promotion because the
+support target was still named vaguely as `base`, several support masks filled
+nearly the whole glass region, views 000028, 000055, 000069, and 000110 had
+large outside-glass removal fractions including 0.6623 and 0.8270, and the
+proposal generator ORed all prompt/box/SAM candidates instead of selecting a
+reviewable single candidate per semantic class. D-016a corrects this by
+generating fixed-nine candidate-review artifacts only, scoring each
+Grounded-SAM2 prompt/box/SAM mask independently for `bird`, `support_plinth`,
+and `support_mount`, and forming `bird_support` only from selected support
+subclasses. The 111-view proposal, formal promotion, D-016 pilot, D-015, and
+Stage E were not run.
+
+D-016a also replaces the earlier internal-object initialization placeholder:
+transferred-D candidates are now actually projected into the formal reviewed
+object union, glass mask, and valid two-hit domain. The filter records pre/post
+candidate counts, selected/rejected D-index hashes, valid/positive view
+histograms, boundary rejections, support-ratio rejections, and deterministic
+random-fill count before `create_transferred_from_diffuse` copies any D surfels.
 
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and

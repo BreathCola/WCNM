@@ -24,27 +24,51 @@ import torch.nn.functional as F
 PROPOSAL_ROLE = "stage_d_internal_object_mask_proposal"
 REVIEWED_ROLE = "stage_d_formal_reviewed_internal_object_masks"
 SCHEMA_VERSION = 1
+INTERNAL_OBJECT_SEMANTICS_VERSION = "tihubird_bird_and_support_v2"
 MASK_INTERPOLATION = "opencv.INTER_LINEAR"
 HARD_THRESHOLD = 0.5
 EXPECTED_STEMS = [f"{index:06d}" for index in range(111)]
-MASK_ROLES = ("bird", "base", "union")
+MASK_ROLES = ("bird", "bird_support", "union")
+LEGACY_BASE_ALIAS = "base"
 
 BIRD_PROMPTS = (
-    "a colorful bird figurine inside the transparent glass display case",
-    "bird figurine",
-    "decorative bird sculpture",
-    "toy bird",
+    "the physical taxidermy bird specimen inside the glass display case",
+    "the mounted bird specimen inside the enclosure",
+    "the real bird exhibit inside the glass case",
+    "the physical bird specimen",
 )
-BASE_PROMPTS = (
-    "the pedestal and supporting display base beneath the bird inside the transparent glass display case",
-    "display pedestal",
-    "supporting base",
-    "bird stand",
+BIRD_SUPPORT_PROMPTS = (
+    "the small white rectangular platform directly underneath the bird",
+    "the black mounting stand connecting the bird to the white platform",
+)
+SUPPORT_PLINTH_PROMPTS = (
+    "the small white rectangular platform directly underneath the bird",
+    "the white display plinth immediately supporting the bird",
+    "the small white platform below the mounted bird",
+    "the rectangular white support platform under the bird",
+)
+SUPPORT_MOUNT_PROMPTS = (
+    "the black mounting stand connecting the bird to the white platform",
+    "the black support rod underneath the bird",
+    "the physical mounting support below the bird",
+    "the bird mounting stand inside the glass case",
 )
 
 
 class InternalObjectMaskError(RuntimeError):
     """Raised when internal-object mask provenance or payload is invalid."""
+
+
+DEFAULT_CANDIDATE_GUARDS = {
+    "bird_max_glass_ratio": 0.45,
+    "bird_support_max_glass_ratio": 0.45,
+    "union_max_glass_ratio": 0.60,
+    "max_raw_outside_glass_ratio": 0.20,
+    "max_glass_iou": 0.85,
+    "support_max_bird_overlap_ratio": 0.35,
+    "max_boundary_touch_count": 2,
+    "min_inside_glass_ratio": 0.70,
+}
 
 
 def sha256_file(path: Path | str) -> str:
@@ -102,6 +126,148 @@ def _bbox(mask: np.ndarray) -> list[int] | None:
     if not len(xs):
         return None
     return [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1]
+
+
+def mask_component_summary(mask: np.ndarray) -> dict[str, Any]:
+    binary = np.asarray(mask, dtype=bool)
+    if not binary.any():
+        return {
+            "connected_components": 0,
+            "largest_component_area": 0,
+            "largest_component_ratio": 0.0,
+            "centroid_xy": None,
+            "bbox_xyxy": None,
+            "touches_image_boundary": False,
+        }
+    labels_count, labels, stats, centroids = cv2.connectedComponentsWithStats(
+        binary.astype(np.uint8), 8
+    )
+    areas = stats[1:, cv2.CC_STAT_AREA] if labels_count > 1 else np.array([], dtype=np.int32)
+    largest_index = int(np.argmax(areas)) + 1 if areas.size else 0
+    bbox = _bbox(binary.astype(np.uint8))
+    h, w = binary.shape
+    touches = bool(
+        binary[0, :].any() or binary[-1, :].any()
+        or binary[:, 0].any() or binary[:, -1].any()
+    )
+    return {
+        "connected_components": int(max(labels_count - 1, 0)),
+        "largest_component_area": int(areas.max()) if areas.size else 0,
+        "largest_component_ratio": float(areas.max() / max(binary.sum(), 1)) if areas.size else 0.0,
+        "centroid_xy": (
+            [float(centroids[largest_index][0]), float(centroids[largest_index][1])]
+            if largest_index else None
+        ),
+        "bbox_xyxy": bbox,
+        "touches_image_boundary": touches,
+        "image_size": [int(w), int(h)],
+    }
+
+
+def candidate_metrics(
+    mask: np.ndarray,
+    glass_mask: np.ndarray,
+    *,
+    bird_mask: np.ndarray | None = None,
+) -> dict[str, Any]:
+    raw = np.asarray(mask, dtype=bool)
+    glass = np.asarray(glass_mask, dtype=bool)
+    if raw.shape != glass.shape:
+        raise InternalObjectMaskError("candidate/glass shape mismatch")
+    clipped = raw & glass
+    union = raw | glass
+    glass_area = int(glass.sum())
+    raw_area = int(raw.sum())
+    clipped_area = int(clipped.sum())
+    outside = raw & ~glass
+    component = mask_component_summary(raw)
+    bbox = component["bbox_xyxy"]
+    touch_glass_edges = {"top": False, "bottom": False, "left": False, "right": False}
+    if clipped.any() and glass.any():
+        ys, xs = np.where(clipped)
+        gys, gxs = np.where(glass)
+        touch_glass_edges = {
+            "top": bool(ys.min() <= gys.min() + 2),
+            "bottom": bool(ys.max() >= gys.max() - 2),
+            "left": bool(xs.min() <= gxs.min() + 2),
+            "right": bool(xs.max() >= gxs.max() - 2),
+        }
+    bird_overlap = 0
+    if bird_mask is not None:
+        bird = np.asarray(bird_mask, dtype=bool)
+        if bird.shape != raw.shape:
+            raise InternalObjectMaskError("candidate/bird shape mismatch")
+        bird_overlap = int((raw & bird).sum())
+    return {
+        **component,
+        "raw_area": raw_area,
+        "clipped_area": clipped_area,
+        "mask_image_ratio": float(raw_area / max(raw.size, 1)),
+        "mask_glass_ratio": float(clipped_area / max(glass_area, 1)),
+        "inside_glass_ratio": float(clipped_area / max(raw_area, 1)),
+        "glass_iou": float((raw & glass).sum() / max(union.sum(), 1)),
+        "raw_outside_glass_pixel_count": int(outside.sum()),
+        "raw_outside_glass_ratio": float(outside.sum() / max(raw_area, 1)),
+        "touches_glass_boundary": touch_glass_edges,
+        "touches_glass_boundary_count": int(sum(touch_glass_edges.values())),
+        "bird_overlap_pixels": bird_overlap,
+        "bird_overlap_ratio": float(bird_overlap / max(raw_area, 1)),
+    }
+
+
+def score_candidate(
+    cls: str,
+    confidence: float,
+    metrics: dict[str, Any],
+    guards: dict[str, float] | None = None,
+) -> dict[str, Any]:
+    guards = {**DEFAULT_CANDIDATE_GUARDS, **(guards or {})}
+    positive = {
+        "grounding_confidence": float(confidence),
+        "inside_glass_ratio": float(metrics["inside_glass_ratio"]),
+        "single_component": 1.0 if metrics["connected_components"] <= 1 else 0.0,
+        "largest_component_ratio": float(metrics["largest_component_ratio"]),
+    }
+    penalties = {
+        "outside_glass_ratio": float(metrics["raw_outside_glass_ratio"]),
+        "glass_iou": max(0.0, float(metrics["glass_iou"]) - 0.50),
+        "boundary_touch": 0.15 * float(metrics["touches_glass_boundary_count"]),
+        "multi_component": 0.20 * max(0, int(metrics["connected_components"]) - 1),
+    }
+    if cls in ("support_plinth", "support_mount", "bird_support"):
+        positive["small_support_area"] = max(0.0, 1.0 - float(metrics["mask_glass_ratio"]) / 0.45)
+        penalties["bird_overlap"] = float(metrics.get("bird_overlap_ratio", 0.0))
+    else:
+        positive["reasonable_bird_area"] = max(
+            0.0, 1.0 - abs(float(metrics["mask_glass_ratio"]) - 0.20) / 0.30
+        )
+    score = sum(positive.values()) - sum(penalties.values())
+    reject_reasons = []
+    if metrics["raw_area"] <= 0:
+        reject_reasons.append("empty_mask")
+    if metrics["inside_glass_ratio"] < guards["min_inside_glass_ratio"]:
+        reject_reasons.append("low_inside_glass_ratio")
+    if metrics["raw_outside_glass_ratio"] > guards["max_raw_outside_glass_ratio"]:
+        reject_reasons.append("raw_outside_glass_ratio_too_high")
+    if metrics["glass_iou"] > guards["max_glass_iou"]:
+        reject_reasons.append("candidate_too_similar_to_glass_hard")
+    limit_key = "bird_max_glass_ratio" if cls == "bird" else "bird_support_max_glass_ratio"
+    if metrics["mask_glass_ratio"] > guards[limit_key]:
+        reject_reasons.append("mask_glass_ratio_too_large")
+    if metrics["touches_glass_boundary_count"] > guards["max_boundary_touch_count"]:
+        reject_reasons.append("touches_too_many_glass_boundaries")
+    if cls == "bird" and metrics["connected_components"] > 1 and metrics["largest_component_ratio"] < 0.75:
+        reject_reasons.append("multiple_distant_bird_components")
+    if cls in ("support_plinth", "support_mount", "bird_support"):
+        if metrics.get("bird_overlap_ratio", 0.0) > guards["support_max_bird_overlap_ratio"]:
+            reject_reasons.append("support_overlaps_too_much_bird")
+    return {
+        "candidate_score": float(score),
+        "score_terms": {"positive": positive, "penalties": penalties},
+        "reject_reasons": reject_reasons,
+        "quality_status": "candidate_rejected" if reject_reasons else "candidate_viable",
+        "guards": guards,
+    }
 
 
 def inspect_l_mask(path: Path | str, expected_size: tuple[int, int] | None = None) -> dict[str, Any]:
@@ -177,7 +343,7 @@ def proposal_view_metadata(
     stem: str,
     rgb_path: Path,
     raw_bird_path: Path,
-    raw_base_path: Path,
+    raw_bird_support_path: Path,
     glass_mask_path: Path,
 ) -> dict[str, Any]:
     with Image.open(rgb_path) as rgb:
@@ -185,11 +351,11 @@ def proposal_view_metadata(
             raise InternalObjectMaskError(f"RGB image must be mode RGB: {rgb_path}")
         size = rgb.size
     bird = _load_binary(raw_bird_path, size)
-    base = _load_binary(raw_base_path, size)
+    bird_support = _load_binary(raw_bird_support_path, size)
     glass = _load_binary(glass_mask_path, size)
-    raw_union = bird | base
+    raw_union = bird | bird_support
     clipped_bird, bird_clip = clip_mask_to_glass(bird, glass)
-    clipped_base, base_clip = clip_mask_to_glass(base, glass)
+    clipped_support, support_clip = clip_mask_to_glass(bird_support, glass)
     clipped_union, union_clip = clip_mask_to_glass(raw_union, glass)
     return {
         "stem": stem,
@@ -197,7 +363,7 @@ def proposal_view_metadata(
         "rgb_sha256": sha256_file(rgb_path),
         "raw": {
             "bird": inspect_l_mask(raw_bird_path, size),
-            "base": inspect_l_mask(raw_base_path, size),
+            "bird_support": inspect_l_mask(raw_bird_support_path, size),
             "union": {
                 "area": int(raw_union.sum()),
                 "area_ratio": float(raw_union.mean()),
@@ -212,12 +378,12 @@ def proposal_view_metadata(
         },
         "clipping": {
             "bird": bird_clip,
-            "base": base_clip,
+            "bird_support": support_clip,
             "union": union_clip,
         },
         "processed": {
             "bird_area": int(clipped_bird.sum()),
-            "base_area": int(clipped_base.sum()),
+            "bird_support_area": int(clipped_support.sum()),
             "union_area": int(clipped_union.sum()),
         },
         "review_flags": _review_flags(union_clip, clipped_union, glass),
@@ -253,7 +419,14 @@ def write_proposal_manifest(
         "method": method,
         "count": len(entries),
         "ordered_stems": EXPECTED_STEMS,
-        "prompts": {"bird": list(BIRD_PROMPTS), "base": list(BASE_PROMPTS)},
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
+        "legacy_aliases": {"base": "bird_support"},
+        "prompts": {
+            "bird": list(BIRD_PROMPTS),
+            "bird_support": list(BIRD_SUPPORT_PROMPTS),
+            "support_plinth": list(SUPPORT_PLINTH_PROMPTS),
+            "support_mount": list(SUPPORT_MOUNT_PROMPTS),
+        },
         "grounded_sam2": grounded_sam2,
         "human_status": "proposal_requires_review",
         "entries": entries,
@@ -319,6 +492,11 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         raise ValueError("--internal_object_masks accepts only a formal reviewed manifest")
     if payload.get("human_status") != "accepted" or payload.get("count") != 111:
         raise ValueError("formal internal-object manifest must record accepted 111/111 masks")
+    if payload.get("internal_object_semantics_version") != INTERNAL_OBJECT_SEMANTICS_VERSION:
+        raise ValueError(
+            "formal internal-object manifest semantic version mismatch: "
+            f"expected {INTERNAL_OBJECT_SEMANTICS_VERSION}"
+        )
     if payload.get("mask_interpolation") != MASK_INTERPOLATION:
         raise ValueError(f"formal internal-object manifest must declare {MASK_INTERPOLATION}")
     if payload.get("ordered_stems") != EXPECTED_STEMS:
@@ -346,12 +524,25 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         role_entries: dict[str, Any] = {}
         for role in MASK_ROLES:
             rel = entry.get(f"{role}_mask_path")
+            if role == "bird_support" and rel is None:
+                rel = entry.get("base_mask_path")
             if rel != f"{role}/{stem}.png":
-                raise ValueError(f"internal-object {stem} {role} path mismatch")
+                if not (role == "bird_support" and rel == f"base/{stem}.png"):
+                    raise ValueError(f"internal-object {stem} {role} path mismatch")
             path = root / rel
             mask_sha = sha256_file(path)
-            if entry.get(f"{role}_mask_sha256") != mask_sha:
+            expected_sha = entry.get(f"{role}_mask_sha256")
+            if role == "bird_support" and expected_sha is None:
+                expected_sha = entry.get("base_mask_sha256")
+            if expected_sha != mask_sha:
                 raise ValueError(f"internal-object {stem} {role} hash mismatch")
+            if role == "bird_support" and entry.get("base_mask_path") is not None:
+                base_path = root / entry["base_mask_path"]
+                base_sha = sha256_file(base_path)
+                if base_sha != mask_sha:
+                    raise ValueError(
+                        f"legacy base alias differs from bird_support for {stem}"
+                    )
             facts = inspect_l_mask(path, size)
             role_entries[role] = {"path": str(path), "sha256": mask_sha, "size": facts["size"]}
             aggregate.update(f"{stem} {role} {mask_sha}\n".encode("utf-8"))
@@ -366,6 +557,8 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         "manifest_payload_sha256": payload["manifest_payload_sha256"],
         "aggregate_sha256": aggregate.hexdigest(),
         "mask_interpolation": MASK_INTERPOLATION,
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
+        "legacy_aliases": {"base": "bird_support"},
         "entries": runtime_entries,
         "provenance": payload.get("provenance", {}),
     }
@@ -400,9 +593,9 @@ def load_resized_internal_object_masks(
             raise ValueError(f"resized internal-object mask is non-finite: {path}")
         loaded[role] = torch.from_numpy(resized[None].copy())
         loaded[f"{role}_sha256"] = role_entry["sha256"]
-    native_union = native_binary["bird"] | native_binary["base"]
+    native_union = native_binary["bird"] | native_binary["bird_support"]
     if not np.array_equal(native_binary["union"], native_union):
-        raise ValueError(f"formal internal-object union is not bird|base for camera {stem}")
+        raise ValueError(f"formal internal-object union is not bird|bird_support for camera {stem}")
     return loaded
 
 
@@ -446,7 +639,7 @@ def object_occupancy_domains(
     base = glass * valid
     mpos = (eroded * base).clamp(0, 1)
     mneg = ((1.0 - dilated) * base).clamp(0, 1)
-    mignore = ((dilated - eroded).clamp(0, 1) * base).clamp(0, 1)
+    mignore = (base * (1.0 - mpos) * (1.0 - mneg)).clamp(0, 1)
     return {"Mpos": mpos, "Mneg": mneg, "Mignore": mignore, "domain": base}
 
 

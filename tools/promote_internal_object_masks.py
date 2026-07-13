@@ -22,6 +22,7 @@ from utils.internal_object_mask import (
     EXPECTED_STEMS,
     MASK_INTERPOLATION,
     MASK_ROLES,
+    INTERNAL_OBJECT_SEMANTICS_VERSION,
     PROPOSAL_ROLE,
     REVIEWED_ROLE,
     SCHEMA_VERSION,
@@ -70,6 +71,8 @@ def main() -> int:
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     if payload.get("role") != PROPOSAL_ROLE:
         raise ValueError("promotion source must be an internal-object proposal manifest")
+    if payload.get("internal_object_semantics_version") != INTERNAL_OBJECT_SEMANTICS_VERSION:
+        raise ValueError("proposal semantic version is not promotable")
     if payload.get("ordered_stems") != EXPECTED_STEMS:
         raise ValueError("proposal does not contain exactly 111 ordered stems")
     approved = _approved_stems(Path(args.approved_stems_file))
@@ -112,6 +115,8 @@ def main() -> int:
         "count": 111,
         "ordered_stems": EXPECTED_STEMS,
         "mask_interpolation": MASK_INTERPOLATION,
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
+        "legacy_aliases": {"base": "bird_support"},
         "source_proposal_manifest": str(manifest_path),
         "source_proposal_manifest_sha256": sha256_file(manifest_path),
         "provenance": payload.get("grounded_sam2", {}),

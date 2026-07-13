@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import time
@@ -41,6 +42,8 @@ from utils.loss_utils import (
 )
 from utils.specular_mask import validate_specular_mask_set
 from utils.internal_object_mask import (
+    INTERNAL_OBJECT_SEMANTICS_VERSION,
+    REVIEWED_ROLE,
     object_domain_metrics,
     object_occupancy_domains,
     object_occupancy_loss,
@@ -1237,6 +1240,235 @@ def _select_transferred_d_candidates(static_cache, diffuse, cuboid, opt, count=4
     return selected, metadata
 
 
+def _sha256_indices(indices: torch.Tensor) -> str:
+    tensor = torch.as_tensor(indices, dtype=torch.int64, device="cpu").contiguous()
+    digest = hashlib.sha256()
+    digest.update(str(list(tensor.shape)).encode("ascii"))
+    digest.update(b"\0")
+    digest.update(tensor.numpy().tobytes())
+    return digest.hexdigest()
+
+
+def _integer_histogram(values: torch.Tensor, bins: tuple[int, ...]) -> dict[str, int]:
+    values = torch.as_tensor(values, device="cpu", dtype=torch.int64)
+    hist = {}
+    for start, end in zip(bins[:-1], bins[1:]):
+        hist[f"{start}-{end - 1}"] = int(((values >= start) & (values < end)).sum())
+    hist[f">={bins[-1]}"] = int((values >= bins[-1]).sum())
+    return hist
+
+
+def _to_hw_bool(mask, name: str) -> torch.Tensor:
+    if mask is None:
+        raise ValueError(f"{name} is missing")
+    if not torch.is_tensor(mask):
+        mask = torch.as_tensor(mask)
+    mask = mask.detach().cpu()
+    if mask.ndim == 3 and mask.shape[0] == 1:
+        mask = mask[0]
+    elif mask.ndim == 3 and mask.shape[-1] == 1:
+        mask = mask[..., 0]
+    if mask.ndim != 2:
+        raise ValueError(f"{name} must be HW, CHW1, or HWC1")
+    return mask >= 0.5
+
+
+def _mask_boundary_band(mask: torch.Tensor, radius: int) -> torch.Tensor:
+    mask = _to_hw_bool(mask, "object mask")
+    if int(radius) <= 0:
+        return torch.zeros_like(mask, dtype=torch.bool)
+    x = mask.float()[None, None]
+    kernel = 2 * int(radius) + 1
+    dilated = F.max_pool2d(x, kernel, stride=1, padding=int(radius))[0, 0] > 0.5
+    eroded = 1.0 - F.max_pool2d(1.0 - x, kernel, stride=1, padding=int(radius))[0, 0]
+    eroded = eroded > 0.5
+    return dilated & ~eroded
+
+
+def _project_world_to_camera(points: torch.Tensor, camera) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    if hasattr(camera, "project_points"):
+        projected = camera.project_points(points.detach().cpu())
+        if isinstance(projected, tuple):
+            x, y, depth = projected
+            return (
+                torch.as_tensor(x, dtype=torch.float64).cpu(),
+                torch.as_tensor(y, dtype=torch.float64).cpu(),
+                torch.as_tensor(depth, dtype=torch.float64).cpu(),
+            )
+        projected = torch.as_tensor(projected, dtype=torch.float64).cpu()
+        if projected.ndim != 2 or projected.shape[1] != 3:
+            raise ValueError("camera.project_points must return Nx3 or (x, y, depth)")
+        return projected[:, 0], projected[:, 1], projected[:, 2]
+
+    width = int(camera.image_width)
+    height = int(camera.image_height)
+    pts = points.detach().to(
+        device=camera.full_proj_transform.device,
+        dtype=camera.full_proj_transform.dtype,
+    )
+    ones = torch.ones((pts.shape[0], 1), dtype=pts.dtype, device=pts.device)
+    hom = torch.cat([pts, ones], dim=1)
+    clip = hom @ camera.full_proj_transform.to(device=pts.device, dtype=pts.dtype)
+    w = clip[:, 3]
+    ndc = clip[:, :3] / w.clamp_min(1e-12).unsqueeze(1)
+    x = (ndc[:, 0] + 1.0) * 0.5 * max(width - 1, 1)
+    y = (1.0 - ndc[:, 1]) * 0.5 * max(height - 1, 1)
+    depth = w
+    return x.detach().double().cpu(), y.detach().double().cpu(), depth.detach().double().cpu()
+
+
+def _cache_two_hit_valid(static_cache, stem: str, shape: tuple[int, int]) -> torch.Tensor:
+    payload = static_cache.load(stem, device="cpu")
+    package = payload.get("package", {}) if isinstance(payload, dict) else {}
+    valid = payload.get("two_hit_valid", package.get("two_hit_valid")) if isinstance(payload, dict) else None
+    if valid is None:
+        return torch.ones(shape, dtype=torch.bool)
+    valid = _to_hw_bool(valid, f"two_hit_valid {stem}")
+    if tuple(valid.shape) != tuple(shape):
+        raise ValueError(f"two_hit_valid shape mismatch for {stem}")
+    return valid
+
+
+@torch.no_grad()
+def _filter_transferred_candidates_by_internal_object_masks(
+    selected: torch.Tensor,
+    diffuse,
+    cameras,
+    static_cache,
+    opt,
+    validated_manifest: dict | None,
+    count=4096,
+) -> tuple[torch.Tensor, dict]:
+    """Filter transferred-D T seeds by reviewed object-mask projection support."""
+    selected = torch.as_tensor(selected, device=diffuse.get_xyz.device, dtype=torch.long)
+    if validated_manifest is None or validated_manifest.get("role") != REVIEWED_ROLE:
+        raise ValueError("D-016 object T initialization requires a reviewed internal-object manifest")
+    if validated_manifest.get("internal_object_semantics_version") != INTERNAL_OBJECT_SEMANTICS_VERSION:
+        raise ValueError("D-016 object T initialization semantic version mismatch")
+    if selected.numel() == 0:
+        metadata = {
+            "schema": "rtgs_stage_d_internal_object_transfer_filter_v2",
+            "status": "active",
+            "pre_object_mask_candidate_count": 0,
+            "post_object_mask_candidate_count": 0,
+            "selected_transferred_count": 0,
+            "random_fill_count": int(count),
+            "selected_D_indices_sha256": _sha256_indices(selected),
+            "rejected_D_indices_sha256": _sha256_indices(torch.empty(0, dtype=torch.long)),
+        }
+        return selected, metadata
+
+    min_views = int(getattr(opt, "object_mask_min_views", 3))
+    min_ratio = float(getattr(opt, "object_mask_min_support_ratio", 0.6))
+    boundary_px = int(getattr(opt, "object_mask_boundary_ignore_px", 5))
+    stems_seen = set()
+    n = int(selected.numel())
+    projected_views = torch.zeros(n, dtype=torch.int32)
+    depth_reject_views = torch.zeros(n, dtype=torch.int32)
+    visible_domain_views = torch.zeros(n, dtype=torch.int32)
+    positive_views = torch.zeros(n, dtype=torch.int32)
+    boundary_views = torch.zeros(n, dtype=torch.int32)
+    visibility_reject_views = torch.zeros(n, dtype=torch.int32)
+    object_points = diffuse.get_xyz.detach()[selected].cpu()
+
+    for camera in cameras:
+        stem = Path(str(camera.image_name)).stem
+        stems_seen.add(stem)
+        if stem not in validated_manifest.get("entries", {}):
+            raise ValueError(f"internal-object manifest has no reviewed mask for camera {stem}")
+        masks = getattr(camera, "internal_object_masks", None)
+        if not masks or "union" not in masks:
+            raise ValueError(f"camera lacks loaded internal-object union mask: {stem}")
+        union = _to_hw_bool(masks["union"], f"internal_object union {stem}")
+        glass = _to_hw_bool(getattr(camera, "specular_mask", None), f"specular mask {stem}")
+        if tuple(union.shape) != tuple(glass.shape):
+            raise ValueError(f"mask shape mismatch for {stem}")
+        valid_two_hit = _cache_two_hit_valid(static_cache, stem, tuple(union.shape))
+        boundary = _mask_boundary_band(union, boundary_px)
+        h, w = union.shape
+        x, y, depth = _project_world_to_camera(object_points, camera)
+        finite_xy = torch.isfinite(x) & torch.isfinite(y) & torch.isfinite(depth)
+        in_bounds = finite_xy & (x >= 0) & (y >= 0) & (x <= (w - 1)) & (y <= (h - 1))
+        depth_ok = in_bounds & (depth > 0)
+        depth_reject_views += (in_bounds & ~depth_ok).to(torch.int32)
+        projected_views += depth_ok.to(torch.int32)
+        if not bool(depth_ok.any()):
+            continue
+        xi = x.round().long().clamp(0, w - 1)
+        yi = y.round().long().clamp(0, h - 1)
+        domain = glass & valid_two_hit
+        sampled_domain = torch.zeros(n, dtype=torch.bool)
+        sampled_union = torch.zeros(n, dtype=torch.bool)
+        sampled_boundary = torch.zeros(n, dtype=torch.bool)
+        sampled_domain[depth_ok] = domain[yi[depth_ok], xi[depth_ok]]
+        sampled_union[depth_ok] = union[yi[depth_ok], xi[depth_ok]]
+        sampled_boundary[depth_ok] = boundary[yi[depth_ok], xi[depth_ok]]
+        boundary_sample = depth_ok & sampled_domain & sampled_boundary
+        visible = depth_ok & sampled_domain & ~sampled_boundary
+        boundary_views += boundary_sample.to(torch.int32)
+        visible_domain_views += visible.to(torch.int32)
+        visibility_reject_views += (depth_ok & ~sampled_domain).to(torch.int32)
+        positive_views += (visible & sampled_union).to(torch.int32)
+
+    cache_stems = set(getattr(static_cache, "entries", {}))
+    if cache_stems:
+        missing = sorted(stems_seen - cache_stems)
+        if missing:
+            raise ValueError(f"static cache lacks views used for object filtering: {missing}")
+    ratio = positive_views.float() / visible_domain_views.clamp_min(1).float()
+    keep = (positive_views >= min_views) & (visible_domain_views > 0) & (ratio >= min_ratio)
+    filtered = selected[keep.to(device=selected.device)]
+    rejected = selected[~keep.to(device=selected.device)]
+
+    reject_invalid_projection = (projected_views == 0)
+    reject_depth = (projected_views == 0) & (depth_reject_views > 0)
+    reject_visibility = (projected_views > 0) & (visible_domain_views == 0) & (boundary_views == 0)
+    reject_boundary = (projected_views > 0) & (visible_domain_views == 0) & (boundary_views > 0)
+    reject_min_views = (visible_domain_views > 0) & (positive_views < min_views)
+    reject_ratio = (visible_domain_views > 0) & (positive_views >= min_views) & (ratio < min_ratio)
+    metadata = {
+        "schema": "rtgs_stage_d_internal_object_transfer_filter_v2",
+        "status": "active",
+        "manifest_path": validated_manifest.get("manifest_path"),
+        "manifest_file_sha256": validated_manifest.get("manifest_file_sha256"),
+        "manifest_payload_sha256": validated_manifest.get("manifest_payload_sha256"),
+        "aggregate_sha256": validated_manifest.get("aggregate_sha256"),
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
+        "mask_role": "union",
+        "minimum_views": min_views,
+        "minimum_support_ratio": min_ratio,
+        "boundary_ignore_px": boundary_px,
+        "projection": "camera.project_points_or_full_proj_transform_nearest_pixel_v1",
+        "pre_geometry_candidate_count": int(selected.numel()),
+        "post_geometry_candidate_count": int(selected.numel()),
+        "pre_object_mask_candidate_count": int(selected.numel()),
+        "post_object_mask_candidate_count": int(filtered.numel()),
+        "selected_transferred_count": int(filtered.numel()),
+        "random_fill_count": int(count - filtered.numel()),
+        "rejected_invalid_projection_count": int((~keep & reject_invalid_projection).sum()),
+        "rejected_visibility_count": int((~keep & reject_visibility).sum()),
+        "rejected_depth_count": int((~keep & reject_depth).sum()),
+        "rejected_boundary_count": int((~keep & reject_boundary).sum()),
+        "rejected_min_views_count": int((~keep & reject_min_views).sum()),
+        "rejected_support_ratio_count": int((~keep & reject_ratio).sum()),
+        "selected_D_indices_sha256": _sha256_indices(filtered),
+        "pre_filter_D_indices_sha256": _sha256_indices(selected),
+        "rejected_D_indices_sha256": _sha256_indices(rejected),
+        "valid_projection_views_histogram": _integer_histogram(projected_views, (0, 1, 2, 3, 5, 10)),
+        "visible_domain_views_histogram": _integer_histogram(visible_domain_views, (0, 1, 2, 3, 5, 10)),
+        "positive_object_views_histogram": _integer_histogram(positive_views, (0, 1, 2, 3, 5, 10)),
+        "per_surfel_support_summary": {
+            "minimum_positive_views": int(positive_views.min()),
+            "maximum_positive_views": int(positive_views.max()),
+            "mean_positive_views": float(positive_views.float().mean()),
+            "minimum_support_ratio": float(ratio.min()),
+            "maximum_support_ratio": float(ratio.max()),
+            "mean_support_ratio": float(ratio.mean()),
+        },
+    }
+    return filtered, metadata
+
+
 def _render_formal_review_node(
     scene, state, pipe, background, release, iteration,
     stems=FORMAL_STEMS, static_cache=None,
@@ -2364,25 +2596,14 @@ def training_stage_d(
                 static_cache, diffuse, semantic_cuboid, opt, count=4096,
             )
             if getattr(opt, "stage_d_internal_object_pilot", False):
-                selection_metadata["internal_object_filter"] = {
-                    "schema": "rtgs_stage_d_internal_object_transfer_filter_v1",
-                    "status": "configured",
-                    "manifest": getattr(
-                        dataset, "_validated_internal_object_mask_manifest", {},
-                    ).get("manifest_file_sha256"),
-                    "minimum_views": int(getattr(opt, "object_mask_min_views", 3)),
-                    "minimum_support_ratio": float(
-                        getattr(opt, "object_mask_min_support_ratio", 0.6)
-                    ),
-                    "boundary_ignore_px": int(
-                        getattr(opt, "object_mask_boundary_ignore_px", 5)
-                    ),
-                    "note": (
-                        "metadata hook present; per-surfel object projection "
-                        "statistics are computed by proposal/review tools before "
-                        "formal pilot launch"
-                    ),
-                }
+                selected, object_filter_metadata = (
+                    _filter_transferred_candidates_by_internal_object_masks(
+                        selected, diffuse, cameras, static_cache, opt,
+                        getattr(dataset, "_validated_internal_object_mask_manifest", None),
+                        count=4096,
+                    )
+                )
+                selection_metadata["internal_object_filter"] = object_filter_metadata
             transmittance.create_transferred_from_diffuse(
                 diffuse, selected, semantic_cuboid, 4096,
                 dataset.transmittance_init_seed,

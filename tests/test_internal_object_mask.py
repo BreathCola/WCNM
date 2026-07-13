@@ -7,11 +7,14 @@ import pytest
 import torch
 
 from utils.internal_object_mask import (
+    DEFAULT_CANDIDATE_GUARDS,
     EXPECTED_STEMS,
+    INTERNAL_OBJECT_SEMANTICS_VERSION,
     MASK_INTERPOLATION,
     PROPOSAL_ROLE,
     REVIEWED_ROLE,
     SCHEMA_VERSION,
+    candidate_metrics,
     canonical_payload_sha256,
     clip_mask_to_glass,
     load_resized_internal_object_masks,
@@ -19,6 +22,7 @@ from utils.internal_object_mask import (
     object_occupancy_domains,
     object_occupancy_loss,
     proposal_view_metadata,
+    score_candidate,
     sha256_file,
     validate_internal_object_mask_set,
 )
@@ -37,7 +41,7 @@ def _write_mask(path, values):
 def _formal_manifest(scene, root):
     images = scene / "images"
     root.mkdir(parents=True)
-    for role in ("bird", "base", "union"):
+    for role in ("bird", "bird_support", "union"):
         (root / role).mkdir()
     entries = []
     import hashlib
@@ -46,11 +50,11 @@ def _formal_manifest(scene, root):
         rgb = images / f"{stem}.jpg"
         _write_rgb(rgb)
         bird = np.zeros((6, 8), dtype=np.uint8)
-        base = np.zeros((6, 8), dtype=np.uint8)
+        bird_support = np.zeros((6, 8), dtype=np.uint8)
         bird[1:3, 2:4] = 1
-        base[3:5, 3:6] = 1
-        union = np.maximum(bird, base)
-        masks = {"bird": bird, "base": base, "union": union}
+        bird_support[3:5, 3:6] = 1
+        union = np.maximum(bird, bird_support)
+        masks = {"bird": bird, "bird_support": bird_support, "union": union}
         entry = {
             "stem": stem,
             "human_status": "accepted",
@@ -68,6 +72,8 @@ def _formal_manifest(scene, root):
     payload = {
         "schema_version": SCHEMA_VERSION,
         "role": REVIEWED_ROLE,
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
+        "legacy_aliases": {"base": "bird_support"},
         "human_status": "accepted",
         "count": 111,
         "ordered_stems": EXPECTED_STEMS,
@@ -111,13 +117,48 @@ def test_reviewed_manifest_rgb_hash_mismatch_fails(tmp_path):
         validate_internal_object_mask_set(scene, "images", manifest)
 
 
+def test_legacy_base_alias_is_accepted_only_as_bird_support(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    (root / "bird_support").rename(root / "base")
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    for entry in payload["entries"]:
+        entry["base_mask_path"] = entry.pop("bird_support_mask_path").replace("bird_support/", "base/")
+        entry["base_mask_sha256"] = entry.pop("bird_support_mask_sha256")
+    payload["manifest_payload_sha256"] = canonical_payload_sha256(payload)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    validated = validate_internal_object_mask_set(scene, "images", manifest)
+    assert validated["legacy_aliases"] == {"base": "bird_support"}
+    assert "bird_support" in validated["entries"]["000000"]
+
+
+def test_legacy_base_alias_must_match_bird_support_when_both_exist(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    (root / "base").mkdir()
+    mismatch = np.zeros((6, 8), dtype=np.uint8)
+    mismatch[:2, :2] = 1
+    _write_mask(root / "base/000000.png", mismatch)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["entries"][0]["base_mask_path"] = "base/000000.png"
+    payload["entries"][0]["base_mask_sha256"] = sha256_file(root / "base/000000.png")
+    payload["manifest_payload_sha256"] = canonical_payload_sha256(payload)
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="legacy base alias differs"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+
 def test_resized_loader_checks_union_semantics(tmp_path):
     scene = tmp_path / "scene"
     manifest = _formal_manifest(scene, tmp_path / "reviewed")
     validated = validate_internal_object_mask_set(scene, "images", manifest)
     loaded = load_resized_internal_object_masks(validated, "000000", (8, 6), (4, 3))
     assert loaded["bird"].shape == (1, 3, 4)
-    assert loaded["base"].shape == (1, 3, 4)
+    assert loaded["bird_support"].shape == (1, 3, 4)
     assert loaded["union"].shape == (1, 3, 4)
 
 
@@ -126,23 +167,47 @@ def test_raw_clipped_accounting_and_review_flags(tmp_path):
     _write_rgb(rgb)
     raw_bird = np.zeros((6, 8), dtype=np.uint8)
     raw_bird[:, :4] = 1
-    raw_base = np.zeros((6, 8), dtype=np.uint8)
-    raw_base[2:4, 4:6] = 1
+    raw_support = np.zeros((6, 8), dtype=np.uint8)
+    raw_support[2:4, 4:6] = 1
     glass = np.zeros((6, 8), dtype=np.uint8)
     glass[:, 2:6] = 1
     _write_mask(tmp_path / "bird.png", raw_bird)
-    _write_mask(tmp_path / "base.png", raw_base)
+    _write_mask(tmp_path / "bird_support.png", raw_support)
     _write_mask(tmp_path / "glass.png", glass)
     clipped, stats = clip_mask_to_glass(raw_bird, glass)
     assert stats["raw_area"] == 24
     assert stats["clipped_area"] == 12
     assert stats["removed_outside_glass_area"] == 12
     metadata = proposal_view_metadata(
-        "000000", rgb, tmp_path / "bird.png", tmp_path / "base.png", tmp_path / "glass.png",
+        "000000", rgb, tmp_path / "bird.png", tmp_path / "bird_support.png", tmp_path / "glass.png",
     )
     assert metadata["clipping"]["union"]["removed_fraction"] > 0.25
     assert "large_prediction_outside_glass" in metadata["review_flags"]
     assert clipped.sum() == 12
+
+
+def test_candidate_scoring_rejects_glass_fill_leaks_and_fragmented_bird():
+    glass = np.zeros((10, 10), dtype=bool)
+    glass[1:9, 1:9] = True
+    whole_glass = glass.copy()
+    metrics = candidate_metrics(whole_glass, glass)
+    scored = score_candidate("support_plinth", 0.9, metrics, DEFAULT_CANDIDATE_GUARDS)
+    assert "candidate_too_similar_to_glass_hard" in scored["reject_reasons"]
+    assert "mask_glass_ratio_too_large" in scored["reject_reasons"]
+
+    leaking = np.zeros((10, 10), dtype=bool)
+    leaking[1:4, 1:4] = True
+    leaking[0:3, 0:3] = True
+    metrics = candidate_metrics(leaking, glass)
+    scored = score_candidate("support_mount", 0.8, metrics, DEFAULT_CANDIDATE_GUARDS)
+    assert "raw_outside_glass_ratio_too_high" in scored["reject_reasons"]
+
+    fragments = np.zeros((10, 10), dtype=bool)
+    fragments[2:4, 2:4] = True
+    fragments[6:8, 6:8] = True
+    metrics = candidate_metrics(fragments, glass)
+    scored = score_candidate("bird", 0.8, metrics, DEFAULT_CANDIDATE_GUARDS)
+    assert "multiple_distant_bird_components" in scored["reject_reasons"]
 
 
 def test_object_domains_do_not_change_transmittance_ray_domain():

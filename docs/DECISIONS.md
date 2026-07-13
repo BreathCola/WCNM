@@ -3335,3 +3335,44 @@ stem validation, raw/clipped accounting, object-domain construction, object
 loss finiteness and T-only gradients, unchanged T/Cout ray domain, full-frame
 RGB retention, semantic transferred-D filtering with deterministic random fill,
 checkpoint metadata round-trip, and new-view rendering without object masks.
+
+## D-016a — Bird-support semantics and active T-init object filtering
+
+Date: 2026-07-14
+
+Question: How should the D-016 internal-object path be corrected after the
+fixed-nine v1 probe showed support/base over-selection and the implementation
+audit found that transferred-D initialization only recorded placeholder
+internal-object metadata?
+
+Chosen implementation: Replace the vague active `base` semantic with
+`bird_support` under semantic version `tihubird_bird_and_support_v2`; retain
+`base` only as a legacy alias when the alias hash exactly matches
+`bird_support`. Grounded-SAM2 proposal generation is fixed-nine only and emits
+candidate-review artifacts. It predicts `bird`, `support_plinth`, and
+`support_mount` candidates independently, scores each prompt/box/SAM mask, and
+selects one viable candidate per subclass instead of ORing all detections. The
+final proposal union is `bird | (support_plinth | support_mount)` after glass
+clipping and remains non-training review evidence.
+
+Stage D initialization now actively filters transferred-D candidates before T
+creation. Selected D surfels are projected into every training camera with a
+formal reviewed internal-object manifest, sampled against the reviewed union,
+the formal glass mask, valid two-hit cache pixels, and a boundary ignore band.
+Only surfels with enough positive object-mask views and support ratio are copied
+into T; the remaining quota is filled by the existing deterministic strict-inside
+random initialization. Metadata records pre/post counts, selected/rejected
+D-index hashes, view histograms, boundary and support-ratio rejections, and
+random-fill count.
+
+Alternatives: Keep `base`; accept the v1 OR proposal; tune prompts from RT-GS
+renders; consume proposal masks directly; or keep the initialization hook as
+metadata only. These would preserve ambiguous ownership, mix unrelated detections
+into support, leak review artifacts into training, or fail to change the actual
+T seed set.
+
+Impact: Existing Stage D behavior remains default-off. The fixed-nine v2 probe
+is still only a review artifact, not formal supervision. D-016 training cannot
+consume proposal masks and cannot claim object-guided T ownership unless the
+formal reviewed v2 manifest is provided and the active filter changes the
+selected D-index set.

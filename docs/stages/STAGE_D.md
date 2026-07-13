@@ -407,17 +407,18 @@ D-016 replaces further D-015 Arm debugging. D-015 outputs, code, and logs are
 preserved as read-only evidence; they are not resume sources and are not the
 training source for this task.
 
-The goal is to create bird, base, and `bird | base` masks for the 111 TiHuBird
-source images using the local Grounded-SAM2 environment. These masks separate
-two responsibilities:
+The goal is to create `bird`, `bird_support`, and `bird | bird_support` masks
+for the 111 TiHuBird source images using the local Grounded-SAM2 environment.
+`base` is no longer the active semantic name; it is accepted only as a legacy
+manifest alias for `bird_support` when hashes match. These masks separate two
+responsibilities:
 
 - the reviewed glass mask continues to define where T first bounce and Cout
   second bounce run: `mask_hard & valid_two_hit`;
 - the reviewed internal-object mask defines where T is encouraged to form bird
-  and base occupancy inside the glass.
+  and support occupancy inside the glass.
 
-Grounded-SAM2 outputs first enter a proposal directory only:
-`output/stage_d_tihubird_internal_object_mask_proposal_v1/`. Proposal outputs
+Grounded-SAM2 outputs first enter a proposal directory only. Proposal outputs
 must include raw masks, glass-clipped processed masks, overlays, contact sheets,
 per-view metadata, `manifest.json`, `validation.json`, and `review_queue.csv`.
 They are review evidence, not formal supervision. A separate promotion tool may
@@ -425,11 +426,17 @@ create `data/TiHuBird/internal_object_masks_reviewed_v1/` only after explicit
 user approval of all 111 stems. Stage D loaders must reject proposal directories
 and loose PNG sets.
 
-The fixed preferred prompts are:
+The fixed-nine D-016a proposal probe must not OR all prompts, boxes, and SAM
+masks together. It must emit independent candidates for `bird`,
+`support_plinth`, and `support_mount`, reject candidates that fill glass, leak
+outside glass, touch too many glass boundaries, or fragment the bird, and form
+`bird_support` only from selected support subclasses.
+
+The fixed preferred prompt roles are:
 
 ```text
-Bird: a colorful bird figurine inside the transparent glass display case
-Base: the pedestal and supporting display base beneath the bird inside the transparent glass display case
+Bird: the physical taxidermy bird specimen inside the glass display case
+Bird support: the physical support structure under the bird inside the glass display case
 ```
 
 The fixed fallback prompt lists are recorded in the proposal manifest. Prompt
