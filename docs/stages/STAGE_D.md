@@ -400,3 +400,66 @@ Implementation note: D-015 uses a dedicated zero-update operator rather than
 the ordinary Stage D training loop. It may construct models for read-only
 forward rendering, but it must not call backward, optimizer/scheduler steps, or
 write checkpoint/PLY/resume artifacts.
+
+## Authorized D-016 Grounded-SAM2 internal-object T ownership
+
+D-016 replaces further D-015 Arm debugging. D-015 outputs, code, and logs are
+preserved as read-only evidence; they are not resume sources and are not the
+training source for this task.
+
+The goal is to create bird, base, and `bird | base` masks for the 111 TiHuBird
+source images using the local Grounded-SAM2 environment. These masks separate
+two responsibilities:
+
+- the reviewed glass mask continues to define where T first bounce and Cout
+  second bounce run: `mask_hard & valid_two_hit`;
+- the reviewed internal-object mask defines where T is encouraged to form bird
+  and base occupancy inside the glass.
+
+Grounded-SAM2 outputs first enter a proposal directory only:
+`output/stage_d_tihubird_internal_object_mask_proposal_v1/`. Proposal outputs
+must include raw masks, glass-clipped processed masks, overlays, contact sheets,
+per-view metadata, `manifest.json`, `validation.json`, and `review_queue.csv`.
+They are review evidence, not formal supervision. A separate promotion tool may
+create `data/TiHuBird/internal_object_masks_reviewed_v1/` only after explicit
+user approval of all 111 stems. Stage D loaders must reject proposal directories
+and loose PNG sets.
+
+The fixed preferred prompts are:
+
+```text
+Bird: a colorful bird figurine inside the transparent glass display case
+Base: the pedestal and supporting display base beneath the bird inside the transparent glass display case
+```
+
+The fixed fallback prompt lists are recorded in the proposal manifest. Prompt
+changes may not be tuned from RT-GS render results.
+
+The D-016 training integration is default-off. When explicitly enabled with a
+formal reviewed manifest, transferred-D initialization adds semantic eligibility:
+strict support-safe, current depth/visibility gates, enough valid object-mask
+projections, sufficient support ratio, and low boundary-band ownership. Failed
+semantic quota is filled only by the existing deterministic strict-inside random
+fill; thresholds are not relaxed to reach 4,096. The first object loss supervises
+only `Ain`:
+
+```text
+Mpos = erode(Mobj) & mask_hard & valid_two_hit
+Mneg = outside(dilate(Mobj)) & mask_hard & valid_two_hit
+L_object = lambda_pos * mean(Mpos * relu(alpha_floor - Ain))
+         + lambda_neg * mean(Mneg * Ain)
+```
+
+The ignore band is `dilate(Mobj) - erode(Mobj)`. This loss must not use target
+RGB as `Cin` supervision, crop final RGB, change the T/Cout ray domain, disable
+Cout, or allow gradients into frozen D/R. All metrics are computed from float
+tensors; PNGs are visual evidence only.
+
+The bounded D-016 pilot is an independent Stage D operator. It defaults to a
+plan-only dry run and requires `--execute` to launch training. It starts fresh
+from Branch-A global-15,000, reads Stage-C v1 immutably, freezes D/R and all D/R
+training state, updates only T for the bounded schedule, keeps fixed T count and
+support safety, keeps full-frame RGB, keeps Cout, refuses existing output,
+refuses proposal masks, and stops with review/audit evidence only. It does not
+authorize joint tuning, global 20,000 continuation, Stage D acceptance, or Stage
+E.

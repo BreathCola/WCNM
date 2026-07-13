@@ -19,6 +19,7 @@ from pathlib import Path
 import torch
 
 from utils.specular_mask import load_resized_formal_mask
+from utils.internal_object_mask import load_resized_internal_object_masks
 
 WARNED = False
 
@@ -98,6 +99,17 @@ def loadCam(args, id, cam_info, resolution_scale, is_nerf_synthetic, is_test_dat
         )
         specular_mask = torch.from_numpy(mask_values[None].copy())
 
+    internal_object_masks = None
+    internal_manifest_path = getattr(args, "internal_object_masks", "")
+    if internal_manifest_path:
+        validated = getattr(args, "_validated_internal_object_mask_manifest", None)
+        internal_object_masks = load_resized_internal_object_masks(
+            validated,
+            Path(cam_info.image_name).stem,
+            (orig_w, orig_h),
+            resolution,
+        )
+
     return Camera(resolution, colmap_id=cam_info.uid, R=cam_info.R, T=cam_info.T, 
                   FoVx=cam_info.FovX, FoVy=cam_info.FovY, depth_params=cam_info.depth_params,
                   image=image, invdepthmap=invdepthmap,
@@ -105,6 +117,7 @@ def loadCam(args, id, cam_info, resolution_scale, is_nerf_synthetic, is_test_dat
                   normal_prior=normal_prior, normal_prior_valid=normal_prior_valid,
                   normal_prior_space=getattr(args, "normal_prior_space", "camera"),
                   specular_mask=specular_mask, specular_mask_sha256=specular_mask_sha256,
+                  internal_object_masks=internal_object_masks,
                   data_device=args.data_device,
                   train_test_exp=args.train_test_exp, is_test_dataset=is_test_dataset, is_test_view=cam_info.is_test)
 

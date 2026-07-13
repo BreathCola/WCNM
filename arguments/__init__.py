@@ -54,6 +54,7 @@ class ModelParams(ParamGroup):
         self.normal_priors = "normal_priors"
         self.normal_prior_space = "camera"
         self.specular_masks = ""
+        self.internal_object_masks = ""
         self.reflection_init_mode = "random_bbox"
         self.reflection_init_count = 0
         self.reflection_init_seed = 0
@@ -176,6 +177,7 @@ class OptimizationParams(ParamGroup):
         self.stage_d_ownership_t_long = False
         self.stage_d_tscale_recovery_preflight = False
         self.stage_d_tscale_recovery_long = False
+        self.stage_d_internal_object_pilot = False
         self.stage_d_phase_a_end_iteration = 18_000
         self.stage_d_cache_parity_atol = 2e-5
         self.stage_d_cache_parity_mean_atol = 2e-6
@@ -187,6 +189,15 @@ class OptimizationParams(ParamGroup):
         self.transfer_opacity_scale = 0.25
         self.transfer_opacity_min = 0.005
         self.transfer_opacity_max = 0.05
+        self.object_mask_min_views = 3
+        self.object_mask_min_support_ratio = 0.6
+        self.object_mask_boundary_ignore_px = 5
+        self.object_mask_init_mode = "reviewed_union_v1"
+        self.object_mask_erode_px = 3
+        self.object_mask_dilate_px = 3
+        self.object_alpha_floor = 0.35
+        self.lambda_object_positive = 0.0
+        self.lambda_object_negative = 0.0
         self.lambda_anti_veil_black = 0.05
         self.lambda_anti_veil_saturation = 0.02
         self.anti_veil_gt_luminance_threshold = 0.15

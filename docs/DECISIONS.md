@@ -3279,3 +3279,59 @@ contribution energy, R/Cin/Cout nonzero overlap, positive energy delta from Arm
 0, and dominant branch labels for over-bright pixels. These fields are audit
 evidence only; they cannot tune gates, read GT/ROI for decisions, authorize
 training, or claim semantic separation.
+
+## D-016 — Grounded-SAM2 internal-object ownership supervision
+
+Date: 2026-07-14
+
+Question: How should Stage D obtain an independent bird/base ownership signal
+without changing the glass ray domain, cropping final RGB, or resuming the
+D-015 semantic-renderer ablation?
+
+Chosen implementation: Introduce a default-off internal-object mask contract.
+Local Grounded-SAM2 may generate bird, base, and union proposal masks for the
+111 TiHuBird source images using fixed prompts and local weights only. Proposal
+directories are review evidence and are rejected by training. A separate
+promotion step, after explicit user approval, creates a formal reviewed manifest
+with 111 stems, RGB and mask hashes, provenance, approval state, and canonical
+payload hash.
+
+The reviewed glass mask and the reviewed internal-object mask have different
+roles. `mask_hard & valid_two_hit` remains the only transparent T/Cout ray
+domain. The internal-object mask is used only to filter transferred-D to T
+initialization and to add an explicit `Ain` occupancy loss. The positive domain
+is eroded object union inside glass and valid two-hit rays; the negative domain
+is glass-valid area outside a dilated object union; the boundary band is ignored.
+The first loss version supervises `Ain` only:
+
+```text
+L_object = lambda_object_positive * mean(Mpos * relu(alpha_floor - Ain))
+         + lambda_object_negative * mean(Mneg * Ain)
+```
+
+`Cin` is not supervised with target RGB, final RGB is full-frame, Cout remains
+enabled in glass-empty regions, and novel-view rendering does not require object
+masks. The bounded D-016 pilot is a new operator, distinct from D-015, starting
+fresh from the immutable global-15,000 D/R source and Stage-C release with D/R
+frozen and T-only updates. It defaults to plan-only and requires `--execute`.
+
+Alternatives: Continue D-015 Arms; use Grounded-SAM2 masks to gate T rays; crop
+final RGB; zero final T images outside the object mask; supervise `Cin` from
+target RGB; disable Cout in glass-empty regions; or depend on Grounded-SAM2 at
+novel-view render time. These either continue a replaced diagnostic path,
+violate Stage D rendering semantics, leak target color into T, remove the
+exterior-through-glass term, or make novel views depend on unavailable masks.
+
+Paper fidelity: Grounded-SAM2 supervision is a project-specific engineering
+aid, not claimed as an RT-GS paper method. The RT-GS thin-shell alpha-over
+contract and full-frame reconstruction remain unchanged.
+
+Impact: Existing Stage D behavior is unchanged unless an explicit formal
+internal-object manifest and nonzero object-loss weights are provided. Proposal
+quality must be reviewed by a human before it can affect training.
+
+Required ablation: D-016 tests must prove proposal/reviewed isolation, hash and
+stem validation, raw/clipped accounting, object-domain construction, object
+loss finiteness and T-only gradients, unchanged T/Cout ray domain, full-frame
+RGB retention, semantic transferred-D filtering with deterministic random fill,
+checkpoint metadata round-trip, and new-view rendering without object masks.

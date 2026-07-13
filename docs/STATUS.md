@@ -4,25 +4,43 @@ Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `feature/stage-d-transmittance`
 
-The current authorized task is D-015, a zero-update semantic-renderer repair
-ablation only. The completed global-20,000 ownership result is preserved as
-scale-repair success but visual/semantic HOLD; it is a read-only reproduction
-source and may never be resumed for training. A second group starts from the
-immutable Branch-A global-15,000 D/R source with one deterministic fresh T
-snapshot reused across Arms 0--3. The ablation tests cuboid-front safe R,
-exact legacy D/R fallback only on two-hit-invalid hard-mask pixels, and an
-experimental exact-hit back-face Cout handoff. Transparent D direct remains
-off. Final metrics must come from float tensors. No optimizer update,
-checkpoint output, short pilot, joint training, Stage E action, or separation
-claim is authorized. The unique planned output is
-`output/stage_d_tihubird_c03r8_semantic_renderer_repair_zero_step_ablation_v1`.
+The current authorized task is D-016, Grounded-SAM2 guided internal-object
+T ownership. It replaces any continuation of D-015 Arms 0--3. D-015 code and
+historical outputs remain read-only evidence and must not be deleted,
+overwritten, resumed, or repaired as part of D-016.
 
-D-015 implementation is now present as a dedicated zero-update operator and
-CPU audit path. It has not been launched on the real fixed-nine views by the
-implementation agent. The operator is intentionally separate from the ordinary
-Stage D training loop and is required to write no checkpoint, PLY, or resume
-state; its formal output verdict remains `AWAITING_USER_REVIEW`, `HOLD`, or
-`BLOCKED` only after the user explicitly runs it.
+D-016 introduces an engineering supervision path for TiHuBird bird/base masks.
+Grounded-SAM2 may create proposal masks and human-review materials, but proposal
+outputs are not formal training supervision. Stage D training may only consume a
+separate reviewed internal-object manifest that records 111 approved stems,
+RGB/mask hashes, provenance, and a canonical payload hash. The glass mask still
+defines the T/Cout ray domain (`mask_hard & valid_two_hit`); the internal-object
+mask only filters transferred-D to T initialization and adds an explicitly
+enabled `Ain` occupancy loss. Full-frame RGB loss and Cout remain active, and
+novel-view rendering must not require object masks.
+
+The bounded D-016 pilot, when explicitly launched by the user, must start fresh
+from the immutable Branch-A global-15,000 D/R checkpoint and immutable Stage-C
+release, create fresh fixed-count T, freeze D/R parameters and state, update T
+only, keep L_depth in its currently authorized disabled schedule, reject proposal
+masks, and refuse pre-existing outputs. The implementation agent may generate
+Grounded-SAM2 proposals and tests, but must not run real RT-GS training, D-015,
+the bounded pilot, or Stage E automatically.
+
+Grounded-SAM2 environment discovery selected conda env `grounded-sam2`,
+project `/home/hanglee/桌面/Grounded-SAM-2` at Git HEAD
+`b7a9c29f196edff0eb54dbe14588d7ae5e3dde28`, SAM2 config
+`configs/sam2.1/sam2.1_hiera_l.yaml`, SAM2 checkpoint SHA-256
+`2647878d5dfa5098f2f8649825738a9345572bae2d4350a2468587ece47dd318`, and
+GroundingDINO checkpoint SHA-256
+`3b3ca2563c77c69f651d7bd133e97139c186df06231157a64c507099c52bc799`.
+The implementation agent ran only a fixed-nine independent-frame proposal probe
+at `output/stage_d_tihubird_internal_object_mask_proposal_fixednine_probe_v1`.
+It is not formal supervision. The probe is `BLOCKED_BY_MASK_QUALITY`: several
+base masks fill nearly the whole glass region and views 000028, 000055, 000069,
+and 000110 have large outside-glass removal fractions, including 0.6623 and
+0.8270. The 111-view proposal, formal promotion, D-016 pilot, D-015, and Stage E
+were not run.
 
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and
