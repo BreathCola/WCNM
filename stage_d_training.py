@@ -1377,14 +1377,18 @@ def _filter_transferred_candidates_by_internal_object_masks(
         if stem not in validated_manifest.get("entries", {}):
             raise ValueError(f"internal-object manifest has no reviewed mask for camera {stem}")
         masks = getattr(camera, "internal_object_masks", None)
-        if not masks or "union" not in masks:
+        if not masks or "internal_object_union" not in masks:
             raise ValueError(f"camera lacks loaded internal-object union mask: {stem}")
-        union = _to_hw_bool(masks["union"], f"internal_object union {stem}")
+        union = _to_hw_bool(masks["internal_object_union"], f"internal_object_union {stem}")
+        ignore = (
+            _to_hw_bool(masks["internal_ignore"], f"internal_ignore {stem}")
+            if "internal_ignore" in masks else torch.zeros_like(union)
+        )
         glass = _to_hw_bool(getattr(camera, "specular_mask", None), f"specular mask {stem}")
         if tuple(union.shape) != tuple(glass.shape):
             raise ValueError(f"mask shape mismatch for {stem}")
         valid_two_hit = _cache_two_hit_valid(static_cache, stem, tuple(union.shape))
-        boundary = _mask_boundary_band(union, boundary_px)
+        boundary = _mask_boundary_band(union, boundary_px) | ignore
         h, w = union.shape
         x, y, depth = _project_world_to_camera(object_points, camera)
         finite_xy = torch.isfinite(x) & torch.isfinite(y) & torch.isfinite(depth)
@@ -1427,14 +1431,15 @@ def _filter_transferred_candidates_by_internal_object_masks(
     reject_min_views = (visible_domain_views > 0) & (positive_views < min_views)
     reject_ratio = (visible_domain_views > 0) & (positive_views >= min_views) & (ratio < min_ratio)
     metadata = {
-        "schema": "rtgs_stage_d_internal_object_transfer_filter_v2",
+        "schema": "rtgs_stage_d_internal_object_transfer_filter_v3",
         "status": "active",
         "manifest_path": validated_manifest.get("manifest_path"),
         "manifest_file_sha256": validated_manifest.get("manifest_file_sha256"),
         "manifest_payload_sha256": validated_manifest.get("manifest_payload_sha256"),
         "aggregate_sha256": validated_manifest.get("aggregate_sha256"),
         "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
-        "mask_role": "union",
+        "mask_role": "internal_object_union",
+        "internal_base_definition": "yellow rectangular base board plus white platform plus reviewed connected fixtures",
         "minimum_views": min_views,
         "minimum_support_ratio": min_ratio,
         "boundary_ignore_px": boundary_px,
@@ -1603,12 +1608,13 @@ def _forward_backward_stage_d(
         )
         if object_enabled:
             masks = getattr(camera, "internal_object_masks", None)
-            if masks is None or "union" not in masks:
+            if masks is None or "internal_object_union" not in masks:
                 raise RuntimeError("D-016 object loss requires camera internal-object masks")
             domains = object_occupancy_domains(
-                masks["union"],
+                masks["internal_object_union"],
                 camera.specular_mask,
                 package["transmittance_valid"],
+                internal_ignore=masks.get("internal_ignore"),
                 erode_px=int(getattr(opt, "object_mask_erode_px", 3)),
                 dilate_px=int(getattr(opt, "object_mask_dilate_px", 3)),
             )

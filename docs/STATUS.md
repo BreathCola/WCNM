@@ -10,16 +10,19 @@ historical outputs remain read-only evidence and must not be deleted,
 overwritten, resumed, or repaired as part of D-016.
 
 D-016 introduces an engineering supervision path for TiHuBird `bird`,
-`bird_support`, and `union = bird | bird_support` masks. The former vague
-`base` wording is now only a legacy manifest alias for `bird_support`; the
-semantic version is `tihubird_bird_and_support_v2`. Grounded-SAM2 may create
-proposal masks and human-review materials, but proposal outputs are not formal
-training supervision. Stage D training may only consume a separate reviewed
-internal-object manifest that records 111 approved stems, RGB/mask hashes,
-provenance, and a canonical payload hash. The glass mask still defines the
-T/Cout ray domain (`mask_hard & valid_two_hit`); the internal-object mask only
-filters transferred-D to T initialization and adds an explicitly enabled `Ain`
-occupancy loss. Full-frame RGB loss and Cout remain active, and novel-view
+`internal_base`, and `internal_object_union = bird | internal_base` masks. The
+v2 `bird_support` semantic is retired as a final training role because it missed
+the yellow rectangular base board and allowed support-mount ambiguity. The
+semantic version is `tihubird_bird_and_internal_base_v3`. `internal_base`
+includes the yellow rectangular board inside the glass case, the white platform
+under the bird, and only reviewed connected fixture details; it excludes glass,
+outside ground, independent rails/poles, labels, reflections, and bird. Proposal
+outputs are not formal training supervision. Stage D training may only consume
+a separate reviewed v3 manifest that records 111 approved stems, RGB/mask
+hashes, provenance, and a canonical payload hash. The glass mask still defines
+the T/Cout ray domain (`mask_hard & valid_two_hit`); the internal-object mask
+only filters transferred-D to T initialization and adds an explicitly enabled
+`Ain` occupancy loss. Full-frame RGB loss and Cout remain active, and novel-view
 rendering must not require object masks.
 
 The bounded D-016 pilot, when explicitly launched by the user, must start fresh
@@ -57,6 +60,19 @@ object union, glass mask, and valid two-hit domain. The filter records pre/post
 candidate counts, selected/rejected D-index hashes, valid/positive view
 histograms, boundary rejections, support-ratio rejections, and deterministic
 random-fill count before `create_transferred_from_diffuse` copies any D surfels.
+
+D-016 fixed-nine v3 supersedes v2 final semantics. The v2 bird masks are useful
+review evidence, but v2 `bird_support` is too narrow and the independent
+`support_mount` class is no longer a formal role. The explicit 000110 error case
+is an independent side pole/round-base structure that must not enter
+`internal_base`; 000083 remains a component-count review case. V3 adds a
+conservative `Mignore` region: object boundary bands plus optional reviewed
+`internal_ignore` are excluded from both positive and negative `Ain` loss.
+Object masks still do not change ray domains, Cout, or full-frame RGB. V1/v2
+proposal artifacts are never auto-promoted. V3 is fixed-nine only and remains
+awaiting user review; no 111-view proposal, training, optimizer update, Stage C
+rewrite, checkpoint, PLY, formal promotion, D-015, D-016 pilot, or Stage E work
+is authorized by this status.
 
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and

@@ -116,7 +116,10 @@ def main() -> int:
         "ordered_stems": EXPECTED_STEMS,
         "mask_interpolation": MASK_INTERPOLATION,
         "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
-        "legacy_aliases": {"base": "bird_support"},
+        "legacy_aliases": {
+            "base": "legacy_not_auto_promoted_to_internal_base",
+            "bird_support": "legacy_not_auto_promoted_to_internal_base",
+        },
         "source_proposal_manifest": str(manifest_path),
         "source_proposal_manifest_sha256": sha256_file(manifest_path),
         "provenance": payload.get("grounded_sam2", {}),

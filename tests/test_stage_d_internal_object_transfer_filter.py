@@ -20,11 +20,13 @@ class _Diffuse:
 
 
 class _Camera:
-    def __init__(self, stem, union, glass=None):
+    def __init__(self, stem, union, glass=None, ignore=None):
         self.image_name = f"{stem}.jpg"
         self.image_width = int(union.shape[1])
         self.image_height = int(union.shape[0])
-        self.internal_object_masks = {"union": union[None].float()}
+        self.internal_object_masks = {"internal_object_union": union[None].float()}
+        if ignore is not None:
+            self.internal_object_masks["internal_ignore"] = ignore[None].float()
         self.specular_mask = (torch.ones_like(union) if glass is None else glass)[None].float()
 
     def project_points(self, points):
@@ -123,3 +125,30 @@ def test_internal_object_filter_counts_boundary_rejection():
 
     assert filtered.numel() == 0
     assert metadata["rejected_boundary_count"] == 1
+
+
+def test_internal_object_filter_uses_v3_union_and_ignores_explicit_ignore():
+    stem = "000000"
+    union = torch.zeros(5, 5)
+    union[1, 1] = 1  # bird
+    union[2, 2] = 1  # white platform
+    union[3, 3] = 1  # yellow base
+    ignore = torch.zeros(5, 5)
+    ignore[3, 3] = 1
+    camera = _Camera(stem, union, ignore=ignore)
+    diffuse = _Diffuse([
+        [1.0, 1.0, 1.0],
+        [2.0, 2.0, 1.0],
+        [3.0, 3.0, 1.0],
+    ])
+
+    filtered, metadata = _filter_transferred_candidates_by_internal_object_masks(
+        torch.tensor([0, 1, 2]), diffuse, [camera], _StaticCache((stem,), (5, 5)),
+        _opt(min_views=1, ratio=1.0, boundary=0), _manifest((stem,)), count=3,
+    )
+
+    assert filtered.tolist() == [0, 1]
+    assert metadata["mask_role"] == "internal_object_union"
+    assert metadata["internal_object_semantics_version"] == INTERNAL_OBJECT_SEMANTICS_VERSION
+    assert metadata["post_object_mask_candidate_count"] == 2
+    assert metadata["random_fill_count"] == 1

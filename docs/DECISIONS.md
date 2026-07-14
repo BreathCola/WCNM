@@ -3376,3 +3376,58 @@ is still only a review artifact, not formal supervision. D-016 training cannot
 consume proposal masks and cannot claim object-guided T ownership unless the
 formal reviewed v2 manifest is provided and the active filter changes the
 selected D-index set.
+
+## D-016b — Fixed-nine v3 internal-base semantics
+
+Date: 2026-07-14
+
+Question: What final internal-object mask semantics should replace v2
+`bird_support` after review showed that the yellow base board belongs to the
+internal exhibit while independent support-mount candidates can select side
+poles and rails?
+
+Chosen implementation: The only final v3 roles are `bird`, `internal_base`, and
+`internal_object_union = bird | internal_base`, under semantic version
+`tihubird_bird_and_internal_base_v3`. `internal_base` includes the yellow
+rectangular display board inside the glass, the small white platform under the
+bird, and only reviewed small connected fixtures. It explicitly excludes
+glass_hard, the transparent glass floor/walls, outside ground, independent
+rails or poles, labels, reflections, and bird. `support_mount` is retired as a
+formal role. `yellow_base_board`, `white_platform`, and optional
+`connected_fixture` may exist only as proposal helper candidate classes.
+
+The fixed-nine proposal generator now scores individual Grounded-SAM2
+prompt/box/SAM candidates for `bird`, `yellow_base_board`, and
+`white_platform`, with optional `connected_fixture` disabled by default to avoid
+forcing independent poles into the base. Only selected helper candidates are
+merged into `internal_base`; no prompt/box/mask family is unconditionally ORed.
+Engineering guards record area, glass-IoU, outside-glass leakage, component
+counts, lower-glass placement, bird/base connection, and isolated vertical pole
+risk. These guards create review evidence; they are not paper parameters.
+
+The object-occupancy domains are now conservative:
+
+```text
+Mpos = erode(internal_object_union) & glass_hard & valid_two_hit
+Mignore = glass_hard & valid_two_hit & (boundary_band | reviewed internal_ignore)
+Mneg = glass_hard & valid_two_hit & outside(dilate(internal_object_union))
+       & not(reviewed internal_ignore)
+```
+
+`Mpos`, `Mignore`, and `Mneg` are mutually exclusive and need not cover the
+whole glass domain. `Mignore` has no positive or negative `Ain` penalty. The
+ray domain remains `glass_hard & valid_two_hit`, Cout remains enabled, full RGB
+loss remains full-frame, and `Cin` is not supervised from target RGB.
+
+Alternatives: Keep `bird_support`; keep `support_mount` as a final class;
+silently reinterpret v2 masks as v3 `internal_base`; crop/close Cout outside
+the object; or auto-copy neighboring masks across views. These either miss the
+yellow board, admit independent display hardware, blur reviewed semantics,
+change the Stage D renderer contract, or replace review with propagation.
+
+Impact: Existing training remains default-off and accepts only a full reviewed
+111-stem v3 manifest. V1/v2/fixed-nine proposals, loose PNGs, and legacy
+`bird_support`-only manifests are rejected by training. The fixed-nine v3
+proposal is review evidence only and does not authorize the 111-view proposal,
+formal promotion, D-016 pilot, optimizer updates, joint training, Stage D
+acceptance, or Stage E.

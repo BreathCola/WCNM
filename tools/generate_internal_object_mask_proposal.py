@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Generate D-016 fixed-nine Grounded-SAM2 candidate review proposals.
+"""Generate D-016 fixed-nine v3 Grounded-SAM2 candidate review proposals.
 
-The output is a proposal review artifact only.  It is not a formal reviewed
-mask set and is never training supervision.
+The output is a proposal review artifact only. It is not formal reviewed
+training supervision and cannot be promoted without explicit human review.
 """
 
 from __future__ import annotations
@@ -24,15 +24,18 @@ if str(ROOT) not in sys.path:
 
 from utils.internal_object_mask import (
     BIRD_PROMPTS,
+    CONNECTED_FIXTURE_PROMPTS,
     DEFAULT_CANDIDATE_GUARDS,
     EXPECTED_STEMS,
     INTERNAL_OBJECT_SEMANTICS_VERSION,
     PROPOSAL_ROLE,
     SCHEMA_VERSION,
-    SUPPORT_MOUNT_PROMPTS,
-    SUPPORT_PLINTH_PROMPTS,
+    WHITE_PLATFORM_PROMPTS,
+    YELLOW_BASE_BOARD_PROMPTS,
     candidate_metrics,
     canonical_payload_sha256,
+    mask_component_summary,
+    object_occupancy_domains,
     score_candidate,
     sha256_file,
 )
@@ -45,12 +48,13 @@ DEFAULT_SAM2_CONFIG = "configs/sam2.1/sam2.1_hiera_l.yaml"
 DEFAULT_GDINO_CONFIG = DEFAULT_GSAM2 / "grounding_dino/groundingdino/config/GroundingDINO_SwinT_OGC.py"
 DEFAULT_GDINO_CHECKPOINT = DEFAULT_GSAM2 / "gdino_checkpoints/groundingdino_swint_ogc.pth"
 FIXED_NINE = ("000000", "000014", "000028", "000042", "000055", "000069", "000083", "000097", "000110")
-CLASSES = ("bird", "support_plinth", "support_mount")
+CLASSES = ("bird", "yellow_base_board", "white_platform", "connected_fixture")
 COLORS = {
     "bird": np.array([255, 35, 35], dtype=np.float32),
-    "bird_support": np.array([35, 120, 255], dtype=np.float32),
-    "union": np.array([255, 225, 35], dtype=np.float32),
+    "internal_base": np.array([35, 120, 255], dtype=np.float32),
+    "internal_object_union": np.array([255, 225, 35], dtype=np.float32),
     "glass_hard": np.array([0, 220, 230], dtype=np.float32),
+    "internal_ignore_preview": np.array([230, 45, 230], dtype=np.float32),
 }
 
 
@@ -78,9 +82,8 @@ def _binary_png(path: Path, mask: np.ndarray) -> None:
 
 def _overlay(rgb: np.ndarray, mask: np.ndarray, color_name: str, alpha: float = 0.45) -> Image.Image:
     out = rgb.astype(np.float32).copy()
-    color = COLORS[color_name]
     mask = np.asarray(mask, dtype=bool)
-    out[mask] = (1.0 - alpha) * out[mask] + alpha * color
+    out[mask] = (1.0 - alpha) * out[mask] + alpha * COLORS[color_name]
     return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8), mode="RGB")
 
 
@@ -119,10 +122,12 @@ def _vstack(images: list[Image.Image]) -> Image.Image:
 def _class_prompts(cls: str) -> tuple[str, ...]:
     if cls == "bird":
         return BIRD_PROMPTS
-    if cls == "support_plinth":
-        return SUPPORT_PLINTH_PROMPTS
-    if cls == "support_mount":
-        return SUPPORT_MOUNT_PROMPTS
+    if cls == "yellow_base_board":
+        return YELLOW_BASE_BOARD_PROMPTS
+    if cls == "white_platform":
+        return WHITE_PLATFORM_PROMPTS
+    if cls == "connected_fixture":
+        return CONNECTED_FIXTURE_PROMPTS
     raise ValueError(cls)
 
 
@@ -144,9 +149,12 @@ def _predict_candidates(
     box_threshold: float,
     text_threshold: float,
     glass_mask: np.ndarray,
-    bird_mask: np.ndarray | None,
-    guards: dict[str, float],
     output: Path,
+    guards: dict[str, float],
+    *,
+    bird_mask: np.ndarray | None = None,
+    yellow_base_board_mask: np.ndarray | None = None,
+    white_platform_mask: np.ndarray | None = None,
 ) -> list[dict]:
     image_source, image = load_image(str(img_path))
     h, w, _ = image_source.shape
@@ -171,25 +179,26 @@ def _predict_candidates(
             in_fmt="cxcywh",
             out_fmt="xyxy",
         ).detach().cpu().numpy()
-        masks, scores, logits = sam2_predictor.predict(
-            point_coords=None,
-            point_labels=None,
-            box=boxes_xyxy,
-            multimask_output=False,
+        masks, scores, _ = sam2_predictor.predict(
+            point_coords=None, point_labels=None, box=boxes_xyxy, multimask_output=False,
         )
         if masks.ndim == 4:
             masks = masks.squeeze(1)
         for box_index, mask in enumerate(masks.astype(bool)):
             cid = _candidate_id(stem, cls, len(candidates))
-            confidence = float(confidences[box_index].detach().cpu())
             xyxy = [float(v) for v in boxes_xyxy[box_index].tolist()]
             box_w, box_h = max(0.0, xyxy[2] - xyxy[0]), max(0.0, xyxy[3] - xyxy[1])
-            metrics = candidate_metrics(mask, glass_mask, bird_mask=bird_mask)
+            metrics = candidate_metrics(
+                mask, glass_mask, bird_mask=bird_mask,
+                yellow_base_board_mask=yellow_base_board_mask,
+                white_platform_mask=white_platform_mask,
+            )
+            confidence = float(confidences[box_index].detach().cpu())
             scored = score_candidate(cls, confidence, metrics, guards)
             record = {
                 "candidate_id": cid,
                 "stem": stem,
-                "class": cls,
+                "candidate_class": cls,
                 "prompt": prompt,
                 "grounding_label": str(labels[box_index]),
                 "grounding_confidence": confidence,
@@ -199,11 +208,14 @@ def _predict_candidates(
                 "box_height": box_h,
                 "box_area": box_w * box_h,
                 "box_image_ratio": float((box_w * box_h) / max(w * h, 1)),
-                **metrics,
-                **scored,
                 "selected": False,
+                "rejected": bool(scored["reject_reasons"]),
+                "unresolved": False,
                 "selection_status": "candidate_rejected" if scored["reject_reasons"] else "candidate_viable",
                 "selection_reason": None,
+                "review_flags": list(scored["reject_reasons"]),
+                **metrics,
+                **scored,
             }
             mask_path = output / "candidates" / cls / f"{cid}.png"
             json_path = output / "candidates" / cls / f"{cid}.json"
@@ -219,6 +231,8 @@ def _predict_candidates(
 def _select_one(candidates: list[dict]) -> dict | None:
     viable = [row for row in candidates if not row["reject_reasons"]]
     if not viable:
+        for row in candidates:
+            row["unresolved"] = True
         return None
     selected = viable[0]
     selected["selected"] = True
@@ -234,29 +248,74 @@ def _load_candidate_mask(record: dict | None, shape: tuple[int, int]) -> np.ndar
         return np.asarray(image) >= 128
 
 
+def _domains(object_union: np.ndarray, glass: np.ndarray) -> dict[str, np.ndarray]:
+    domains = object_occupancy_domains(
+        torch.from_numpy(object_union[..., None].astype(np.float32)),
+        torch.from_numpy(glass[..., None].astype(np.float32)),
+        torch.from_numpy(glass[..., None].astype(np.float32)),
+        erode_px=3,
+        dilate_px=3,
+    )
+    return {key: (value[..., 0].detach().cpu().numpy() >= 0.5) for key, value in domains.items()}
+
+
+def _quality_flags(final_masks: dict[str, np.ndarray], guards: dict[str, float]) -> list[str]:
+    glass = final_masks["glass_hard"]
+    base = final_masks["internal_base"]
+    union = final_masks["internal_object_union"]
+    flags = []
+    base_ratio = float(base.sum() / max(glass.sum(), 1))
+    union_ratio = float(union.sum() / max(glass.sum(), 1))
+    base_components = mask_component_summary(base)["connected_components"]
+    union_components = mask_component_summary(union)["connected_components"]
+    if base_ratio < guards["internal_base_min_glass_ratio"]:
+        flags.append("internal_base_too_small_possible_missing_yellow_board")
+    if base_ratio > guards["internal_base_max_glass_ratio"]:
+        flags.append("internal_base_too_large_possible_glass_or_ground")
+    if union_ratio > guards["internal_object_union_max_glass_ratio"]:
+        flags.append("internal_object_union_too_large")
+    if base_components > guards["internal_base_max_components"]:
+        flags.append("internal_base_too_many_components")
+    if union_components > guards["internal_object_union_max_components"]:
+        flags.append("internal_object_union_too_many_components")
+    return flags
+
+
+def _status_from(selected: dict | None, candidates: list[dict]) -> str:
+    if selected:
+        return "auto_candidate_ready"
+    if candidates:
+        return "unresolved"
+    return "manual_edit_required"
+
+
 def _write_review_page(
     output: Path,
     stem: str,
     rgb: np.ndarray,
-    glass: np.ndarray,
     final_masks: dict[str, np.ndarray],
     candidates: dict[str, list[dict]],
     status: dict,
 ) -> Image.Image:
+    domains = _domains(final_masks["internal_object_union"], final_masks["glass_hard"])
     panels = [
         _panel(Image.fromarray(rgb), f"{stem} Original"),
-        _panel(_overlay(rgb, glass, "glass_hard"), "glass_hard overlay"),
-        _panel(_overlay(rgb, final_masks["bird"], "bird"), f"final bird: {status['bird_status']}"),
-        _panel(_overlay(rgb, final_masks["bird_support"], "bird_support"), f"final bird_support: {status['bird_support_status']}"),
-        _panel(_overlay(rgb, final_masks["union"], "union"), f"union: {status['frame_status']}"),
+        _panel(_overlay(rgb, final_masks["glass_hard"], "glass_hard"), "glass_hard overlay"),
+        _panel(_overlay(rgb, final_masks["bird"], "bird"), f"bird: {status['bird_status']}"),
+        _panel(_overlay(rgb, final_masks["internal_base"], "internal_base"), f"internal_base: {status['internal_base_status']}"),
+        _panel(_overlay(rgb, final_masks["internal_object_union"], "internal_object_union"), f"union: {status['frame_status']}"),
+        _panel(_overlay(rgb, domains["Mpos"], "bird"), "Mpos preview"),
+        _panel(_overlay(rgb, domains["Mignore"], "internal_ignore_preview"), "Mignore preview"),
+        _panel(_overlay(rgb, domains["Mneg"], "glass_hard"), "Mneg preview"),
     ]
     candidate_panels = []
     for cls in CLASSES:
-        for row in candidates[cls][:4]:
+        for row in candidates.get(cls, [])[:6]:
             mask = _load_candidate_mask(row, rgb.shape[:2])
+            color = "bird" if cls == "bird" else "internal_base"
             title = f"{cls} {row['candidate_id']} score={row['candidate_score']:.2f} {row['selection_status']}"
-            candidate_panels.append(_panel(_overlay(rgb, mask, "bird" if cls == "bird" else "bird_support"), title))
-    rows = [_hstack(panels)]
+            candidate_panels.append(_panel(_overlay(rgb, mask, color), title))
+    rows = [_hstack(panels[:4]), _hstack(panels[4:])]
     for index in range(0, len(candidate_panels), 3):
         rows.append(_hstack(candidate_panels[index:index + 3]))
     page = _vstack(rows)
@@ -269,20 +328,12 @@ def _write_fixed_sheet(images: list[Image.Image], path: Path) -> None:
         _vstack(images).save(path)
 
 
-def _status_from(selected: dict | None, candidates: list[dict]) -> str:
-    if selected:
-        return "auto_candidate_ready"
-    if candidates:
-        return "unresolved"
-    return "manual_edit_required"
-
-
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--scene", default=str(ROOT / "data/TiHuBird"))
     parser.add_argument("--images", default="images")
     parser.add_argument("--glass-mask-manifest", default="specular_masks_reviewed_v1/manifest.json")
-    parser.add_argument("--output", default=str(ROOT / "output/stage_d_tihubird_internal_object_mask_proposal_fixednine_probe_v2"))
+    parser.add_argument("--output", default=str(ROOT / "output/stage_d_tihubird_internal_object_mask_proposal_fixednine_probe_v3"))
     parser.add_argument("--grounded-sam2-project", default=str(DEFAULT_GSAM2))
     parser.add_argument("--sam2-checkpoint", default=str(DEFAULT_SAM2_CHECKPOINT))
     parser.add_argument("--sam2-config", default=DEFAULT_SAM2_CONFIG)
@@ -290,25 +341,27 @@ def main() -> int:
     parser.add_argument("--gdino-checkpoint", default=str(DEFAULT_GDINO_CHECKPOINT))
     parser.add_argument("--box-threshold", type=float, default=0.35)
     parser.add_argument("--text-threshold", type=float, default=0.25)
-    parser.add_argument("--seed", type=int, default=20260716)
+    parser.add_argument("--seed", type=int, default=20260717)
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--stems", nargs="*", default=list(FIXED_NINE))
+    parser.add_argument("--enable-connected-fixture", action="store_true")
     args = parser.parse_args()
 
     scene = Path(args.scene).resolve()
     output = Path(args.output).resolve()
     if output.exists():
-        raise FileExistsError(f"refusing to overwrite proposal output: {output}")
+        raise FileExistsError(f"BLOCKED_BY_EXISTING_OUTPUT: {output}")
     stems = list(args.stems)
     if stems != list(FIXED_NINE):
-        raise ValueError("D-016a proposal generation is fixed-nine only")
+        raise ValueError("D-016 fixed-nine v3 proposal generation is fixed-nine only")
     unexpected = sorted(set(stems) - set(EXPECTED_STEMS))
     if unexpected:
         raise ValueError(f"unexpected stems: {unexpected}")
     for directory in (
-        "candidates/bird", "candidates/support_plinth", "candidates/support_mount",
-        "raw/bird", "raw/support_plinth", "raw/support_mount",
-        "processed/bird", "processed/bird_support", "processed/union", "processed/glass_hard",
+        "candidates/bird", "candidates/yellow_base_board", "candidates/white_platform", "candidates/connected_fixture",
+        "raw/bird", "raw/yellow_base_board", "raw/white_platform", "raw/connected_fixture",
+        "processed/bird", "processed/internal_base", "processed/internal_object_union",
+        "processed/internal_ignore_preview", "processed/glass_hard",
         "overlays", "review_pages", "contact_sheets",
     ):
         (output / directory).mkdir(parents=True, exist_ok=True)
@@ -331,146 +384,198 @@ def main() -> int:
         torch.backends.cudnn.allow_tf32 = True
 
     glass_manifest = validate_specular_mask_set(scene, args.images, args.glass_mask_manifest)
-    rows = []
-    selection_json = {}
-    fixed_binary, fixed_overlay, review_pages = [], [], []
-    review_template = {}
-    review_queue = []
     guards = dict(DEFAULT_CANDIDATE_GUARDS)
+    rows, fixed_binary, fixed_overlay, review_pages, ignore_pages = [], [], [], [], []
+    selection_json, review_template, review_queue = {}, {}, []
 
     for stem in stems:
         rgb_path = scene / args.images / f"{stem}.jpg"
         with Image.open(rgb_path) as rgb_image:
             size = rgb_image.size
             rgb = np.asarray(rgb_image.convert("RGB"))
-        glass_values, glass_sha, _ = load_resized_formal_mask(glass_manifest, stem, size, size)
+        glass_values, _, _ = load_resized_formal_mask(glass_manifest, stem, size, size)
         glass = glass_values >= 0.5
-        _binary_png(output / "processed" / "glass_hard" / f"{stem}.png", glass)
         candidates: dict[str, list[dict]] = {}
-        bird_candidates = _predict_candidates(
-            stem, "bird", rgb_path, _class_prompts("bird"), grounding_model,
+        candidates["bird"] = _predict_candidates(
+            stem, "bird", rgb_path, BIRD_PROMPTS, grounding_model, sam2_predictor,
+            box_convert, load_image, predict, args.device, args.box_threshold,
+            args.text_threshold, glass, output, guards,
+        )
+        selected_bird = _select_one(candidates["bird"])
+        bird_raw = _load_candidate_mask(selected_bird, glass.shape)
+        candidates["yellow_base_board"] = _predict_candidates(
+            stem, "yellow_base_board", rgb_path, YELLOW_BASE_BOARD_PROMPTS, grounding_model,
             sam2_predictor, box_convert, load_image, predict, args.device,
-            args.box_threshold, args.text_threshold, glass, None, guards, output,
+            args.box_threshold, args.text_threshold, glass, output, guards,
+            bird_mask=bird_raw,
         )
-        selected_bird = _select_one(bird_candidates)
-        bird_mask_raw = _load_candidate_mask(selected_bird, glass.shape)
-        candidates["bird"] = bird_candidates
-        support_masks_for_relation = bird_mask_raw if selected_bird else None
-        for cls in ("support_plinth", "support_mount"):
-            candidates[cls] = _predict_candidates(
-                stem, cls, rgb_path, _class_prompts(cls), grounding_model,
+        selected_yellow = _select_one(candidates["yellow_base_board"])
+        yellow_raw = _load_candidate_mask(selected_yellow, glass.shape)
+        candidates["white_platform"] = _predict_candidates(
+            stem, "white_platform", rgb_path, WHITE_PLATFORM_PROMPTS, grounding_model,
+            sam2_predictor, box_convert, load_image, predict, args.device,
+            args.box_threshold, args.text_threshold, glass, output, guards,
+            bird_mask=bird_raw, yellow_base_board_mask=yellow_raw,
+        )
+        selected_white = _select_one(candidates["white_platform"])
+        white_raw = _load_candidate_mask(selected_white, glass.shape)
+        if args.enable_connected_fixture:
+            candidates["connected_fixture"] = _predict_candidates(
+                stem, "connected_fixture", rgb_path, CONNECTED_FIXTURE_PROMPTS, grounding_model,
                 sam2_predictor, box_convert, load_image, predict, args.device,
-                args.box_threshold, args.text_threshold, glass, support_masks_for_relation,
-                guards, output,
+                args.box_threshold, args.text_threshold, glass, output, guards,
+                bird_mask=bird_raw, yellow_base_board_mask=yellow_raw, white_platform_mask=white_raw,
             )
-        selected_plinth = _select_one(candidates["support_plinth"])
-        selected_mount = _select_one(candidates["support_mount"])
-        plinth_raw = _load_candidate_mask(selected_plinth, glass.shape)
-        mount_raw = _load_candidate_mask(selected_mount, glass.shape)
-        bird_support_raw = plinth_raw | mount_raw
-        union_raw = bird_mask_raw | bird_support_raw
+            selected_fixture = _select_one(candidates["connected_fixture"])
+        else:
+            candidates["connected_fixture"] = []
+            selected_fixture = None
+        fixture_raw = _load_candidate_mask(selected_fixture, glass.shape)
+        internal_base_raw = yellow_raw | white_raw | fixture_raw
+        union_raw = bird_raw | internal_base_raw
         final_masks = {
-            "bird": bird_mask_raw & glass,
-            "bird_support": bird_support_raw & glass,
-            "union": union_raw & glass,
-            "support_plinth": plinth_raw & glass,
-            "support_mount": mount_raw & glass,
+            "bird": bird_raw & glass,
+            "yellow_base_board": yellow_raw & glass,
+            "white_platform": white_raw & glass,
+            "connected_fixture": fixture_raw & glass,
+            "internal_base": internal_base_raw & glass,
+            "internal_object_union": union_raw & glass,
+            "glass_hard": glass,
         }
-        _binary_png(output / "raw" / "bird" / f"{stem}.png", bird_mask_raw)
-        _binary_png(output / "raw" / "support_plinth" / f"{stem}.png", plinth_raw)
-        _binary_png(output / "raw" / "support_mount" / f"{stem}.png", mount_raw)
-        for role in ("bird", "bird_support", "union"):
+        domains = _domains(final_masks["internal_object_union"], glass)
+        for role in ("bird", "yellow_base_board", "white_platform", "connected_fixture"):
+            _binary_png(output / "raw" / role / f"{stem}.png", final_masks[role] if role in final_masks else np.zeros_like(glass))
+        for role in ("bird", "internal_base", "internal_object_union", "glass_hard"):
             _binary_png(output / "processed" / role / f"{stem}.png", final_masks[role])
-        bird_status = _status_from(selected_bird, bird_candidates)
-        support_status = (
+        _binary_png(output / "processed" / "internal_ignore_preview" / f"{stem}.png", domains["Mignore"])
+
+        bird_status = _status_from(selected_bird, candidates["bird"])
+        yellow_status = _status_from(selected_yellow, candidates["yellow_base_board"])
+        white_status = _status_from(selected_white, candidates["white_platform"])
+        fixture_status = "disabled_empty" if not args.enable_connected_fixture else _status_from(selected_fixture, candidates["connected_fixture"])
+        quality_flags = _quality_flags(final_masks, guards)
+        internal_base_status = (
             "auto_candidate_ready"
-            if selected_plinth or selected_mount else (
-                "unresolved" if candidates["support_plinth"] or candidates["support_mount"]
-                else "manual_edit_required"
-            )
+            if selected_yellow and selected_white and not quality_flags else "unresolved"
         )
-        union_ratio = float(final_masks["union"].sum() / max(glass.sum(), 1))
-        support_ratio = float(final_masks["bird_support"].sum() / max(glass.sum(), 1))
-        bird_ratio = float(final_masks["bird"].sum() / max(glass.sum(), 1))
-        union_guard = [] if union_ratio <= guards["union_max_glass_ratio"] else ["union_mask_glass_ratio_too_large"]
         frame_status = (
             "auto_candidate_ready"
-            if bird_status == support_status == "auto_candidate_ready" and not union_guard
+            if bird_status == "auto_candidate_ready" and internal_base_status == "auto_candidate_ready"
             else "unresolved"
         )
-        status = {
-            "bird_status": bird_status,
-            "bird_support_status": support_status,
-            "frame_status": frame_status,
-            "quality_guards": union_guard,
-        }
+        if quality_flags:
+            frame_status = "unresolved"
         if frame_status != "auto_candidate_ready":
-            review_queue.append({"stem": stem, "status": frame_status, "reason": ";".join(union_guard) or "unresolved_candidate_selection"})
+            review_queue.append({"stem": stem, "status": frame_status, "reason": ";".join(quality_flags) or "unresolved_candidate_selection"})
+        raw_outside = float(((union_raw & ~glass).sum()) / max(union_raw.sum(), 1))
+        base_summary = mask_component_summary(final_masks["internal_base"])
+        union_summary = mask_component_summary(final_masks["internal_object_union"])
+        row = {
+            "stem": stem,
+            "bird_candidate_count": len(candidates["bird"]),
+            "bird_selected_candidate_id": selected_bird["candidate_id"] if selected_bird else None,
+            "bird_status": bird_status,
+            "bird_image_ratio": candidate_metrics(final_masks["bird"], glass)["mask_image_ratio"],
+            "bird_glass_ratio": candidate_metrics(final_masks["bird"], glass)["mask_glass_ratio"],
+            "bird_connected_components": mask_component_summary(final_masks["bird"])["connected_components"],
+            "bird_reflection_risk": "review_required_if_duplicate_component",
+            "yellow_base_board_candidate_count": len(candidates["yellow_base_board"]),
+            "yellow_base_board_selected_id": selected_yellow["candidate_id"] if selected_yellow else None,
+            "yellow_base_board_status": yellow_status,
+            "yellow_base_board_glass_ratio": candidate_metrics(final_masks["yellow_base_board"], glass)["mask_glass_ratio"],
+            "white_platform_candidate_count": len(candidates["white_platform"]),
+            "white_platform_selected_id": selected_white["candidate_id"] if selected_white else None,
+            "white_platform_status": white_status,
+            "white_platform_glass_ratio": candidate_metrics(final_masks["white_platform"], glass)["mask_glass_ratio"],
+            "connected_fixture_candidate_count": len(candidates["connected_fixture"]),
+            "connected_fixture_selected_id": selected_fixture["candidate_id"] if selected_fixture else None,
+            "connected_fixture_status": fixture_status,
+            "fixture_connects_bird": bool(selected_fixture and selected_fixture.get("bird_distance_px", 1e9) <= 8.0),
+            "fixture_connects_base": bool(selected_fixture and selected_fixture.get("forms_bird_to_base_connection")),
+            "fixture_independent_pole_risk": "rejected_or_disabled",
+            "internal_base_status": internal_base_status,
+            "internal_base_image_ratio": candidate_metrics(final_masks["internal_base"], glass)["mask_image_ratio"],
+            "internal_base_glass_ratio": candidate_metrics(final_masks["internal_base"], glass)["mask_glass_ratio"],
+            "internal_base_connected_components": base_summary["connected_components"],
+            "internal_base_bbox": base_summary["bbox_xyxy"],
+            "internal_base_centroid": base_summary["centroid_xy"],
+            "union_image_ratio": candidate_metrics(final_masks["internal_object_union"], glass)["mask_image_ratio"],
+            "union_glass_ratio": candidate_metrics(final_masks["internal_object_union"], glass)["mask_glass_ratio"],
+            "union_connected_components": union_summary["connected_components"],
+            "raw_outside_glass_ratio": raw_outside,
+            "clipped_removed_ratio": raw_outside,
+            "Mpos_area": int(domains["Mpos"].sum()),
+            "Mignore_area": int(domains["Mignore"].sum()),
+            "Mneg_area": int(domains["Mneg"].sum()),
+            "quality_guards": ";".join(quality_flags),
+            "review_flags": ";".join(quality_flags),
+            "frame_status": frame_status,
+        }
+        rows.append(row)
+        status = {**row, "quality_flags": quality_flags}
         selection_json[stem] = {
             "status": frame_status,
-            "bird_candidate_id": selected_bird["candidate_id"] if selected_bird else None,
-            "support_plinth_candidate_id": selected_plinth["candidate_id"] if selected_plinth else None,
-            "support_mount_candidate_id": selected_mount["candidate_id"] if selected_mount else None,
-            "bird_candidates": bird_candidates,
-            "support_plinth_candidates": candidates["support_plinth"],
-            "support_mount_candidates": candidates["support_mount"],
-            "quality_guards": status["quality_guards"],
+            "auto_suggestion": {
+                "bird_candidate_id": row["bird_selected_candidate_id"],
+                "yellow_base_board_candidate_id": row["yellow_base_board_selected_id"],
+                "white_platform_candidate_id": row["white_platform_selected_id"],
+                "connected_fixture_candidate_id": row["connected_fixture_selected_id"],
+            },
+            "candidates": candidates,
+            "quality_guards": quality_flags,
             "ratios": {
-                "bird_glass_ratio": bird_ratio,
-                "bird_support_glass_ratio": support_ratio,
-                "union_glass_ratio": union_ratio,
+                "internal_base_glass_ratio": row["internal_base_glass_ratio"],
+                "internal_object_union_glass_ratio": row["union_glass_ratio"],
             },
         }
         review_template[stem] = {
             "bird_candidate_id": None,
-            "support_plinth_candidate_id": None,
-            "support_mount_candidate_id": None,
+            "yellow_base_board_candidate_id": None,
+            "white_platform_candidate_id": None,
+            "connected_fixture_candidate_id": None,
             "status": "accept|reject|manual_edit_required",
+            "bird_ok": None,
+            "yellow_base_board_ok": None,
+            "white_platform_ok": None,
+            "isolated_pole_included": None,
+            "glass_included": None,
+            "outside_ground_included": None,
+            "reflection_included": None,
+            "ignore_region_ok": None,
             "notes": "",
         }
-        rows.append({
-            "stem": stem,
-            "bird_candidate_count": len(bird_candidates),
-            "bird_candidate_id": selection_json[stem]["bird_candidate_id"],
-            "bird_status": bird_status,
-            "support_plinth_candidate_count": len(candidates["support_plinth"]),
-            "support_mount_candidate_count": len(candidates["support_mount"]),
-            "support_plinth_candidate_id": selection_json[stem]["support_plinth_candidate_id"],
-            "support_mount_candidate_id": selection_json[stem]["support_mount_candidate_id"],
-            "bird_support_status": support_status,
-            "frame_status": frame_status,
-            "bird_glass_ratio": bird_ratio,
-            "bird_support_glass_ratio": support_ratio,
-            "union_glass_ratio": union_ratio,
-            "raw_outside_glass_ratio": float(((union_raw & ~glass).sum()) / max(union_raw.sum(), 1)),
-            "raw_clipped_removed_ratio": float(((union_raw & ~glass).sum()) / max(union_raw.sum(), 1)),
-            "union_connected_components": candidate_metrics(union_raw, glass)["connected_components"],
-            "union_glass_iou": candidate_metrics(union_raw, glass)["glass_iou"],
-            "quality_guards": ";".join(status["quality_guards"]),
-        })
         binary = _hstack([
             _panel(Image.fromarray(rgb), f"{stem} Original"),
             _panel(Image.fromarray((final_masks["bird"].astype(np.uint8) * 255), mode="L").convert("RGB"), "Bird"),
-            _panel(Image.fromarray((final_masks["bird_support"].astype(np.uint8) * 255), mode="L").convert("RGB"), "Bird Support"),
-            _panel(Image.fromarray((final_masks["union"].astype(np.uint8) * 255), mode="L").convert("RGB"), "Internal Object Union"),
+            _panel(Image.fromarray((final_masks["internal_base"].astype(np.uint8) * 255), mode="L").convert("RGB"), "Internal Base"),
+            _panel(Image.fromarray((final_masks["internal_object_union"].astype(np.uint8) * 255), mode="L").convert("RGB"), "Internal Object Union"),
             _panel(Image.fromarray((glass.astype(np.uint8) * 255), mode="L").convert("RGB"), "Glass Hard"),
         ])
         overlay = _hstack([
             _panel(Image.fromarray(rgb), f"{stem} Original"),
             _panel(_overlay(rgb, final_masks["bird"], "bird"), "Bird"),
-            _panel(_overlay(rgb, final_masks["bird_support"], "bird_support"), "Bird Support"),
-            _panel(_overlay(rgb, final_masks["union"], "union"), "Internal Object Union"),
+            _panel(_overlay(rgb, final_masks["internal_base"], "internal_base"), "Internal Base"),
+            _panel(_overlay(rgb, final_masks["internal_object_union"], "internal_object_union"), "Internal Object Union"),
             _panel(_overlay(rgb, glass, "glass_hard"), "Glass Hard"),
+        ])
+        ignore = _hstack([
+            _panel(Image.fromarray(rgb), f"{stem} Original"),
+            _panel(_overlay(rgb, domains["Mpos"], "bird"), "Mpos"),
+            _panel(_overlay(rgb, domains["Mignore"], "internal_ignore_preview"), "Mignore"),
+            _panel(_overlay(rgb, domains["Mneg"], "glass_hard"), "Mneg"),
         ])
         binary.save(output / "overlays" / f"{stem}_binary_comparison.png")
         overlay.save(output / "overlays" / f"{stem}_overlay_comparison.png")
+        ignore.save(output / "overlays" / f"{stem}_ignore_domain_review.png")
         fixed_binary.append(binary)
         fixed_overlay.append(overlay)
-        review_pages.append(_write_review_page(output, stem, rgb, glass, final_masks, candidates, status))
+        ignore_pages.append(ignore)
+        review_pages.append(_write_review_page(output, stem, rgb, final_masks, candidates, status))
 
     _write_fixed_sheet(fixed_binary, output / "contact_sheets" / "fixed_nine_binary_comparison.png")
     _write_fixed_sheet(fixed_overlay, output / "contact_sheets" / "fixed_nine_overlay_comparison.png")
     _write_fixed_sheet(review_pages, output / "contact_sheets" / "fixed_nine_candidate_review.png")
+    _write_fixed_sheet(ignore_pages, output / "contact_sheets" / "fixed_nine_ignore_domain_review.png")
     with (output / "candidate_selection.csv").open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
@@ -497,17 +602,23 @@ def main() -> int:
         "seed": args.seed,
         "device": args.device,
         "input_image_sha256": {stem: sha256_file(scene / args.images / f"{stem}.jpg") for stem in stems},
-        "method": "per-frame independent grounding; no video propagation claimed",
+        "glass_manifest": glass_manifest,
+        "method": "per-frame independent grounding; no video propagation; fixed-nine only",
         "video_propagation": None,
     }
     summary = {
-        "artifact_role": "Grounded-SAM2 fixed-nine proposal review artifact",
+        "artifact_role": "Grounded-SAM2 fixed-nine v3 proposal review artifact",
+        "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
         "status_counts": {
             status: sum(1 for row in rows if row["frame_status"] == status)
             for status in ("auto_candidate_ready", "unresolved", "manual_edit_required")
         },
         "fixed_nine": list(stems),
-        "guards": guards,
+        "engineering_review_guards": guards,
+        "connected_fixture": {
+            "enabled": bool(args.enable_connected_fixture),
+            "default": "disabled_empty_to_avoid_independent_pole_or_rail_selection",
+        },
         "rows": rows,
         "review_queue_count": len(review_queue),
     }
@@ -515,16 +626,22 @@ def main() -> int:
         "schema_version": SCHEMA_VERSION,
         "role": PROPOSAL_ROLE,
         "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
-        "legacy_aliases": {"base": "bird_support"},
+        "legacy_aliases": {
+            "base": "legacy_not_auto_promoted_to_internal_base",
+            "bird_support": "legacy_not_auto_promoted_to_internal_base",
+        },
         "human_status": "proposal_requires_review",
         "count": len(stems),
         "ordered_stems": list(stems),
+        "formal_roles": ["bird", "internal_base", "internal_object_union"],
+        "helper_candidate_classes": list(CLASSES),
         "prompts": {
             "bird": list(BIRD_PROMPTS),
-            "support_plinth": list(SUPPORT_PLINTH_PROMPTS),
-            "support_mount": list(SUPPORT_MOUNT_PROMPTS),
+            "yellow_base_board": list(YELLOW_BASE_BOARD_PROMPTS),
+            "white_platform": list(WHITE_PLATFORM_PROMPTS),
+            "connected_fixture": list(CONNECTED_FIXTURE_PROMPTS),
         },
-        "candidate_selection_policy": "score_individual_candidates_no_unconditional_or_v2",
+        "candidate_selection_policy": "score_individual_candidates_no_unconditional_or_v3",
         "grounded_sam2": grounded_sam2,
         "summary": summary,
     }
@@ -532,8 +649,13 @@ def main() -> int:
     (output / "proposal_manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     (output / "proposal_summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
     (output / "README.md").write_text(
-        "# D-016 fixed-nine candidate review v2\n\n"
-        "Artifact role: Grounded-SAM2 fixed-nine proposal review artifact.\n\n"
+        "# D-016 fixed-nine candidate review v3\n\n"
+        "Artifact role: Grounded-SAM2 fixed-nine v3 proposal review artifact.\n\n"
+        "Formal v3 classes are bird, internal_base, and internal_object_union.\n"
+        "internal_base includes the yellow rectangular base board, the white platform,\n"
+        "and only human-confirmed connected fixtures. It is not glass_hard, not the\n"
+        "transparent glass floor, not the whole display case, not outside ground,\n"
+        "not independent rails or poles, and not bird.\n\n"
         "This is not a formal reviewed mask, not accepted supervision, and not training-ready.\n",
         encoding="utf-8",
     )

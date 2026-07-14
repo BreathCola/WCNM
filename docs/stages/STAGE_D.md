@@ -407,11 +407,14 @@ D-016 replaces further D-015 Arm debugging. D-015 outputs, code, and logs are
 preserved as read-only evidence; they are not resume sources and are not the
 training source for this task.
 
-The goal is to create `bird`, `bird_support`, and `bird | bird_support` masks
-for the 111 TiHuBird source images using the local Grounded-SAM2 environment.
-`base` is no longer the active semantic name; it is accepted only as a legacy
-manifest alias for `bird_support` when hashes match. These masks separate two
-responsibilities:
+The goal is to create `bird`, `internal_base`, and
+`internal_object_union = bird | internal_base` masks for the 111 TiHuBird source
+images using the local Grounded-SAM2 environment. V3 retires `bird_support` and
+does not allow `support_mount` as a final semantic role. `internal_base`
+contains the yellow rectangular base board inside the glass, the white platform
+under the bird, and only reviewed fixtures connected to those base structures;
+it excludes glass, outside ground, independent rails/poles, labels,
+reflections, and bird. These masks separate two responsibilities:
 
 - the reviewed glass mask continues to define where T first bounce and Cout
   second bounce run: `mask_hard & valid_two_hit`;
@@ -426,17 +429,20 @@ create `data/TiHuBird/internal_object_masks_reviewed_v1/` only after explicit
 user approval of all 111 stems. Stage D loaders must reject proposal directories
 and loose PNG sets.
 
-The fixed-nine D-016a proposal probe must not OR all prompts, boxes, and SAM
+The fixed-nine D-016 v3 proposal probe must not OR all prompts, boxes, and SAM
 masks together. It must emit independent candidates for `bird`,
-`support_plinth`, and `support_mount`, reject candidates that fill glass, leak
-outside glass, touch too many glass boundaries, or fragment the bird, and form
-`bird_support` only from selected support subclasses.
+`yellow_base_board`, `white_platform`, and optional `connected_fixture`.
+`connected_fixture` is not a final role and may be empty. The generator must
+reject candidates that fill glass, leak outside glass, touch too many glass
+boundaries, fragment the bird, or resemble independent side poles/rails.
+`internal_base` is formed only from selected yellow-board, white-platform, and
+reviewed connected-fixture helper candidates.
 
 The fixed preferred prompt roles are:
 
 ```text
 Bird: the physical taxidermy bird specimen inside the glass display case
-Bird support: the physical support structure under the bird inside the glass display case
+Internal base: the yellow rectangular display board and white platform inside the glass case
 ```
 
 The fixed fallback prompt lists are recorded in the proposal manifest. Prompt
@@ -452,15 +458,18 @@ only `Ain`:
 
 ```text
 Mpos = erode(Mobj) & mask_hard & valid_two_hit
-Mneg = outside(dilate(Mobj)) & mask_hard & valid_two_hit
+Mignore = (dilate(Mobj) - erode(Mobj) | reviewed internal_ignore) & mask_hard & valid_two_hit
+Mneg = outside(dilate(Mobj)) & mask_hard & valid_two_hit & !reviewed_internal_ignore
 L_object = lambda_pos * mean(Mpos * relu(alpha_floor - Ain))
          + lambda_neg * mean(Mneg * Ain)
 ```
 
-The ignore band is `dilate(Mobj) - erode(Mobj)`. This loss must not use target
-RGB as `Cin` supervision, crop final RGB, change the T/Cout ray domain, disable
-Cout, or allow gradients into frozen D/R. All metrics are computed from float
-tensors; PNGs are visual evidence only.
+`Mignore` has no alpha penalty and prevents uncertain internal details,
+boundary errors, labels, highlights, or optional reviewed ignore regions from
+becoming forced negatives. This loss must not use target RGB as `Cin`
+supervision, crop final RGB, change the T/Cout ray domain, disable Cout, or
+allow gradients into frozen D/R. All metrics are computed from float tensors;
+PNGs are visual evidence only.
 
 The bounded D-016 pilot is an independent Stage D operator. It defaults to a
 plan-only dry run and requires `--execute` to launch training. It starts fresh
