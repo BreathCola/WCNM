@@ -334,6 +334,7 @@ def materialize(args: argparse.Namespace) -> dict:
         first_filter = dict(scene.transmittance.initialization["selection"]["internal_object_filter"])
 
         tmp_check = tmp / "_second_replay_check"
+        tmp_check.mkdir(parents=True)
         dataset2, opt2, pipe2, start_checkpoint2 = _extract_train_args(plan)
         scene2, state2, _background2, _release2, _cache2, _source2 = _build_scene(
             dataset2, opt2, pipe2, tmp_check, start_checkpoint2, metadata,
