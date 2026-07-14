@@ -88,8 +88,37 @@ processed union strictly inside `glass_hard`. Proposal manifest SHA-256 is
 `4e8c8615af9328d5e09e07f09ef013f2980b6560beedea41c729714708d15190`;
 human-review record SHA-256 is
 `c29fb52c87b7126711690e1da466c52d1ceeab3185cae34c64afc41d5753629e`.
-No formal promotion, training, optimizer update, Stage C rewrite, checkpoint,
-PLY, D-015, D-016 pilot, or Stage E work is authorized by this proposal.
+
+The user subsequently explicitly accepted all 111 proposal frames,
+000000--000110, with rejected = 0 and manual_edit_required = 0. Frames 000012,
+000048, 000049, 000050, 000051, 000052, and 000053 are
+accepted_with_warning; all other frames are accepted. D-016c promoted the
+byte-identical processed proposal masks to the local formal reviewed release
+`data/TiHuBird/internal_object_masks_reviewed_v3/` with role
+`stage_d_internal_object_masks_reviewed`, human_status `accepted`, semantic
+version `tihubird_bird_and_internal_base_v3`, and 111/111 stems. The release
+includes local `bird`, `internal_base`, `internal_object_union`, and validation
+`glass_hard` PNGs, plus an empty `internal_ignore/`. Its aggregate mask SHA-256
+is `c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052`,
+manifest file SHA-256 is
+`ae5be91083c9859a81917c383358b030bc3621cd3d8ac52faea8a5becf40350e`, canonical
+payload SHA-256 is
+`34e244f45758d2e6fac010b3510a63b418c5a006678c84478b3dae9701491592`, and human
+review record SHA-256 is
+`a1980f4604da3d7b935e149c8b55ac53be87a0361a1b4528325e4130e9d304ca`. The
+source proposal manifest SHA-256 remains
+`4e8c8615af9328d5e09e07f09ef013f2980b6560beedea41c729714708d15190`; source
+proposal payload hash is
+`205a6af0bfa119fee0fa269307460a377353940926b9b4882659e21296970e26`; source
+processed payload hash before and after promotion is
+`521b6b9e3f1010342edee3e3b2e9e377fa46b270753f9196ced090581c52f8ae`. The
+strict loader accepts this formal release and still rejects proposal artifacts,
+loose PNGs, v1/v2 semantics, non-accepted status, missing/extra stems, hash
+mismatches, union equation failures, and union outside reviewed `glass_hard`.
+`data/` is ignored by Git in this repository, so this release is a local
+immutable data artifact and is not claimed as Git-tracked. No training,
+optimizer update, checkpoint, PLY, Stage C rewrite, D-016 pilot, D-015, or
+Stage E work was run by the promotion.
 
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and

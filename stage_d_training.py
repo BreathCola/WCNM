@@ -898,7 +898,7 @@ def _validate_internal_object_contract(
         "reflection_off": dataset.transparent_reflection_mode == "off",
         "cout_safe": dataset.cout_ownership_mode == "support_safe_outside",
         "glass_mask": current_mask.get("role") == "stage_b_formal_reviewed_specular_soft_masks",
-        "internal_mask": internal.get("role") == "stage_d_formal_reviewed_internal_object_masks",
+        "internal_mask": internal.get("role") == REVIEWED_ROLE,
         "object_weights_explicit": (
             float(getattr(opt, "lambda_object_positive", 0.0)) > 0.0
             or float(getattr(opt, "lambda_object_negative", 0.0)) > 0.0

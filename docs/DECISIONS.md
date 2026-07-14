@@ -3482,3 +3482,66 @@ Impact: The current 111-view package is ready for human review only. It does
 not create `data/TiHuBird/internal_object_masks_reviewed_v3/`, does not enable
 object loss, does not run training or a D-016 pilot, and does not authorize Stage
 D acceptance or Stage E.
+
+## D-016c addendum — Formal reviewed-v3 mask promotion
+
+Date: 2026-07-14
+
+Question: After explicit user approval of all 111 reviewed-anchor proposal
+frames, how should the project create formal internal-object supervision without
+silently changing mask pixels or letting proposal artifacts become training
+inputs?
+
+Chosen implementation: Create a separate local release at
+`data/TiHuBird/internal_object_masks_reviewed_v3/` with artifact role
+`stage_d_internal_object_masks_reviewed`, `human_status = accepted`, semantic
+version `tihubird_bird_and_internal_base_v3`, and accepted stems
+000000--000110. The formal `bird`, `internal_base`, and
+`internal_object_union` PNGs are byte-for-byte copies of the proposal
+`processed/` masks. The release also stores byte-copied proposal
+`processed/glass_hard` masks for validation, while retaining the separate
+formal Stage-B soft-glass source hashes. `internal_ignore/` is present and empty
+for this reviewed release.
+
+The manifest records RGB hashes, formal soft-glass hashes, hard-glass hashes,
+all three internal-object role hashes, aggregate mask hash, source proposal
+manifest file hash, source proposal canonical payload hash, source processed
+payload hash, generation code identity, repository commit identity, and review
+authorization `{type: explicit_user_approval, source: current_codex_task_prompt}`.
+It records no reviewer name. The source proposal manifest SHA-256 is
+`4e8c8615af9328d5e09e07f09ef013f2980b6560beedea41c729714708d15190`, source
+proposal payload hash is
+`205a6af0bfa119fee0fa269307460a377353940926b9b4882659e21296970e26`, source
+processed payload hash is
+`521b6b9e3f1010342edee3e3b2e9e377fa46b270753f9196ced090581c52f8ae`, release
+aggregate mask SHA-256 is
+`c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052`, manifest
+file SHA-256 is
+`ae5be91083c9859a81917c383358b030bc3621cd3d8ac52faea8a5becf40350e`, canonical
+payload SHA-256 is
+`34e244f45758d2e6fac010b3510a63b418c5a006678c84478b3dae9701491592`, and human
+review record SHA-256 is
+`a1980f4604da3d7b935e149c8b55ac53be87a0361a1b4528325e4130e9d304ca`.
+
+The formal loader accepts only this reviewed role, accepted human status, v3
+semantic version, complete 111 stems, correct per-file hashes, correct canonical
+payload hash, `union == bird | internal_base`, `bird` and `internal_base`
+subsets of union, and `union` subset of reviewed `glass_hard`. It rejects
+proposal manifests, fixed-nine artifacts, loose PNGs, v1/v2 semantics,
+`proposal_requires_review`, missing or extra stems, hash mismatches, and union
+or glass-domain failures. Accepted-with-warning frames 000012, 000048, 000049,
+000050, 000051, 000052, and 000053 remain accepted by explicit user override
+and do not block loading.
+
+Alternatives: Re-encode masks during promotion; depend on the proposal directory
+at training time; use the soft-glass PNG hash as the hard-glass file identity;
+or force-add ignored TiHuBird data into Git. These would risk pixel drift,
+proposal/formal confusion, incorrect glass-domain validation, or inconsistent
+data-versioning policy.
+
+Impact: D-016c now has formal reviewed internal-object mask infrastructure for a
+future separately authorized D-016 pilot. The release directory has write bits
+removed and refuses overwrite on creation. Because `data/` is ignored, the
+release is a local immutable data artifact, not a Git-tracked asset. This did
+not run training, optimizer steps, checkpoint/PLY export, Stage C modification,
+the D-016 pilot, or Stage E.

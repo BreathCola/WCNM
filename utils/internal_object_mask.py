@@ -22,7 +22,7 @@ import torch.nn.functional as F
 
 
 PROPOSAL_ROLE = "stage_d_internal_object_mask_proposal"
-REVIEWED_ROLE = "stage_d_formal_reviewed_internal_object_masks"
+REVIEWED_ROLE = "stage_d_internal_object_masks_reviewed"
 SCHEMA_VERSION = 1
 INTERNAL_OBJECT_SEMANTICS_VERSION = "tihubird_bird_and_internal_base_v3"
 MASK_INTERPOLATION = "opencv.INTER_NEAREST"
@@ -91,6 +91,8 @@ def sha256_file(path: Path | str) -> str:
 def canonical_payload_sha256(payload: dict[str, Any]) -> str:
     clean = dict(payload)
     clean.pop("manifest_payload_sha256", None)
+    clean.pop("canonical_payload_sha256", None)
+    clean.pop("payload_sha256", None)
     encoded = json.dumps(
         clean, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
     ).encode("utf-8")
@@ -571,10 +573,15 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     if payload.get("role") == PROPOSAL_ROLE:
         raise ValueError("proposal internal-object masks are not formal training supervision")
-    if payload.get("role") != REVIEWED_ROLE or payload.get("schema_version") != SCHEMA_VERSION:
-        raise ValueError("--internal_object_masks accepts only a formal reviewed manifest")
-    if payload.get("human_status") != "accepted" or payload.get("count") != 111:
+    role = payload.get("artifact_role")
+    if role != REVIEWED_ROLE or payload.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError("--internal_object_masks accepts only a formal reviewed internal-object release")
+    if payload.get("role", REVIEWED_ROLE) != REVIEWED_ROLE:
+        raise ValueError("formal internal-object role alias mismatch")
+    if payload.get("human_status") != "accepted" or payload.get("accepted_count") != 111:
         raise ValueError("formal internal-object manifest must record accepted 111/111 masks")
+    if payload.get("count") not in (None, 111):
+        raise ValueError("formal internal-object count must be 111")
     if payload.get("internal_object_semantics_version") != INTERNAL_OBJECT_SEMANTICS_VERSION:
         raise ValueError(
             "formal internal-object manifest semantic version mismatch: "
@@ -582,10 +589,15 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         )
     if payload.get("mask_interpolation") != MASK_INTERPOLATION:
         raise ValueError(f"formal internal-object manifest must declare {MASK_INTERPOLATION}")
-    if payload.get("ordered_stems") != EXPECTED_STEMS:
+    if payload.get("ordered_stems") != EXPECTED_STEMS or payload.get("accepted_stems") != EXPECTED_STEMS:
         raise ValueError("formal internal-object manifest stems must be exactly 000000--000110")
-    if payload.get("manifest_payload_sha256") != canonical_payload_sha256(payload):
+    canonical = canonical_payload_sha256(payload)
+    if payload.get("canonical_payload_sha256") != canonical:
+        raise ValueError("formal internal-object canonical payload hash mismatch")
+    if payload.get("manifest_payload_sha256") not in (None, canonical):
         raise ValueError("formal internal-object manifest payload hash mismatch")
+    if not payload.get("source_proposal_payload_hash"):
+        raise ValueError("formal internal-object manifest must record source proposal payload hash")
     if payload.get("legacy_aliases", {}).get("bird_support") == "internal_base":
         raise ValueError("legacy bird_support may not be auto-promoted to internal_base")
     images = {path.stem: path for path in sorted(image_root.iterdir()) if path.is_file()}
@@ -595,6 +607,30 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
     if not isinstance(entries, list) or [entry.get("stem") for entry in entries] != EXPECTED_STEMS:
         raise ValueError("formal internal-object entries are missing, duplicated, extra, or out of order")
     root = manifest.parent
+    for role_name in (*MASK_ROLES, "glass_hard"):
+        role_root = root / role_name
+        if not role_root.is_dir():
+            raise ValueError(f"formal internal-object missing role directory: {role_name}")
+        if sorted(path.stem for path in role_root.glob("*.png")) != EXPECTED_STEMS:
+            raise ValueError(f"formal internal-object {role_name} directory has missing or extra stems")
+    ignore_root = root / "internal_ignore"
+    if ignore_root.exists():
+        referenced_ignore = sorted(
+            entry["stem"] for entry in entries if entry.get("internal_ignore_mask_path") is not None
+        )
+        if sorted(path.stem for path in ignore_root.glob("*.png")) != referenced_ignore:
+            raise ValueError("formal internal-object internal_ignore directory has missing or extra stems")
+    hash_maps = {
+        "rgb": payload.get("rgb_hashes"),
+        "glass": payload.get("glass_hashes"),
+        "glass_hard": payload.get("glass_hard_hashes"),
+        "bird": payload.get("bird_hashes"),
+        "internal_base": payload.get("internal_base_hashes"),
+        "internal_object_union": payload.get("internal_object_union_hashes"),
+    }
+    for name, values in hash_maps.items():
+        if not isinstance(values, dict) or sorted(values) != EXPECTED_STEMS:
+            raise ValueError(f"formal internal-object {name} hash map must cover exactly 111 stems")
     runtime_entries: dict[str, Any] = {}
     aggregate = hashlib.sha256()
     for entry in entries:
@@ -602,11 +638,30 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         rgb = images[stem]
         if entry.get("rgb_path") != f"{images_directory}/{rgb.name}":
             raise ValueError(f"internal-object {stem} RGB path mismatch")
-        if entry.get("rgb_sha256") != sha256_file(rgb):
+        rgb_sha = sha256_file(rgb)
+        if entry.get("rgb_sha256") != rgb_sha or hash_maps["rgb"][stem] != rgb_sha:
             raise ValueError(f"internal-object {stem} RGB hash mismatch")
         with Image.open(rgb) as image:
+            if image.mode != "RGB":
+                raise ValueError(f"internal-object {stem} RGB mode mismatch")
             size = image.size
+        glass_rel = entry.get("glass_mask_path")
+        if glass_rel != f"specular_masks_reviewed_v1/{stem}.png":
+            raise ValueError(f"internal-object {stem} glass path mismatch")
+        glass_path = source / glass_rel
+        glass_sha = sha256_file(glass_path)
+        if entry.get("glass_mask_sha256") != glass_sha or hash_maps["glass"][stem] != glass_sha:
+            raise ValueError(f"internal-object {stem} glass hash mismatch")
+        glass_hard_rel = entry.get("glass_hard_mask_path")
+        if glass_hard_rel != f"glass_hard/{stem}.png":
+            raise ValueError(f"internal-object {stem} glass_hard path mismatch")
+        glass_hard_path = root / glass_hard_rel
+        glass_hard_sha = sha256_file(glass_hard_path)
+        if entry.get("glass_hard_mask_sha256") != glass_hard_sha or hash_maps["glass_hard"][stem] != glass_hard_sha:
+            raise ValueError(f"internal-object {stem} glass_hard hash mismatch")
+        glass_binary = _load_binary(glass_hard_path, size)
         role_entries: dict[str, Any] = {}
+        native_binary: dict[str, np.ndarray] = {}
         for role in MASK_ROLES:
             rel = entry.get(f"{role}_mask_path")
             if rel != f"{role}/{stem}.png":
@@ -614,11 +669,21 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
             path = root / rel
             mask_sha = sha256_file(path)
             expected_sha = entry.get(f"{role}_mask_sha256")
-            if expected_sha != mask_sha:
+            if expected_sha != mask_sha or hash_maps[role][stem] != mask_sha:
                 raise ValueError(f"internal-object {stem} {role} hash mismatch")
+            native_binary[role] = _load_binary(path, size)
             facts = inspect_l_mask(path, size)
             role_entries[role] = {"path": str(path), "sha256": mask_sha, "size": facts["size"]}
             aggregate.update(f"{stem} {role} {mask_sha}\n".encode("utf-8"))
+        native_union = native_binary["bird"] | native_binary["internal_base"]
+        if not np.array_equal(native_binary["internal_object_union"], native_union):
+            raise ValueError(f"formal internal-object union is not bird|internal_base for camera {stem}")
+        if (native_binary["bird"] & ~native_binary["internal_object_union"]).any():
+            raise ValueError(f"formal internal-object bird is not subset of union for camera {stem}")
+        if (native_binary["internal_base"] & ~native_binary["internal_object_union"]).any():
+            raise ValueError(f"formal internal-object internal_base is not subset of union for camera {stem}")
+        if (native_binary["internal_object_union"] & ~glass_binary).any():
+            raise ValueError(f"formal internal-object union is not subset of glass_hard for camera {stem}")
         ignore_rel = entry.get("internal_ignore_mask_path")
         if ignore_rel is not None:
             if ignore_rel != f"internal_ignore/{stem}.png":
@@ -636,10 +701,15 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
         raise ValueError("formal internal-object aggregate hash mismatch")
     return {
         "role": REVIEWED_ROLE,
+        "artifact_role": REVIEWED_ROLE,
         "count": 111,
+        "accepted_count": 111,
+        "accepted_with_warning": payload.get("accepted_with_warning", []),
         "manifest_path": str(manifest),
         "manifest_file_sha256": sha256_file(manifest),
-        "manifest_payload_sha256": payload["manifest_payload_sha256"],
+        "manifest_payload_sha256": payload.get("manifest_payload_sha256", payload["canonical_payload_sha256"]),
+        "canonical_payload_sha256": payload["canonical_payload_sha256"],
+        "source_proposal_payload_hash": payload["source_proposal_payload_hash"],
         "aggregate_sha256": aggregate.hexdigest(),
         "mask_interpolation": MASK_INTERPOLATION,
         "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,

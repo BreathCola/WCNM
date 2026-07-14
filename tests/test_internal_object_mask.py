@@ -40,15 +40,28 @@ def _write_mask(path, values):
 
 def _formal_manifest(scene, root):
     images = scene / "images"
+    glass_root = scene / "specular_masks_reviewed_v1"
     root.mkdir(parents=True)
-    for role in ("bird", "internal_base", "internal_object_union"):
+    for role in ("bird", "internal_base", "internal_object_union", "glass_hard"):
         (root / role).mkdir()
+    (root / "internal_ignore").mkdir()
     entries = []
     import hashlib
     aggregate = hashlib.sha256()
+    rgb_hashes = {}
+    glass_hashes = {}
+    glass_hard_hashes = {}
+    bird_hashes = {}
+    internal_base_hashes = {}
+    union_hashes = {}
     for stem in EXPECTED_STEMS:
         rgb = images / f"{stem}.jpg"
         _write_rgb(rgb)
+        glass = np.ones((6, 8), dtype=np.uint8)
+        glass_path = glass_root / f"{stem}.png"
+        _write_mask(glass_path, glass)
+        glass_hard_path = root / "glass_hard" / f"{stem}.png"
+        _write_mask(glass_hard_path, glass)
         bird = np.zeros((6, 8), dtype=np.uint8)
         internal_base = np.zeros((6, 8), dtype=np.uint8)
         bird[1:3, 2:4] = 1
@@ -60,17 +73,31 @@ def _formal_manifest(scene, root):
             "human_status": "accepted",
             "rgb_path": f"images/{stem}.jpg",
             "rgb_sha256": sha256_file(rgb),
+            "glass_mask_path": f"specular_masks_reviewed_v1/{stem}.png",
+            "glass_mask_sha256": sha256_file(glass_path),
+            "glass_hard_mask_path": f"glass_hard/{stem}.png",
+            "glass_hard_mask_sha256": sha256_file(glass_hard_path),
         }
+        rgb_hashes[stem] = entry["rgb_sha256"]
+        glass_hashes[stem] = entry["glass_mask_sha256"]
+        glass_hard_hashes[stem] = entry["glass_hard_mask_sha256"]
         for role, mask in masks.items():
             path = root / role / f"{stem}.png"
             _write_mask(path, mask)
             digest = sha256_file(path)
             entry[f"{role}_mask_path"] = f"{role}/{stem}.png"
             entry[f"{role}_mask_sha256"] = digest
+            if role == "bird":
+                bird_hashes[stem] = digest
+            elif role == "internal_base":
+                internal_base_hashes[stem] = digest
+            else:
+                union_hashes[stem] = digest
             aggregate.update(f"{stem} {role} {digest}\n".encode("utf-8"))
         entries.append(entry)
     payload = {
         "schema_version": SCHEMA_VERSION,
+        "artifact_role": REVIEWED_ROLE,
         "role": REVIEWED_ROLE,
         "internal_object_semantics_version": INTERNAL_OBJECT_SEMANTICS_VERSION,
         "legacy_aliases": {
@@ -78,14 +105,25 @@ def _formal_manifest(scene, root):
             "bird_support": "legacy_not_auto_promoted_to_internal_base",
         },
         "human_status": "accepted",
+        "accepted_count": 111,
         "count": 111,
         "ordered_stems": EXPECTED_STEMS,
+        "accepted_stems": EXPECTED_STEMS,
+        "accepted_with_warning": [],
         "mask_interpolation": MASK_INTERPOLATION,
         "aggregate_mask_sha256": aggregate.hexdigest(),
+        "source_proposal_payload_hash": "0" * 64,
+        "rgb_hashes": rgb_hashes,
+        "glass_hashes": glass_hashes,
+        "glass_hard_hashes": glass_hard_hashes,
+        "bird_hashes": bird_hashes,
+        "internal_base_hashes": internal_base_hashes,
+        "internal_object_union_hashes": union_hashes,
         "provenance": {"method": "unit-test"},
         "entries": entries,
     }
-    payload["manifest_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
     (root / "manifest.json").write_text(json.dumps(payload), encoding="utf-8")
     return root / "manifest.json"
 
@@ -96,6 +134,7 @@ def test_reviewed_manifest_validates_and_rejects_proposal(tmp_path):
     validated = validate_internal_object_mask_set(scene, "images", manifest)
     assert validated["role"] == REVIEWED_ROLE
     assert validated["count"] == 111
+    assert validated["accepted_count"] == 111
 
     proposal = tmp_path / "proposal.json"
     proposal.write_text(
@@ -120,6 +159,57 @@ def test_reviewed_manifest_rgb_hash_mismatch_fails(tmp_path):
         validate_internal_object_mask_set(scene, "images", manifest)
 
 
+def test_reviewed_manifest_glass_hash_mismatch_fails(tmp_path):
+    scene = tmp_path / "scene"
+    manifest = _formal_manifest(scene, tmp_path / "reviewed")
+    _write_mask(scene / "specular_masks_reviewed_v1" / "000000.png", np.zeros((6, 8), dtype=np.uint8))
+    with pytest.raises(ValueError, match="glass hash mismatch"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+
+def test_reviewed_manifest_missing_and_extra_stem_fail(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    (root / "bird" / "000110.png").unlink()
+    with pytest.raises(ValueError, match="missing or extra stems"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+    manifest = _formal_manifest(scene, tmp_path / "reviewed_extra")
+    _write_mask(tmp_path / "reviewed_extra" / "bird" / "999999.png", np.zeros((6, 8), dtype=np.uint8))
+    with pytest.raises(ValueError, match="missing or extra stems"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+
+def test_reviewed_manifest_mask_hash_mismatch_fails(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    mask = np.zeros((6, 8), dtype=np.uint8)
+    mask[0, 0] = 1
+    _write_mask(root / "bird" / "000000.png", mask)
+    with pytest.raises(ValueError, match="bird hash mismatch"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+
+def test_reviewed_manifest_union_outside_glass_fails(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    glass_hard = np.ones((6, 8), dtype=np.uint8)
+    glass_hard[1, 2] = 0
+    glass_hard_path = root / "glass_hard" / "000000.png"
+    _write_mask(glass_hard_path, glass_hard)
+    payload["entries"][0]["glass_hard_mask_sha256"] = sha256_file(glass_hard_path)
+    payload["glass_hard_hashes"]["000000"] = sha256_file(glass_hard_path)
+    payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="union is not subset of glass_hard"):
+        validate_internal_object_mask_set(scene, "images", manifest)
+
+
 def test_legacy_v2_bird_support_manifest_cannot_claim_v3(tmp_path):
     scene = tmp_path / "scene"
     root = tmp_path / "reviewed"
@@ -129,10 +219,12 @@ def test_legacy_v2_bird_support_manifest_cannot_claim_v3(tmp_path):
     for entry in payload["entries"]:
         entry["bird_support_mask_path"] = entry.pop("internal_base_mask_path").replace("internal_base/", "bird_support/")
         entry["bird_support_mask_sha256"] = entry.pop("internal_base_mask_sha256")
-    payload["manifest_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["internal_base_hashes"] = {}
+    payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
     manifest.write_text(json.dumps(payload), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="internal_base path mismatch"):
+    with pytest.raises(ValueError, match="missing role directory|hash map"):
         validate_internal_object_mask_set(scene, "images", manifest)
 
 
@@ -142,7 +234,8 @@ def test_legacy_alias_cannot_auto_promote_bird_support_to_internal_base(tmp_path
     manifest = _formal_manifest(scene, root)
     payload = json.loads(manifest.read_text(encoding="utf-8"))
     payload["legacy_aliases"] = {"bird_support": "internal_base"}
-    payload["manifest_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
     manifest.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ValueError, match="may not be auto-promoted"):
@@ -157,6 +250,38 @@ def test_resized_loader_checks_union_semantics(tmp_path):
     assert loaded["bird"].shape == (1, 3, 4)
     assert loaded["internal_base"].shape == (1, 3, 4)
     assert loaded["internal_object_union"].shape == (1, 3, 4)
+
+
+def test_accepted_with_warning_does_not_block_loading(tmp_path):
+    scene = tmp_path / "scene"
+    root = tmp_path / "reviewed"
+    manifest = _formal_manifest(scene, root)
+    payload = json.loads(manifest.read_text(encoding="utf-8"))
+    payload["accepted_with_warning"] = ["000012"]
+    payload["entries"][12]["human_status"] = "accepted_with_warning"
+    payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+    payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+    validated = validate_internal_object_mask_set(scene, "images", manifest)
+    assert validated["accepted_with_warning"] == ["000012"]
+
+
+def test_wrong_role_status_or_version_fails(tmp_path):
+    scene = tmp_path / "scene"
+    for field, value, pattern in (
+        ("artifact_role", "stage_d_internal_object_mask_proposal_111_v3", "formal reviewed"),
+        ("human_status", "proposal_requires_review", "accepted"),
+        ("internal_object_semantics_version", "v2", "semantic version"),
+    ):
+        root = tmp_path / f"reviewed_{field}"
+        manifest = _formal_manifest(scene, root)
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload[field] = value
+        payload["canonical_payload_sha256"] = canonical_payload_sha256(payload)
+        payload["manifest_payload_sha256"] = payload["canonical_payload_sha256"]
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        with pytest.raises(ValueError, match=pattern):
+            validate_internal_object_mask_set(scene, "images", manifest)
 
 
 def test_raw_clipped_accounting_and_review_flags(tmp_path):

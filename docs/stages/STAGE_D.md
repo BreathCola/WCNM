@@ -425,7 +425,7 @@ Grounded-SAM2 outputs first enter a proposal directory only. Proposal outputs
 must include raw masks, glass-clipped processed masks, overlays, contact sheets,
 per-view metadata, `manifest.json`, `validation.json`, and `review_queue.csv`.
 They are review evidence, not formal supervision. A separate promotion tool may
-create `data/TiHuBird/internal_object_masks_reviewed_v1/` only after explicit
+create `data/TiHuBird/internal_object_masks_reviewed_v3/` only after explicit
 user approval of all 111 stems. Stage D loaders must reject proposal directories
 and loose PNG sets.
 
@@ -458,6 +458,37 @@ The current reviewed-anchor artifact is
 auto-candidate-ready frames, 33 review-required frames, and 0 manual-edit
 required frames. This status does not create formal reviewed masks and cannot be
 used by training until a separate all-111 human-reviewed manifest is promoted.
+
+The user has now explicitly accepted all 111 frames from that proposal. D-016c
+promoted the reviewed masks to the local formal release
+`data/TiHuBird/internal_object_masks_reviewed_v3/` with role
+`stage_d_internal_object_masks_reviewed`, `human_status = accepted`, semantic
+version `tihubird_bird_and_internal_base_v3`, and stems 000000--000110. The
+formal `bird`, `internal_base`, and `internal_object_union` PNGs are byte copies
+of the proposal `processed/` PNGs; `glass_hard/` is included as a byte-copied
+validation domain; `internal_ignore/` is empty. Accepted-with-warning frames are
+000012, 000048, 000049, 000050, 000051, 000052, and 000053.
+
+Formal release identity:
+
+- aggregate mask SHA-256:
+  `c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052`;
+- manifest file SHA-256:
+  `ae5be91083c9859a81917c383358b030bc3621cd3d8ac52faea8a5becf40350e`;
+- manifest canonical payload SHA-256:
+  `34e244f45758d2e6fac010b3510a63b418c5a006678c84478b3dae9701491592`;
+- human review record SHA-256:
+  `a1980f4604da3d7b935e149c8b55ac53be87a0361a1b4528325e4130e9d304ca`;
+- source proposal processed payload SHA-256 before/after promotion:
+  `521b6b9e3f1010342edee3e3b2e9e377fa46b270753f9196ced090581c52f8ae`.
+
+The formal loader must continue to reject the proposal directory, fixed-nine
+proposal artifacts, loose PNGs, v1/v2 manifests, non-accepted status, missing or
+extra stems, hash mismatches, `union != bird | internal_base`, and
+`union` outside `glass_hard`. This promotion does not authorize or run the
+D-016 pilot, optimizer updates, checkpoints, PLY export, Stage C changes, joint
+training, Stage D acceptance, or Stage E. `data/` remains Git-ignored, so the
+formal release is local immutable data rather than a Git-tracked asset.
 
 The fixed preferred prompt roles are:
 

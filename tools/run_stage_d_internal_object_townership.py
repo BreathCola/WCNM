@@ -29,7 +29,7 @@ from utils.specular_mask import validate_specular_mask_set
 SOURCE = ROOT / "output/tier2_c03_r8_oneshot_v4_rstart_g03000_to_g15000/chkpnt15000.pth"
 RELEASE = ROOT / "geometry_releases/stage_c_geometry_release_v1.json"
 GLASS_MASK = "specular_masks_reviewed_v1/manifest.json"
-INTERNAL_MASK = "internal_object_masks_reviewed_v1/manifest.json"
+INTERNAL_MASK = "internal_object_masks_reviewed_v3/manifest.json"
 OUTPUT = ROOT / "output" / INTERNAL_OBJECT_OUTPUT_NAME
 
 
