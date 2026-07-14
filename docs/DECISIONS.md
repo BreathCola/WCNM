@@ -3431,3 +3431,54 @@ Impact: Existing training remains default-off and accepts only a full reviewed
 proposal is review evidence only and does not authorize the 111-view proposal,
 formal promotion, D-016 pilot, optimizer updates, joint training, Stage D
 acceptance, or Stage E.
+
+## D-016c — Reviewed-anchor 111-view proposal propagation
+
+Date: 2026-07-14
+
+Question: After explicit user approval of the nine fixed-nine v3 masks, how
+should the project generate a complete 111-view internal-object proposal without
+turning automatic propagation into training supervision?
+
+Chosen implementation: Record the nine accepted fixed-nine v3 masks in a
+separate human-review JSON with authorization source
+`current_codex_task_prompt`, candidate IDs, preserved automated warnings,
+proposal/candidate/summary file hashes, and per-role mask SHA-256 values. The
+record does not invent a reviewer identity and does not rewrite the accepted
+mask PNGs.
+
+The 111-view proposal uses the accepted masks as SAM2 video anchors with stable
+helper object IDs `1 = bird`, `2 = yellow_base_board`, and
+`3 = white_platform`. `support_mount` and `connected_fixture` are not propagated
+as formal objects. Each anchor interval is propagated independently left-to-right
+and right-to-left with SAM2 video `add_new_mask` and `propagate_in_video`; both
+directions are saved as separate candidates. Final per-frame helper masks are
+selected by anchor distance and consistency metadata, never by unconditional
+forward/backward union. Anchor frames are copied exactly and verified by hash.
+
+Engineering review guards now distinguish raw component count from significant
+components. A component is significant only when its area is at least
+`max(64 px, total_mask_area * 0.002)`. Tiny nearby fragments are warnings, not
+automatic blockers; distant significant components, low forward/backward IoU,
+low neighbor IoU, centroid jumps, area jumps, large raw outside-glass leakage,
+or glass-sized candidates enter the review queue. These thresholds are
+manifested as engineering review guards, not paper parameters.
+
+The generated artifact remains a proposal:
+`stage_d_internal_object_mask_proposal_111_v3` with
+`human_status = proposal_requires_review`. Raw selected helper masks are saved
+before glass clipping; processed `bird`, `internal_base`, and
+`internal_object_union` are clipped to formal `glass_hard`; preview
+`Mpos/Mignore/Mneg` domains are generated only for review and still require
+`glass_hard & valid_two_hit` at training time.
+
+Alternatives: Promote all 111 propagated masks automatically; OR forward and
+backward candidates; propagate a separate `support_mount`; copy neighboring
+masks across uncertain frames; or use proposal masks directly in training. These
+would replace human review with propagation, hide disagreements, reintroduce
+independent-pole ambiguity, or violate the proposal/formal-supervision boundary.
+
+Impact: The current 111-view package is ready for human review only. It does
+not create `data/TiHuBird/internal_object_masks_reviewed_v3/`, does not enable
+object loss, does not run training or a D-016 pilot, and does not authorize Stage
+D acceptance or Stage E.

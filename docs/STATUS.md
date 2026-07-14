@@ -69,10 +69,27 @@ is an independent side pole/round-base structure that must not enter
 conservative `Mignore` region: object boundary bands plus optional reviewed
 `internal_ignore` are excluded from both positive and negative `Ain` loss.
 Object masks still do not change ray domains, Cout, or full-frame RGB. V1/v2
-proposal artifacts are never auto-promoted. V3 is fixed-nine only and remains
-awaiting user review; no 111-view proposal, training, optimizer update, Stage C
-rewrite, checkpoint, PLY, formal promotion, D-015, D-016 pilot, or Stage E work
-is authorized by this status.
+proposal artifacts are never auto-promoted.
+
+The user explicitly accepted the nine fixed-nine v3 anchors for stems 000000,
+000014, 000028, 000042, 000055, 000069, 000083, 000097, and 000110. That
+authorization is recorded in
+`output/stage_d_tihubird_internal_object_mask_proposal_111_v3/fixed_nine_human_review_v3.json`
+with `review_authorization.type = explicit_user_approval` and no reviewer
+identity. The generated 111-view artifact at
+`output/stage_d_tihubird_internal_object_mask_proposal_111_v3/` is only
+`stage_d_internal_object_mask_proposal_111_v3` with
+`human_status = proposal_requires_review`: 9 anchor-accepted frames, 69
+auto-candidate-ready frames, 33 review-required frames, and 0 manual-edit
+required frames. Independent verification found 111/111 `bird`,
+`internal_base`, `internal_object_union`, and `glass_hard` processed masks,
+exact 27/27 anchor role hash parity, `union == bird | internal_base`, and
+processed union strictly inside `glass_hard`. Proposal manifest SHA-256 is
+`4e8c8615af9328d5e09e07f09ef013f2980b6560beedea41c729714708d15190`;
+human-review record SHA-256 is
+`c29fb52c87b7126711690e1da466c52d1ceeab3185cae34c64afc41d5753629e`.
+No formal promotion, training, optimizer update, Stage C rewrite, checkpoint,
+PLY, D-015, D-016 pilot, or Stage E work is authorized by this proposal.
 
 The user-executed ownership T-long v1 is now preserved
 `OWNERSHIP_T_LONG_BLOCKED` evidence. It completed through global 16,774 and

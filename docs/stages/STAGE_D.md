@@ -438,6 +438,27 @@ boundaries, fragment the bird, or resemble independent side poles/rails.
 `internal_base` is formed only from selected yellow-board, white-platform, and
 reviewed connected-fixture helper candidates.
 
+The reviewed-anchor 111-view proposal package is still proposal evidence only.
+It records explicit user acceptance of fixed-nine v3 anchors and uses those
+accepted masks as SAM2 video anchors with object IDs `1 = bird`,
+`2 = yellow_base_board`, and `3 = white_platform`. Each anchor interval is
+propagated both forward and backward, the two candidate sets are saved
+separately, and the selected helper masks must not be an unconditional
+forward/backward union. Anchor masks must remain byte-identical to the accepted
+fixed-nine masks. The package must include raw selected helper masks,
+glass-clipped processed `bird`, `internal_base`, `internal_object_union`, review
+CSV/JSON, contact sheets, review pages, temporal metrics, and preview-only
+`Mpos/Mignore/Mneg` domains. Review guards may flag low temporal IoU,
+forward/backward disagreement, raw outside-glass leakage, centroid or area
+jumps, and distant significant components. They may not promote masks.
+
+The current reviewed-anchor artifact is
+`output/stage_d_tihubird_internal_object_mask_proposal_111_v3/`. It contains
+111/111 processed masks for the required roles, 9 accepted anchors, 69
+auto-candidate-ready frames, 33 review-required frames, and 0 manual-edit
+required frames. This status does not create formal reviewed masks and cannot be
+used by training until a separate all-111 human-reviewed manifest is promoted.
+
 The fixed preferred prompt roles are:
 
 ```text
