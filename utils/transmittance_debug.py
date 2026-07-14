@@ -340,6 +340,22 @@ def make_semantic_repair_contact_sheet(iteration_directory, stems):
         ("transparent_mask.png", "mask"), ("ks.png", "ks"),
         ("t_spatial_class_map.png", "T spatial"),
     )
+    required = {
+        "ground_truth.png", "final.png", "diffuse_contribution.png",
+        "transmittance_contribution.png", "inside_color.png",
+        "inside_alpha.png", "transparent_mask.png",
+    }
+    available_columns = []
+    for filename, label in columns:
+        exists_for_all = all(
+            os.path.isfile(os.path.join(iteration_directory, stem, filename))
+            for stem in stems
+        )
+        if exists_for_all:
+            available_columns.append((filename, label))
+        elif filename in required:
+            raise FileNotFoundError(os.path.join(iteration_directory, stems[0], filename))
+    columns = tuple(available_columns)
     thumb, label_height = (240, 135), 25
     canvas = Image.new(
         "RGB", (thumb[0] * len(columns), (thumb[1] + label_height) * len(stems)), "white"
@@ -360,4 +376,5 @@ def make_semantic_repair_contact_sheet(iteration_directory, stems):
             draw.text((col * thumb[0] + 3, y0 + 4), f"{stem} | {label}", fill="black")
     target = os.path.join(iteration_directory, "semantic_repair_contact_sheet.png")
     canvas.save(target)
+    canvas.save(os.path.join(iteration_directory, "contact_sheet.png"))
     return target
