@@ -49,6 +49,17 @@ not run `--execute`, did not train, did not update an optimizer, did not create
 the pilot output, did not write checkpoint/PLY, did not modify Stage C, and did
 not authorize Stage E.
 
+The first user-launched D-016 pilot wrapper reached `train.py` but stopped at
+argument validation before any optimizer update because `_validate_args()`
+still allowed `transferred_d_inside` only for the earlier ownership/T-scale
+modes, while D-016 requires that same transferred-D initialization. The failed
+attempt produced `/tmp/d016_pilot_execute.log` and final status
+`operator_exit_code=1`; the formal pilot output directory was not created and
+there is no checkpoint, PLY, telemetry, or audit result. The launch gate now
+also treats `stage_d_internal_object_pilot` as an allowed
+`transferred_d_inside` mode, with a regression test. This does not run or
+authorize a retry; the user must launch the fixed command separately.
+
 Grounded-SAM2 environment discovery selected conda env `grounded-sam2`,
 project `/home/hanglee/桌面/Grounded-SAM-2` at Git HEAD
 `b7a9c29f196edff0eb54dbe14588d7ae5e3dde28`, SAM2 config

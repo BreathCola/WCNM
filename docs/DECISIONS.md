@@ -3604,3 +3604,35 @@ mocked `--execute`, CPU audit pass/block behavior, split metrics, reviewed-mask
 loading, transferred-D filtering, formal operator code, and static-cache
 contracts. This change did not run a real pilot, optimizer update, checkpoint,
 PLY export, Stage C modification, D-015, or Stage E.
+
+## D-016d addendum — Internal-object launch-gate mode allowance
+
+Date: 2026-07-14
+
+Question: Why did the first user-launched D-016 wrapper stop before training,
+and how should the launch gate be corrected without changing the pilot schedule
+or renderer contract?
+
+Chosen implementation: The failed launch showed that the operator plan and the
+D-016 contract correctly require `--transmittance_init_mode transferred_d_inside`,
+but `_validate_args()` still allowed that mode only for the previous
+ownership/T-scale modes. Add `stage_d_internal_object_pilot` to the same allowed
+initialization set while retaining the later D-016-specific checks requiring
+formal internal-object masks, `cuboid_front_v1`, and `support_safe_outside`
+Cout. No renderer, ray-domain, loss, schedule, source checkpoint, Stage-C
+release, mask identity, or output path changes.
+
+Evidence: The wrapper's execute log failed at
+`ValueError: Stage D T initialization must be one of ['random_bbox']` before
+output creation, checkpoint/PLY writing, telemetry, CPU audit, or optimizer
+updates. A regression test now verifies that D-016
+`stage_d_internal_object_pilot` accepts `transferred_d_inside` at the argument
+gate.
+
+Alternatives: Change the operator back to `random_bbox`; bypass `_validate_args`;
+or retry from a partial output. These would violate the D-016 T ownership
+contract, weaken fail-closed validation, or invent a resume source.
+
+Impact: The launch gate now matches the previously documented D-016 operator
+contract. The failed user attempt remains zero-update evidence only and is not a
+resume source. A real pilot retry still requires separate user execution.

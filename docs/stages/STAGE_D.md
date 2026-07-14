@@ -571,3 +571,20 @@ The implementation and tests for this infrastructure were added without running
 creating the pilot output, without checkpoint or PLY creation, without modifying
 Stage C, and without entering Stage E. The real pilot remains a user-launched
 action.
+
+### D-016d launch-gate correction
+
+The first user-launched wrapper for the D-016 pilot reached `train.py` and then
+stopped at `_validate_args()` before any optimizer update because
+`transferred_d_inside` was not included in the allowed T initialization set for
+`stage_d_internal_object_pilot`. The execute log records the failure, but the
+formal output directory was not created and there are no pilot checkpoints,
+PLYs, telemetry, or CPU audit products.
+
+The launch gate now includes `stage_d_internal_object_pilot` in the
+`transferred_d_inside` allowance while preserving the D-016-specific
+requirements for formal internal-object masks, `cuboid_front_v1`, and
+`support_safe_outside`. This is a launch validation repair only; it does not
+change the 500-update schedule, source checkpoint, Stage-C release, mask
+release, renderer, losses, ray domain, or authorization boundary. The fixed
+pilot still requires a separate user launch.

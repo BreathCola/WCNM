@@ -504,6 +504,7 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("Stage D requires --geometry_release_manifest")
     allowed_t_init = {"random_bbox"}
     if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long \
+            or getattr(opt, "stage_d_internal_object_pilot", False) \
             or _tscale_recovery_mode(opt):
         allowed_t_init = {"random_strict_inside", "transferred_d_inside"}
     if dataset.transmittance_init_mode not in allowed_t_init:
