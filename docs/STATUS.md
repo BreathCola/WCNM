@@ -1058,3 +1058,30 @@ evidence is judged sufficient by the user.
   change, did not rerun training, did not start an optimizer, did not overwrite
   the completed pilot output, did not modify Stage C or the formal masks, and
   did not authorize Stage E.
+
+## D-016 T-only continuation to global 20,000
+
+- The user authorized a dedicated D-016 internal-object T-only continuation
+  from
+  `output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1/chkpnt15500.pth`
+  to global 20,000. The source SHA-256 is
+  `c71f36f5dede142eedbfbb4f6dd2ccdab657451f5eeda6280e32d55e5dfa4543`.
+- The continuation contract is global 15,501--20,000, exactly 4,500 updates,
+  T-local 501--5,000, D/R frozen, only existing T optimizer restored and
+  updated, fixed T count 4,096, no T reinitialization, no transferred-D
+  selection rerun, no random fill rerun, no densification/pruning/topology
+  change, full-frame RGB retained, Cout retained, L_depth disabled by schedule,
+  and the same formal reviewed-v3 internal-object object loss as the 500-step
+  pilot.
+- The new plan-only operator is
+  `tools/run_stage_d_internal_object_townership_to_20000.py`; it refuses an
+  existing output
+  `output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/`,
+  validates the source checkpoint identity/header/T optimizer, pilot CPU audit
+  PASS, Stage-C release, formal internal-object release, and the read-only pilot
+  static cache before emitting a plan. Only explicit `--execute` launches
+  `train.py`.
+- Codex added the operator and resume contract but did not run `--execute`, did
+  not start training, did not start tmux/nohup, did not create the continuation
+  output, did not run materializer/audit for the continuation, did not modify
+  Stage C or masks, and did not authorize joint training or Stage E.

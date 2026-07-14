@@ -128,6 +128,21 @@ TSCALE_RECOVERY_RAW_ACTIVE_ATOL = 2e-6
 INTERNAL_OBJECT_OUTPUT_NAME = "stage_d_tihubird_c03r8_internal_object_townership_pilot_v1"
 INTERNAL_OBJECT_NODES = (15000, 15100, 15250, 15500)
 INTERNAL_OBJECT_ENDPOINT = 15500
+INTERNAL_OBJECT_TO_20000_OUTPUT_NAME = (
+    "stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1"
+)
+INTERNAL_OBJECT_TO_20000_SOURCE_SHA256 = (
+    "c71f36f5dede142eedbfbb4f6dd2ccdab657451f5eeda6280e32d55e5dfa4543"
+)
+INTERNAL_OBJECT_TO_20000_NODES = tuple(range(16000, 20001, 500))
+INTERNAL_OBJECT_TO_20000_ENDPOINT = 20000
+
+
+def _internal_object_mode(opt):
+    return bool(
+        getattr(opt, "stage_d_internal_object_pilot", False)
+        or getattr(opt, "stage_d_internal_object_to_20000", False)
+    )
 
 
 def _tscale_recovery_mode(opt):
@@ -141,7 +156,7 @@ def _cached_mode(opt):
     return bool(
         opt.stage_d_cached_twarmup or opt.stage_d_semantic_repair_pilot
         or opt.stage_d_ownership_pilot
-        or getattr(opt, "stage_d_internal_object_pilot", False)
+        or _internal_object_mode(opt)
         or getattr(opt, "stage_d_ownership_t_long", False)
         or _tscale_recovery_mode(opt)
     )
@@ -151,7 +166,7 @@ def _requires_cuboid_space(opt):
     """Stage D modes whose renderer/initialization contract requires the release cuboid."""
     return bool(
         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-        or getattr(opt, "stage_d_internal_object_pilot", False)
+        or _internal_object_mode(opt)
         or getattr(opt, "stage_d_ownership_t_long", False)
         or _tscale_recovery_mode(opt)
     )
@@ -166,6 +181,8 @@ def _required_nodes(opt):
         return OWNERSHIP_T_LONG_NODES
     if opt.stage_d_ownership_pilot:
         return OWNERSHIP_NODES
+    if getattr(opt, "stage_d_internal_object_to_20000", False):
+        return INTERNAL_OBJECT_TO_20000_NODES
     if getattr(opt, "stage_d_internal_object_pilot", False):
         return INTERNAL_OBJECT_NODES
     return SEMANTIC_NODES if opt.stage_d_semantic_repair_pilot else FORMAL_NODES
@@ -178,7 +195,7 @@ def _telemetry_schema(opt):
         return "rtgs_stage_d_ownership_t_long_telemetry_v1"
     if opt.stage_d_ownership_pilot:
         return "rtgs_stage_d_cuboid_path_ownership_telemetry_v4"
-    if getattr(opt, "stage_d_internal_object_pilot", False):
+    if _internal_object_mode(opt):
         return "rtgs_stage_d_internal_object_townership_telemetry_v1"
     if opt.stage_d_semantic_repair_pilot:
         return "rtgs_stage_d_semantic_repair_telemetry_v3"
@@ -239,6 +256,7 @@ def _config(dataset, opt, release, source):
         if recovery_preflight else TSCALE_RECOVERY_LONG_ENDPOINT
     )
     recovery_updates = 50 if recovery_preflight else 3950
+    internal_to_20000 = bool(getattr(opt, "stage_d_internal_object_to_20000", False))
     return {
         "stage": "stage_d", "model_type": "surfel",
         "experiment": dataset.experiment, "resolution": int(dataset.resolution),
@@ -289,15 +307,16 @@ def _config(dataset, opt, release, source):
                     "transmittance": (
                         recovery_updates if recovery else (
                         4500 if opt.stage_d_ownership_t_long else (
+                        4500 if internal_to_20000 else (
                         500 if opt.stage_d_ownership_pilot else (
                         500 if getattr(opt, "stage_d_internal_object_pilot", False) else (
                         1000 if opt.stage_d_semantic_repair_pilot else 3000)
-                    )))),
+                    ))))),
                 },
                 "phase_b_global": (
                     None if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or getattr(opt, "stage_d_internal_object_pilot", False)
+                        or _internal_object_mode(opt)
                         or opt.stage_d_ownership_t_long or recovery
                     )
                     else [CACHED_PHASE_A_END + 1, 20000]
@@ -305,7 +324,7 @@ def _config(dataset, opt, release, source):
                 "phase_b_mode": (
                     None if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or getattr(opt, "stage_d_internal_object_pilot", False)
+                        or _internal_object_mode(opt)
                         or opt.stage_d_ownership_t_long or recovery
                     )
                     else "exact_uncached_joint_d_r_t"
@@ -314,7 +333,7 @@ def _config(dataset, opt, release, source):
                     "R-local remains 12000 for the entire ownership/semantic pilot; no Phase B"
                     if (
                         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                        or getattr(opt, "stage_d_internal_object_pilot", False)
+                        or _internal_object_mode(opt)
                         or opt.stage_d_ownership_t_long or recovery
                     ) else
                     "R-local remains 12000 in Phase A and advances only for Phase-B optimizer updates"
@@ -407,8 +426,28 @@ def _config(dataset, opt, release, source):
                 "novel_view_requires_object_mask": False,
                 "pilot_global": [15001, INTERNAL_OBJECT_ENDPOINT],
             }
-            if getattr(opt, "stage_d_internal_object_pilot", False)
+            if _internal_object_mode(opt)
             else None
+        ),
+        "internal_object_to_20000": (
+            {
+                "schema": "rtgs_stage_d_internal_object_townership_to_20000_v1",
+                "source_checkpoint_sha256": getattr(
+                    dataset, "_stage_d_start_checkpoint_sha256", None,
+                ),
+                "global": [15501, INTERNAL_OBJECT_TO_20000_ENDPOINT],
+                "t_local": [501, 5000],
+                "updates": {
+                    "diffuse": 0, "reflection": 0, "transmittance": 4500,
+                },
+                "review_nodes": list(INTERNAL_OBJECT_TO_20000_NODES),
+                "t_reinitialization": False,
+                "optimizer_resume": True,
+                "static_cache_reused": True,
+                "depth_enabled": False,
+                "semantic_claim": False,
+            }
+            if internal_to_20000 else None
         ),
         "ownership_t_long": (
             {
@@ -504,7 +543,7 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("Stage D requires --geometry_release_manifest")
     allowed_t_init = {"random_bbox"}
     if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long \
-            or getattr(opt, "stage_d_internal_object_pilot", False) \
+            or _internal_object_mode(opt) \
             or _tscale_recovery_mode(opt):
         allowed_t_init = {"random_strict_inside", "transferred_d_inside"}
     if dataset.transmittance_init_mode not in allowed_t_init:
@@ -531,11 +570,13 @@ def _validate_args(dataset, opt, start_checkpoint):
         getattr(opt, "stage_d_tscale_recovery_preflight", False),
         getattr(opt, "stage_d_tscale_recovery_long", False),
         getattr(opt, "stage_d_internal_object_pilot", False),
+        getattr(opt, "stage_d_internal_object_to_20000", False),
     ))
     if modes > 1:
         raise ValueError("Stage D cached/semantic/ownership modes are mutually exclusive")
     object_enabled = (
         bool(getattr(opt, "stage_d_internal_object_pilot", False))
+        or bool(getattr(opt, "stage_d_internal_object_to_20000", False))
         or float(getattr(opt, "lambda_object_positive", 0.0)) > 0.0
         or float(getattr(opt, "lambda_object_negative", 0.0)) > 0.0
     )
@@ -556,6 +597,8 @@ def _validate_args(dataset, opt, start_checkpoint):
         expected_phase_end = TSCALE_RECOVERY_LONG_ENDPOINT
     elif opt.stage_d_ownership_t_long:
         expected_phase_end = OWNERSHIP_T_LONG_ENDPOINT
+    elif getattr(opt, "stage_d_internal_object_to_20000", False):
+        expected_phase_end = INTERNAL_OBJECT_TO_20000_ENDPOINT
     elif opt.stage_d_ownership_pilot:
         expected_phase_end = OWNERSHIP_ENDPOINT
     elif getattr(opt, "stage_d_internal_object_pilot", False):
@@ -572,7 +615,7 @@ def _validate_args(dataset, opt, start_checkpoint):
         raise ValueError("semantic repair requires transparent_interface_margin_mode=exclude")
     if (
         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-        or getattr(opt, "stage_d_internal_object_pilot", False)
+        or _internal_object_mode(opt)
     ):
         if opt.lambda_anti_veil_black <= 0 or opt.lambda_anti_veil_saturation <= 0:
             raise ValueError("semantic repair requires positive anti-veil weights")
@@ -622,6 +665,22 @@ def _validate_args(dataset, opt, start_checkpoint):
         if failures:
             raise ValueError(
                 "T-scale recovery configuration mismatch: " + ", ".join(failures)
+            )
+    if getattr(opt, "stage_d_internal_object_to_20000", False):
+        required = {
+            "path": dataset.transparent_path_mode == "cuboid_front_v1",
+            "direct": dataset.transparent_direct_mode == "off",
+            "reflection": dataset.transparent_reflection_mode == "off",
+            "cout": dataset.cout_ownership_mode == "support_safe_outside",
+            "init_identity": dataset.transmittance_init_mode == "transferred_d_inside",
+            "reuse_cache": bool(opt.stage_d_reuse_static_cache),
+            "depth": int(opt.stage_d_depth_start_iteration) == 40000,
+        }
+        failures = [name for name, passed in required.items() if not passed]
+        if failures:
+            raise ValueError(
+                "D-016 internal-object to-20000 configuration mismatch: "
+                + ", ".join(failures)
             )
 
 
@@ -910,6 +969,77 @@ def _validate_internal_object_contract(
         raise ValueError("D-016 internal-object pilot contract mismatch: " + ", ".join(failures))
 
 
+def _validate_internal_object_to_20000_contract(
+    dataset, opt, release, source, fresh_from_stage_b, saved_config,
+    global_iteration, reflection_iteration, transmittance_iteration,
+    saving_iterations, checkpoint_iterations,
+):
+    if not getattr(opt, "stage_d_internal_object_to_20000", False):
+        return
+    current_mask = getattr(dataset, "_validated_specular_mask_manifest", {})
+    internal = getattr(dataset, "_validated_internal_object_mask_manifest", {})
+    prior_internal = (saved_config or {}).get("internal_object_ownership", {})
+    prior_cache = (saved_config or {}).get("cached_t_warmup", {})
+    expected_cache = Path(
+        "output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1/"
+        "static_dr_cache"
+    ).resolve()
+    required = {
+        "stage_d_resume": not fresh_from_stage_b,
+        "start_hash": getattr(dataset, "_stage_d_start_checkpoint_sha256", None)
+        == INTERNAL_OBJECT_TO_20000_SOURCE_SHA256,
+        "start_global": int(global_iteration) == 15500,
+        "start_r_local": int(reflection_iteration) == 12000,
+        "start_t_local": int(transmittance_iteration) == 500,
+        "source_sha256": source.get("sha256") == FORMAL_SOURCE_SHA256,
+        "release_id": release.manifest.get("geometry_release_id") == FORMAL_RELEASE_ID,
+        "release_sha256": release.validation.get("aggregate_sha256") == FORMAL_RELEASE_SHA256,
+        "endpoint": int(opt.iterations) == INTERNAL_OBJECT_TO_20000_ENDPOINT,
+        "phase_end": int(opt.stage_d_phase_a_end_iteration) == INTERNAL_OBJECT_TO_20000_ENDPOINT,
+        "depth_disabled": int(opt.stage_d_depth_start_iteration) == 40000,
+        "resolution": int(dataset.resolution) == 8,
+        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
+        "output": Path(dataset.model_path).name == INTERNAL_OBJECT_TO_20000_OUTPUT_NAME,
+        "cache": Path(dataset.stage_d_static_cache_path).resolve() == expected_cache,
+        "cache_reuse": bool(opt.stage_d_reuse_static_cache),
+        "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations)))
+        == INTERNAL_OBJECT_TO_20000_NODES,
+        "ply_nodes": tuple(sorted(set(saving_iterations)))
+        == INTERNAL_OBJECT_TO_20000_NODES,
+        "path": dataset.transparent_path_mode == "cuboid_front_v1",
+        "direct_off": dataset.transparent_direct_mode == "off",
+        "reflection_off": dataset.transparent_reflection_mode == "off",
+        "cout_safe": dataset.cout_ownership_mode == "support_safe_outside",
+        "glass_mask": current_mask.get("role") == "stage_b_formal_reviewed_specular_soft_masks",
+        "internal_mask": internal.get("role") == REVIEWED_ROLE,
+        "internal_mask_hash": internal.get("aggregate_sha256")
+        == "c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052",
+        "prior_internal_schema": prior_internal.get("schema")
+        == "rtgs_stage_d_internal_object_townership_v1",
+        "prior_object_loss": prior_internal.get("object_occupancy_loss", {})
+        == {
+            "alpha_floor": 0.35,
+            "erode_px": 3,
+            "dilate_px": 3,
+            "lambda_positive": 0.05,
+            "lambda_negative": 0.05,
+            "supervised_field": "Ain_only",
+            "cin_rgb_supervision": False,
+        },
+        "prior_cache_path": Path(prior_cache.get("cache_path", "")).resolve()
+        == expected_cache,
+        "prior_frozen_hash": prior_cache.get("phase_a_frozen_hash_before")
+        == prior_cache.get("phase_a_frozen_hash_after"),
+        "t_count": int(dataset.transmittance_init_count) == 4096,
+    }
+    failures = [name for name, passed in required.items() if not passed]
+    if failures:
+        raise ValueError(
+            "D-016 internal-object to-20000 contract mismatch: "
+            + ", ".join(failures)
+        )
+
+
 def _validate_tscale_recovery_contract(
     dataset, opt, release, source, fresh_from_stage_b, saved_config,
     global_iteration, reflection_iteration, transmittance_iteration,
@@ -1005,7 +1135,7 @@ def _transmittance_topology_update_allowed(opt, transmittance_iteration):
     """Keep the semantic pilot's fixed-cardinality T contract fail closed."""
     if (
         opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-        or getattr(opt, "stage_d_internal_object_pilot", False)
+        or _internal_object_mode(opt)
         or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
     ):
         return False
@@ -1605,7 +1735,7 @@ def _forward_backward_stage_d(
         object_enabled = (
             float(getattr(opt, "lambda_object_positive", 0.0)) > 0.0
             or float(getattr(opt, "lambda_object_negative", 0.0)) > 0.0
-            or bool(getattr(opt, "stage_d_internal_object_pilot", False))
+            or _internal_object_mode(opt)
         )
         if object_enabled:
             masks = getattr(camera, "internal_object_masks", None)
@@ -2342,6 +2472,11 @@ def training_stage_d(
         dataset, opt, release, source, fresh_from_stage_b,
         saving_iterations, checkpoint_iterations,
     )
+    _validate_internal_object_to_20000_contract(
+        dataset, opt, release, source, fresh_from_stage_b, saved_config,
+        global_iteration, reflection_iteration, transmittance_iteration,
+        saving_iterations, checkpoint_iterations,
+    )
     _validate_ownership_t_long_contract(
         dataset, opt, release, source, fresh_from_stage_b, saved_config,
         global_iteration, reflection_iteration, transmittance_iteration,
@@ -2503,6 +2638,38 @@ def training_stage_d(
             "semantic_claim": False,
         }
         _atomic_json(Path(scene.model_path, "internal_object_townership_metadata.json"), metadata)
+    elif getattr(opt, "stage_d_internal_object_to_20000", False):
+        metadata = {
+            "schema": "rtgs_stage_d_internal_object_townership_to_20000_v1",
+            "source": source, "config": config,
+            "start_checkpoint": str(Path(start_checkpoint).resolve()),
+            "start_checkpoint_sha256": dataset._stage_d_start_checkpoint_sha256,
+            "required_nodes": list(INTERNAL_OBJECT_TO_20000_NODES),
+            "review_stems": list(CACHED_STEMS),
+            "global": [15501, INTERNAL_OBJECT_TO_20000_ENDPOINT],
+            "transmittance_local": [501, 5000],
+            "mode": "grounded_sam2_reviewed_mask_resume_frozen_dr_t_only",
+            "diffuse_optimizer_updates": 0,
+            "reflection_optimizer_updates": 0,
+            "transmittance_optimizer_updates": 4500,
+            "t_topology_updates_allowed": False,
+            "expected_t_count": 4096,
+            "t_reinitialization": False,
+            "transferred_d_selection_rerun": False,
+            "random_fill_rerun": False,
+            "optimizer_resume": True,
+            "cuboid_space": semantic_cuboid.metadata(),
+            "future_depth_activation_global": 40000,
+            "depth_enabled_during_run": False,
+            "full_frame_rgb_loss": True,
+            "cout_retained": True,
+            "novel_view_requires_internal_object_mask": False,
+            "semantic_claim": False,
+        }
+        _atomic_json(
+            Path(scene.model_path, "internal_object_townership_to_20000_metadata.json"),
+            metadata,
+        )
     elif opt.stage_d_cached_twarmup:
         metadata = {
             "schema": "rtgs_stage_d_cached_twarmup_then_joint_v1",
@@ -2590,6 +2757,7 @@ def training_stage_d(
             if (
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
+                or getattr(opt, "stage_d_internal_object_to_20000", False)
             )
             else Path(scene.model_path) / "static_dr_cache"
         )
@@ -2597,6 +2765,7 @@ def training_stage_d(
             (
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
+                or getattr(opt, "stage_d_internal_object_to_20000", False)
             )
             and opt.stage_d_reuse_static_cache
         ):
@@ -2607,7 +2776,7 @@ def training_stage_d(
                 cache_identity, camera_identities,
                 semantic_repair=(
                     opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                    or getattr(opt, "stage_d_internal_object_pilot", False)
+                    or _internal_object_mode(opt)
                 ),
             )
         if (
@@ -2654,6 +2823,7 @@ def training_stage_d(
                 (
                     opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                     or _tscale_recovery_mode(opt)
+                    or getattr(opt, "stage_d_internal_object_to_20000", False)
                 )
                 and opt.stage_d_reuse_static_cache
             ),
@@ -2684,6 +2854,7 @@ def training_stage_d(
         if not (
             opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
             or _tscale_recovery_mode(opt)
+            or getattr(opt, "stage_d_internal_object_to_20000", False)
         ):
             benchmark_camera = next(
                 camera for camera in cameras
@@ -2706,8 +2877,10 @@ def training_stage_d(
                 if opt.stage_d_ownership_t_long else (
                 "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
                 if opt.stage_d_ownership_pilot else (
+                "D016_TO_20000_BLOCKED"
+                if getattr(opt, "stage_d_internal_object_to_20000", False) else (
                 "SEMANTIC_REPAIR_PILOT_BLOCKED"
-                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")))
+                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED"))))
             )
             raise RuntimeError(f"{verdict}: D/R changed during cache preflight")
         metadata["cache_identity"] = cache_identity
@@ -2716,9 +2889,11 @@ def training_stage_d(
         metadata_name = (
             "tscale_recovery_metadata.json" if _tscale_recovery_mode(opt) else (
             "ownership_t_long_metadata.json" if opt.stage_d_ownership_t_long else (
+            "internal_object_townership_to_20000_metadata.json"
+            if getattr(opt, "stage_d_internal_object_to_20000", False) else (
             "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot else (
             "semantic_repair_run_metadata.json"
-            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json")))
+            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json"))))
         )
         _atomic_json(Path(scene.model_path, metadata_name), metadata)
         restore_rng_state(restored_rng_state)
@@ -2795,7 +2970,7 @@ def training_stage_d(
                 opt.stage_d_ownership_pilot,
                 opt.stage_d_ownership_t_long,
                 _tscale_recovery_mode(opt),
-                getattr(opt, "stage_d_internal_object_pilot", False),
+                _internal_object_mode(opt),
             )
             if _cached_mode(opt) else "exact_joint"
         )
@@ -2893,7 +3068,7 @@ def training_stage_d(
                 )
             if (
                 opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                or getattr(opt, "stage_d_internal_object_pilot", False)
+                or _internal_object_mode(opt)
                 or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
             ):
                 if int(transmittance.get_xyz.shape[0]) != 4096:
@@ -2922,6 +3097,10 @@ def training_stage_d(
                 or (
                     getattr(opt, "stage_d_internal_object_pilot", False)
                     and iteration == INTERNAL_OBJECT_ENDPOINT
+                )
+                or (
+                    getattr(opt, "stage_d_internal_object_to_20000", False)
+                    and iteration == INTERNAL_OBJECT_TO_20000_ENDPOINT
                 )
                 or (opt.stage_d_ownership_t_long and iteration == OWNERSHIP_T_LONG_ENDPOINT)
                 or (
@@ -2952,8 +3131,10 @@ def training_stage_d(
                         if _tscale_recovery_mode(opt) else (
                         "internal_object_townership_metadata.json"
                         if getattr(opt, "stage_d_internal_object_pilot", False) else (
+                        "internal_object_townership_to_20000_metadata.json"
+                        if getattr(opt, "stage_d_internal_object_to_20000", False) else (
                         "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot
-                        else "semantic_repair_run_metadata.json"))),
+                        else "semantic_repair_run_metadata.json")))),
                     ), metadata
                 )
             finite_counts = _finite_models({
@@ -3028,7 +3209,7 @@ def training_stage_d(
             }
             if (
                 opt.stage_d_semantic_repair_pilot or opt.stage_d_ownership_pilot
-                or getattr(opt, "stage_d_internal_object_pilot", False)
+                or _internal_object_mode(opt)
                 or opt.stage_d_ownership_t_long or _tscale_recovery_mode(opt)
             ):
                 last_record["semantic_metrics"] = _semantic_step_metrics(
@@ -3134,6 +3315,15 @@ def training_stage_d(
                 )
                 last_record["formal_review_node"] = True
             elif opt.stage_d_ownership_t_long and iteration in OWNERSHIP_T_LONG_NODES:
+                _render_formal_review_node(
+                    scene, state, pipe, background, release, iteration,
+                    stems=CACHED_STEMS, static_cache=static_cache,
+                )
+                last_record["formal_review_node"] = True
+            elif (
+                getattr(opt, "stage_d_internal_object_to_20000", False)
+                and iteration in INTERNAL_OBJECT_TO_20000_NODES
+            ):
                 _render_formal_review_node(
                     scene, state, pipe, background, release, iteration,
                     stems=CACHED_STEMS, static_cache=static_cache,

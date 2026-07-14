@@ -622,3 +622,30 @@ internal-object manifest.
 This D-016e infrastructure change does not rerun the pilot, does not run the
 materializer on the real output, does not run the final posthoc CPU audit, does
 not alter Stage C or formal masks, and does not authorize Stage E.
+
+### D-016f T-only continuation to 20k
+
+The D-016 continuation from the accepted 15,500 pilot checkpoint is a separate
+default-off operator:
+
+```text
+tools/run_stage_d_internal_object_townership_to_20000.py
+```
+
+It is not the legacy D-015
+`tools/run_stage_d_ownership_t_long.py`. The continuation source is
+`output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1/chkpnt15500.pth`
+with SHA-256
+`c71f36f5dede142eedbfbb4f6dd2ccdab657451f5eeda6280e32d55e5dfa4543`.
+
+The authorized schedule is exactly global 15,501--20,000, 4,500 updates,
+T-local 501--5,000, with checkpoints and PLY/debug nodes at 16,000, 16,500,
+17,000, 17,500, 18,000, 18,500, 19,000, 19,500, and 20,000. The run must
+restore the complete Stage-D checkpoint, restore the existing T optimizer,
+freeze D/R, update only T, keep T count 4,096, reuse the pilot static D/R cache
+read-only, keep full-frame RGB and Cout, and keep L_depth inactive under the
+existing 40,000 start schedule.
+
+This mode must not initialize T, rerun transferred-D selection, rerun
+internal-object mask filtering, rerun random fill, densify, prune, change
+topology, run 20,001+, enter joint training, or authorize Stage E.

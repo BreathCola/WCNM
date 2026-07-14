@@ -3679,3 +3679,40 @@ user-executed posthoc materialization command and then the CPU audit. This
 change did not rerun training, run the materializer on the real output, launch
 an optimizer, overwrite the pilot output, modify Stage C or formal masks, or
 authorize Stage E.
+
+## D-016f — Internal-object T-only continuation to 20k
+
+Date: 2026-07-14
+
+Question: How should the accepted D-016 500-step pilot be continued to global
+20,000 without reinitializing T or falling back to the older D-015 long-run
+operator?
+
+Chosen implementation: Add the dedicated default-off operator
+`tools/run_stage_d_internal_object_townership_to_20000.py` and a new training
+mode `stage_d_internal_object_to_20000`. The operator defaults to plan-only and
+only calls `train.py` when `--execute` is explicitly supplied. Its source is the
+D-016 pilot checkpoint at global 15,500 with SHA-256
+`c71f36f5dede142eedbfbb4f6dd2ccdab657451f5eeda6280e32d55e5dfa4543`; it rejects
+other sources, missing T optimizer state, mismatched checkpoint header, failed
+pilot CPU audit, mismatched Stage-C/internal-object identities, mismatched pilot
+static cache, or an existing output.
+
+The training mode resumes the complete Stage-D checkpoint through
+`restore_stage_d_checkpoint()` rather than `initialize_stage_d_from_stage_b()`.
+It reuses the pilot static D/R cache read-only, freezes D/R, continues only the
+existing T optimizer for global 15,501--20,000 / T-local 501--5,000, records
+4,500 T updates, and keeps T fixed at 4,096 with densification/pruning disabled.
+It does not call transferred-D selection, object-mask transfer filtering,
+random fill, or `create_transferred_from_diffuse`.
+
+Alternatives: Reuse `tools/run_stage_d_ownership_t_long.py`; copy the 15,500
+checkpoint into a fresh-run output; rebuild T from the formal masks; or run the
+continuation through the original 500-step pilot flag. These would bind to old
+D-015 evidence, obscure resume provenance, change the T population, or trigger
+the pilot initialization contract again.
+
+Impact: A user can now launch a bounded D-016 T-only continuation to global
+20,000 as a separate action. This change does not authorize joint D/R/T
+training, Stage D acceptance, Stage E, or any run beyond global 20,000. Codex
+did not execute the continuation.
