@@ -1627,7 +1627,14 @@ def _forward_backward_stage_d(
             object_total = object_loss["total"]
             object_positive = object_loss["positive"]
             object_negative = object_loss["negative"]
-            object_metrics = object_domain_metrics(package, domains)
+            object_metrics = object_domain_metrics(
+                package,
+                domains,
+                masks,
+                alpha_floor=float(getattr(opt, "object_alpha_floor", 0.35)),
+                erode_px=int(getattr(opt, "object_mask_erode_px", 3)),
+                dilate_px=int(getattr(opt, "object_mask_dilate_px", 3)),
+            )
         loss = (
             rgb_loss + opt.lambda_norm * normal_loss + opt.lambda_mono * mono_loss
             + opt.lambda_perc * perceptual_loss + opt.lambda_spec * specular_loss
@@ -2481,6 +2488,17 @@ def training_stage_d(
             "full_frame_rgb_loss": True,
             "cout_retained": True,
             "novel_view_requires_internal_object_mask": False,
+            "split_metrics": {
+                "source": "training float tensors",
+                "regions": ["bird", "internal_base", "union", "Mneg"],
+                "alpha_statistics": [
+                    "mean", "median", "p05", "p50", "p95", "max",
+                    "nonzero_ratio", "above_alpha_floor_ratio",
+                ],
+                "color_statistics": ["Cin RGB mean", "Cin energy", "Cin nonzero ratio"],
+                "cout_statistics": ["Mneg energy", "union-outside retained energy"],
+                "loss_region": "internal_object_union only; bird/internal_base split metrics do not duplicate loss",
+            },
             "semantic_claim": False,
         }
         _atomic_json(Path(scene.model_path, "internal_object_townership_metadata.json"), metadata)

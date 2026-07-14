@@ -531,3 +531,43 @@ support safety, keeps full-frame RGB, keeps Cout, refuses existing output,
 refuses proposal masks, and stops with review/audit evidence only. It does not
 authorize joint tuning, global 20,000 continuation, Stage D acceptance, or Stage
 E.
+
+### D-016d plan-only and audit infrastructure
+
+The D-016 pilot operator's default plan-only path has been repaired to use the
+actual dict returned by `validate_geometry_release()`. It validates the source
+checkpoint, immutable Stage-C release, formal reviewed glass masks, and formal
+reviewed internal-object masks, refuses an existing pilot output, then prints a
+JSON plan and returns without calling `train.py` unless `--execute` is present.
+The plan records the exact source/release/mask identities, 500-update
+15,001--15,500 bounded schedule, required nodes, T count 4,096, seed 20260703,
+D/R frozen status, object-loss parameters, ray-domain statement, planned
+products, and future command. The intended output remains
+`output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1` and must
+not exist before execution.
+
+The D-016 final CPU audit is now
+`tools/audit_stage_d_internal_object_townership.py`. It is read-only with
+respect to checkpoint/PLY/debug artifacts and fail-closed: it checks operator
+plan identity, Stage-C identity, formal internal-object release identity,
+metadata, exact telemetry range 15,001--15,500, finite losses/state, T-only
+optimizer updates, unchanged D/R parameter and optimizer hashes, finite nonzero
+T changes, fixed T count, no densification/pruning/topology changes, required
+checkpoint/PLY/debug nodes, and split internal-object metrics. It writes only
+its audit JSON and Markdown summary into a completed pilot output when invoked.
+Allowed verdicts are `D016_PILOT_PASS_AWAITING_USER_REVIEW`,
+`D016_PILOT_HOLD`, and `D016_PILOT_BLOCKED`; none authorize Stage D acceptance,
+additional training, or Stage E.
+
+D-016 telemetry now includes float-tensor split metrics for `bird`,
+`internal_base`, `union`, and `Mneg`: pixel counts; Ain mean, median, p05, p50,
+p95, max, nonzero ratio, and above-alpha-floor ratio; Cin RGB/energy/nonzero
+statistics; Mneg Cout energy; and union-outside Cout retention. These metrics
+are diagnostics only. The loss still uses the union domain and does not double
+count bird/base overlap.
+
+The implementation and tests for this infrastructure were added without running
+`--execute`, without starting training, without optimizer updates, without
+creating the pilot output, without checkpoint or PLY creation, without modifying
+Stage C, and without entering Stage E. The real pilot remains a user-launched
+action.

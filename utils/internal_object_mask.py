@@ -848,20 +848,73 @@ def object_occupancy_loss(
     return {"total": total, "positive": positive, "negative": negative}
 
 
-def object_domain_metrics(package: dict[str, torch.Tensor], domains: dict[str, torch.Tensor]) -> dict[str, float]:
+def object_domain_metrics(
+    package: dict[str, torch.Tensor],
+    domains: dict[str, torch.Tensor],
+    masks: dict[str, torch.Tensor] | None = None,
+    *,
+    alpha_floor: float = 0.35,
+    erode_px: int = 3,
+    dilate_px: int = 3,
+) -> dict[str, float]:
     ain = _as_hwc1(package["inside_alpha"], "inside_alpha").detach().float()
     cin = package["inside_color"].detach().float()
     cout = package["outside_color"].detach().float()
     mpos = _as_hwc1(domains["Mpos"], "Mpos").to(ain.device) > 0.5
     mneg = _as_hwc1(domains["Mneg"], "Mneg").to(ain.device) > 0.5
 
-    def masked_mean(value: torch.Tensor, mask: torch.Tensor) -> float:
+    def masked_values(value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+        mask = mask.to(device=value.device)
         if value.shape[-1] != mask.shape[-1]:
             mask = mask.expand_as(value)
-        selected = value[mask]
+        return value[mask]
+
+    def masked_mean(value: torch.Tensor, mask: torch.Tensor) -> float:
+        selected = masked_values(value, mask)
         return float(selected.mean()) if selected.numel() else 0.0
 
-    return {
+    def alpha_stats(name: str, mask: torch.Tensor) -> dict[str, float | int]:
+        selected = masked_values(ain, mask)
+        if not selected.numel():
+            return {
+                f"{name}_pixel_count": int(mask.sum()),
+                f"{name}_ain_mean": 0.0,
+                f"{name}_ain_median": 0.0,
+                f"{name}_ain_p05": 0.0,
+                f"{name}_ain_p50": 0.0,
+                f"{name}_ain_p95": 0.0,
+                f"{name}_ain_max": 0.0,
+                f"{name}_ain_nonzero_ratio": 0.0,
+                f"{name}_ain_above_alpha_floor_ratio": 0.0,
+            }
+        quantiles = torch.quantile(selected, selected.new_tensor([0.05, 0.50, 0.95]))
+        return {
+            f"{name}_pixel_count": int(mask.sum()),
+            f"{name}_ain_mean": float(selected.mean()),
+            f"{name}_ain_median": float(selected.median()),
+            f"{name}_ain_p05": float(quantiles[0]),
+            f"{name}_ain_p50": float(quantiles[1]),
+            f"{name}_ain_p95": float(quantiles[2]),
+            f"{name}_ain_max": float(selected.max()),
+            f"{name}_ain_nonzero_ratio": float((selected > 0).float().mean()),
+            f"{name}_ain_above_alpha_floor_ratio": float((selected >= float(alpha_floor)).float().mean()),
+        }
+
+    def color_stats(name: str, value: torch.Tensor, mask: torch.Tensor, prefix: str) -> dict[str, float]:
+        selected = masked_values(value, mask)
+        if not selected.numel():
+            return {
+                f"{name}_{prefix}_rgb_mean": 0.0,
+                f"{name}_{prefix}_energy": 0.0,
+                f"{name}_{prefix}_nonzero_ratio": 0.0,
+            }
+        return {
+            f"{name}_{prefix}_rgb_mean": float(selected.mean()),
+            f"{name}_{prefix}_energy": float(selected.abs().mean()),
+            f"{name}_{prefix}_nonzero_ratio": float((selected.abs() > 0).float().mean()),
+        }
+
+    metrics = {
         "ain_mean_mpos": masked_mean(ain, mpos),
         "ain_mean_mneg": masked_mean(ain, mneg),
         "ain_positive_coverage_ge_0_35": masked_mean((ain >= 0.35).float(), mpos),
@@ -870,3 +923,32 @@ def object_domain_metrics(package: dict[str, torch.Tensor], domains: dict[str, t
         "cin_energy_mneg": masked_mean(cin.abs(), mneg),
         "cout_energy_mneg": masked_mean(cout.abs(), mneg),
     }
+    if masks:
+        glass = _as_hwc1(domains["domain"], "domain").to(ain.device) > 0.5
+        ignore = _as_hwc1(domains["Mignore"], "Mignore").to(ain.device) > 0.5
+        bird_raw = _as_hwc1(masks["bird"], "bird").to(ain.device)
+        base_raw = _as_hwc1(masks["internal_base"], "internal_base").to(ain.device)
+        union_raw = _as_hwc1(masks["internal_object_union"], "internal_object_union").to(ain.device)
+        bird_pos = ((_morph((bird_raw >= HARD_THRESHOLD).float(), int(erode_px), "erode") > 0.5) & glass & ~ignore)
+        base_pos = ((_morph((base_raw >= HARD_THRESHOLD).float(), int(erode_px), "erode") > 0.5) & glass & ~ignore)
+        union_pos = ((_morph((union_raw >= HARD_THRESHOLD).float(), int(erode_px), "erode") > 0.5) & glass & ~ignore)
+        union_dilated = _morph((union_raw >= HARD_THRESHOLD).float(), int(dilate_px), "dilate") > 0.5
+        split_mneg = glass & ~union_dilated & ~ignore
+        split_masks = {
+            "bird": bird_pos,
+            "internal_base": base_pos,
+            "union": union_pos,
+            "mneg": split_mneg,
+        }
+        metrics["bird_internal_base_overlap_count"] = int((bird_pos & base_pos).sum())
+        metrics["split_metrics_source"] = "float_training_tensors"
+        for name, mask in split_masks.items():
+            metrics.update(alpha_stats(name, mask))
+            metrics.update(color_stats(name, cin, mask, "cin"))
+        metrics["mneg_cout_energy"] = color_stats("mneg", cout, split_mneg, "cout")["mneg_cout_energy"]
+        metrics["mneg_cout_rgb_mean"] = color_stats("mneg", cout, split_mneg, "cout")["mneg_cout_rgb_mean"]
+        metrics["mneg_cout_nonzero_ratio"] = color_stats("mneg", cout, split_mneg, "cout")["mneg_cout_nonzero_ratio"]
+        outside_union = glass & ~union_pos
+        metrics["outside_union_cout_energy"] = masked_mean(cout.abs(), outside_union)
+        metrics["outside_union_cout_nonzero_ratio"] = masked_mean((cout.abs() > 0).float(), outside_union)
+    return metrics

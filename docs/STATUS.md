@@ -33,6 +33,22 @@ masks, and refuse pre-existing outputs. The implementation agent may generate
 Grounded-SAM2 proposals and tests, but must not run real RT-GS training, D-015,
 the bounded pilot, or Stage E automatically.
 
+D-016d repaired the pilot operator's default plan-only path after a dict-access
+bug (`validate_geometry_release()` returns a dict, not an object with
+`.validation`). The operator now emits a complete JSON plan with source,
+Stage-C, glass-mask, reviewed internal-object release, schedule, node, T-count,
+seed, loss, ray-domain, command, and planned-output identities while still
+requiring explicit `--execute` before any training subprocess is launched. A
+D-016-specific CPU final audit tool now checks identity, frozen D/R isolation,
+T-only updates, telemetry continuity, required checkpoint/PLY/debug products,
+and the verdict schema
+`D016_PILOT_PASS_AWAITING_USER_REVIEW` / `D016_PILOT_HOLD` /
+`D016_PILOT_BLOCKED`. D-016 telemetry also records float-tensor split metrics
+for bird, internal_base, union, and Mneg regions. This infrastructure work did
+not run `--execute`, did not train, did not update an optimizer, did not create
+the pilot output, did not write checkpoint/PLY, did not modify Stage C, and did
+not authorize Stage E.
+
 Grounded-SAM2 environment discovery selected conda env `grounded-sam2`,
 project `/home/hanglee/桌面/Grounded-SAM-2` at Git HEAD
 `b7a9c29f196edff0eb54dbe14588d7ae5e3dde28`, SAM2 config

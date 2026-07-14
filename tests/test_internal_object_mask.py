@@ -415,3 +415,39 @@ def test_object_metrics_keep_cout_in_negative_region():
     }
     metrics = object_domain_metrics(package, domains)
     assert metrics["cout_energy_mneg"] == 1.0
+
+
+def test_object_metrics_include_float_split_regions():
+    bird = torch.zeros((4, 4, 1))
+    base = torch.zeros((4, 4, 1))
+    bird[0, 0, 0] = 1
+    base[1, 1, 0] = 1
+    union = torch.maximum(bird, base)
+    glass = torch.ones((4, 4, 1))
+    valid = torch.ones((4, 4, 1))
+    domains = object_occupancy_domains(union, glass, valid, erode_px=0, dilate_px=0)
+    package = {
+        "inside_alpha": torch.linspace(0.0, 1.0, 16).reshape(4, 4, 1),
+        "inside_color": torch.ones((4, 4, 3), dtype=torch.float32) * 0.25,
+        "outside_color": torch.ones((4, 4, 3), dtype=torch.float32) * 0.5,
+    }
+
+    metrics = object_domain_metrics(
+        package,
+        domains,
+        {"bird": bird, "internal_base": base, "internal_object_union": union},
+        alpha_floor=0.35,
+        erode_px=0,
+        dilate_px=0,
+    )
+
+    assert metrics["split_metrics_source"] == "float_training_tensors"
+    assert metrics["bird_pixel_count"] == 1
+    assert metrics["internal_base_pixel_count"] == 1
+    assert metrics["union_pixel_count"] == 2
+    assert metrics["mneg_pixel_count"] == 14
+    assert metrics["bird_internal_base_overlap_count"] == 0
+    assert metrics["bird_ain_p05"] == metrics["bird_ain_p50"] == metrics["bird_ain_p95"]
+    assert metrics["union_cin_energy"] == pytest.approx(0.25)
+    assert metrics["mneg_cout_energy"] == pytest.approx(0.5)
+    assert metrics["outside_union_cout_energy"] == pytest.approx(0.5)

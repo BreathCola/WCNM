@@ -3545,3 +3545,62 @@ removed and refuses overwrite on creation. Because `data/` is ignored, the
 release is a local immutable data artifact, not a Git-tracked asset. This did
 not run training, optimizer steps, checkpoint/PLY export, Stage C modification,
 the D-016 pilot, or Stage E.
+
+## D-016d — Pilot plan-only repair and CPU final audit
+
+Date: 2026-07-14
+
+Question: How should the D-016 bounded pilot be made executable by a user
+without allowing Codex to accidentally start training, and what final audit
+evidence is required after such a pilot exists?
+
+Chosen implementation: Keep
+`tools/run_stage_d_internal_object_townership.py` defaulting to plan-only and
+requiring explicit `--execute` for any training subprocess. The plan-only bug
+was a direct contract mismatch: `validate_geometry_release()` returns a top-level
+dict with `geometry_release_id`, `aggregate_sha256`, `cache_count`, `coverage`,
+`runtime_generation_required`, and `verdict`, not an object exposing
+`.validation`. The operator now reads the Stage-C aggregate with
+`release.get("aggregate_sha256")` for both validation and JSON plan emission.
+
+The JSON plan records source checkpoint path/hash, Stage-C release path/ID/hash,
+formal glass mask manifest hash, formal reviewed internal-object manifest hash
+and aggregate, semantic version, output path, 15,001--15,500 / 500-update
+schedule, nodes 15,000/15,100/15,250/15,500, T count 4,096, seed 20260703,
+frozen D/R status, object-loss parameters, ray-domain statement, planned
+products, and the exact future training command. The command uses the formal
+reviewed-v3 internal-object manifest and does not reference a proposal.
+Existing output remains a hard refusal.
+
+Add a dedicated CPU-only final audit,
+`tools/audit_stage_d_internal_object_townership.py`, for a future user-executed
+pilot. It validates the operator plan, source identity, Stage-C release,
+reviewed internal-object release, metadata, telemetry continuity, 15,000/15,100/
+15,250/15,500 checkpoints, D/R/T PLY presence, fixed-nine debug products,
+finite state, unchanged D/R parameter and optimizer hashes, finite nonzero T
+change, fixed 4,096 T count, no topology changes, and T-only optimizer updates.
+Its verdicts are only
+`D016_PILOT_PASS_AWAITING_USER_REVIEW`, `D016_PILOT_HOLD`, or
+`D016_PILOT_BLOCKED`; PASS is an engineering-completeness result awaiting human
+visual review, not semantic separation, Stage D acceptance, full training
+authorization, or Stage E authorization.
+
+Training telemetry now records split float-tensor metrics for `bird`,
+`internal_base`, `union`, and `Mneg`. The regions are derived from the formal
+reviewed masks, `glass_hard`, `valid_two_hit`, morphology, and reviewed ignore
+region; PNGs and display-normalized values are not used. The object loss remains
+defined on the union domain only, so bird/internal_base statistics do not double
+count or change the loss.
+
+Alternatives: Wrap the release dict in a fake object; catch and ignore the
+AttributeError; infer audit completeness from PNGs; use proposal masks in the
+operator; or let plan-only create output directories. These would obscure the
+validator contract, hide preflight failures, introduce quantized visual metrics,
+violate reviewed-release boundaries, or weaken fail-closed output handling.
+
+Impact: The D-016 pilot can now be preflighted and planned without launching
+training. Targeted tests cover plan-only behavior, fail-closed identities,
+mocked `--execute`, CPU audit pass/block behavior, split metrics, reviewed-mask
+loading, transferred-D filtering, formal operator code, and static-cache
+contracts. This change did not run a real pilot, optimizer update, checkpoint,
+PLY export, Stage C modification, D-015, or Stage E.

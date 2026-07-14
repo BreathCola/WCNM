@@ -119,7 +119,7 @@ def main() -> int:
     source_sha = sha256_file(SOURCE)
     if source_sha != FORMAL_SOURCE_SHA256:
         raise RuntimeError("immutable Stage-B source hash mismatch")
-    if release.validation.get("aggregate_sha256") != FORMAL_RELEASE_SHA256:
+    if release.get("aggregate_sha256") != FORMAL_RELEASE_SHA256:
         raise RuntimeError("immutable Stage-C release hash mismatch")
     if OUTPUT.exists():
         raise FileExistsError(f"refusing existing D-016 output: {OUTPUT}")
@@ -131,9 +131,46 @@ def main() -> int:
         "source": str(SOURCE),
         "source_sha256": source_sha,
         "release": str(RELEASE),
-        "release_aggregate_sha256": release.validation.get("aggregate_sha256"),
+        "release_id": release.get("geometry_release_id"),
+        "release_aggregate_sha256": release.get("aggregate_sha256"),
         "glass_mask_manifest_sha256": glass["manifest_file_sha256"],
+        "glass_mask_aggregate_sha256": glass.get("aggregate_sha256"),
         "internal_object_manifest_sha256": internal["manifest_file_sha256"],
+        "internal_object_aggregate_sha256": internal.get("aggregate_sha256"),
+        "internal_object_role": internal.get("role"),
+        "internal_object_human_status": internal.get("human_status"),
+        "internal_object_semantics_version": internal.get("internal_object_semantics_version"),
+        "iterations": {"start_exclusive": 15000, "end_inclusive": INTERNAL_OBJECT_ENDPOINT, "updates": 500},
+        "nodes": list(INTERNAL_OBJECT_NODES),
+        "transmittance": {"count": 4096, "init_seed": 20260703, "init_mode": "transferred_d_inside"},
+        "frozen_branches": {"diffuse": True, "reflection": True, "transmittance": False},
+        "losses": {
+            "object_alpha_floor": float(args.object_alpha_floor),
+            "lambda_object_positive": float(args.lambda_object_positive),
+            "lambda_object_negative": float(args.lambda_object_negative),
+            "depth_enabled_during_run": False,
+            "future_depth_activation_global": 40000,
+        },
+        "object_mask_filter": {
+            "minimum_views": int(args.object_mask_min_views),
+            "minimum_support_ratio": float(args.object_mask_min_support_ratio),
+            "boundary_ignore_px": int(args.object_mask_boundary_ignore_px),
+            "erode_px": int(args.object_mask_erode_px),
+            "dilate_px": int(args.object_mask_dilate_px),
+            "mask_role": "internal_object_union",
+        },
+        "ray_domain": "T first bounce and Cout second bounce remain glass_hard & valid_two_hit; internal-object masks do not crop full-frame RGB.",
+        "planned_outputs": [
+            "operator plan",
+            "internal_object_townership_metadata.json",
+            "stage_d_telemetry.jsonl",
+            "required checkpoints",
+            "D/R/T PLY",
+            "fixed-nine debug maps",
+            "float metric records",
+            "CPU final audit JSON",
+            "CPU final audit Markdown summary",
+        ],
         "command": command,
         "note": "Default mode is plan-only; --execute launches the bounded T-only pilot.",
     }
