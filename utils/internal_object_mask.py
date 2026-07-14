@@ -702,6 +702,7 @@ def validate_internal_object_mask_set(source_path, images_directory, manifest_pa
     return {
         "role": REVIEWED_ROLE,
         "artifact_role": REVIEWED_ROLE,
+        "human_status": "accepted",
         "count": 111,
         "accepted_count": 111,
         "accepted_with_warning": payload.get("accepted_with_warning", []),
