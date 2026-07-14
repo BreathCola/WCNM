@@ -588,3 +588,37 @@ requirements for formal internal-object masks, `cuboid_front_v1`, and
 change the 500-update schedule, source checkpoint, Stage-C release, mask
 release, renderer, losses, ray domain, or authorization boundary. The fixed
 pilot still requires a separate user launch.
+
+### D-016e posthoc review materialization
+
+The completed user-run D-016 pilot produced real training evidence only for the
+bounded 15,001--15,500 interval. Therefore 15,000 must not be represented as a
+real pilot checkpoint. It is now a posthoc deterministic replay node:
+
+- root pilot checkpoints and PLYs are required only at 15,100 / 15,250 /
+  15,500;
+- 15,000 review evidence must live under `posthoc_review/` and must be labeled
+  `deterministic_zero_update_replay`;
+- the replay must use the same source checkpoint, Stage-C release, formal
+  reviewed internal-object masks, `transferred_d_inside` seed/config, and exact
+  transferred-D internal-object filter recorded by the run;
+- no optimizer update, scheduler advance, densification, pruning, checkpoint
+  resume, or training step may occur during materialization.
+
+The CPU audit reads the filter only from
+`actual_transmittance_initialization.selection.internal_object_filter`. This is
+the runtime metadata path written by the D-016 training code. The older direct
+path under `actual_transmittance_initialization` is rejected.
+
+`tools/materialize_stage_d_internal_object_review.py` is the post-run tool for
+the separate user step. It refuses existing `posthoc_review/`, verifies the
+real 15,100 / 15,250 / 15,500 checkpoints before heavy work, replays the
+initial state twice to prove determinism, renders fixed-nine review artifacts
+under `posthoc_review/debug/`, emits derived PLY/replay metadata under
+`posthoc_review/`, and records immutable before/after hashes for the original
+pilot files, operator plan, source checkpoint, Stage-C manifest, and formal
+internal-object manifest.
+
+This D-016e infrastructure change does not rerun the pilot, does not run the
+materializer on the real output, does not run the final posthoc CPU audit, does
+not alter Stage C or formal masks, and does not authorize Stage E.

@@ -1030,3 +1030,31 @@ evidence is judged sufficient by the user.
   Therefore classify this as
   `L_SPEC_PILOT_COMPLETED_AWAITING_USER_EVALUATION_WITH_MEMORY_TELEMETRY_GAP`,
   not Stage B acceptance or long-training authorization.
+
+## D-016e post-run review materialization contract
+
+- The user-run D-016 bounded internal-object T-ownership pilot completed at
+  execution HEAD `f93b26aaf27d678f96dabafe14b3c0c58adff0ae` in
+  `output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1/`.
+  The run exited 0, produced 500 telemetry rows for global 15,001--15,500,
+  kept T count at 4,096, updated only T once per step, kept D/R optimizer
+  updates at zero, and left `L_depth` disabled.
+- The post-run CPU audit blocked on review-materialization contract gaps, not
+  on a training failure: there is no real `chkpnt15000.pth` for this fresh
+  15,001--15,500 pilot, no root 15,000 PLY, and the original operator did not
+  create fixed-nine posthoc review/debug products. The real training
+  checkpoints are 15,100 / 15,250 / 15,500.
+- The audit now reads the transferred-D internal-object filter only from the
+  exact runtime path
+  `actual_transmittance_initialization.selection.internal_object_filter`. The
+  legacy direct path under `actual_transmittance_initialization` is rejected.
+- A posthoc materializer has been added for a separate user execution. It
+  refuses existing `posthoc_review/`, replays the 15,000 initial T state
+  deterministically with zero optimizer updates, emits derived review artifacts
+  under `posthoc_review/`, renders the real 15,100 / 15,250 / 15,500
+  checkpoints, and records immutable before/after hashes for the original pilot,
+  source checkpoint, Stage-C release, and formal internal-object release.
+- Codex did not run the real materializer or final posthoc CPU audit in this
+  change, did not rerun training, did not start an optimizer, did not overwrite
+  the completed pilot output, did not modify Stage C or the formal masks, and
+  did not authorize Stage E.

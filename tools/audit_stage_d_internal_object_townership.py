@@ -65,6 +65,23 @@ REQUIRED_SPLIT_KEYS = {
     "mneg_cout_energy",
     "outside_union_cout_energy",
 }
+FILTER_REQUIRED_KEYS = {
+    "pre_filter_D_indices_sha256",
+    "selected_D_indices_sha256",
+    "rejected_D_indices_sha256",
+    "random_fill_count",
+    "pre_object_mask_candidate_count",
+    "post_object_mask_candidate_count",
+    "selected_transferred_count",
+    "rejected_min_views_count",
+    "rejected_support_ratio_count",
+    "valid_projection_views_histogram",
+    "visible_domain_views_histogram",
+    "positive_object_views_histogram",
+    "per_surfel_support_summary",
+}
+TRAINING_NODES = (15100, 15250, 15500)
+POSTHOC_SCHEMA = "rtgs_stage_d_internal_object_posthoc_review_v1"
 
 
 def _json(path: Path) -> dict:
@@ -112,6 +129,60 @@ def _optimizer_hash(checkpoint: dict, branch: str) -> str:
     if state is None:
         raise KeyError(f"checkpoint lacks {branch} optimizer")
     return state_sha256(state)
+
+
+def _internal_object_filter_metadata(metadata: dict) -> dict:
+    if metadata.get("schema") != METADATA_SCHEMA:
+        raise ValueError("metadata schema mismatch")
+    init = metadata.get("actual_transmittance_initialization")
+    if not isinstance(init, dict):
+        raise ValueError("metadata lacks actual_transmittance_initialization")
+    selection = init.get("selection")
+    if not isinstance(selection, dict):
+        raise ValueError("metadata lacks actual_transmittance_initialization.selection")
+    filter_meta = selection.get("internal_object_filter")
+    if not isinstance(filter_meta, dict):
+        raise ValueError("metadata lacks actual_transmittance_initialization.selection.internal_object_filter")
+    if filter_meta.get("schema") != "rtgs_stage_d_internal_object_transfer_filter_v3":
+        raise ValueError("internal-object transfer filter schema mismatch")
+    missing = sorted(FILTER_REQUIRED_KEYS - set(filter_meta))
+    if missing:
+        raise ValueError(f"internal-object transfer filter metadata missing {missing}")
+    return filter_meta
+
+
+def _posthoc_manifest(output: Path, errors: list[str]) -> dict:
+    path = output / "posthoc_review" / "materialization_manifest.json"
+    if not path.is_file():
+        errors.append("missing posthoc review materialization manifest")
+        return {}
+    try:
+        manifest = _json(path)
+    except Exception as exc:
+        errors.append(f"cannot read posthoc materialization manifest: {exc}")
+        return {}
+    if manifest.get("schema") != POSTHOC_SCHEMA:
+        errors.append("posthoc materialization schema mismatch")
+    initial = manifest.get("posthoc_replayed_initial_state", {})
+    if initial.get("initial_state_kind") != "deterministic_zero_update_replay":
+        errors.append("posthoc initial state is not deterministic_zero_update_replay")
+    if initial.get("optimizer_updates") != 0:
+        errors.append("posthoc initial replay claims optimizer updates")
+    if initial.get("transmittance_count") != 4096:
+        errors.append("posthoc initial replay T count mismatch")
+    if initial.get("replay_deterministic") is not True:
+        errors.append("posthoc initial replay is not marked deterministic")
+    first_hash = initial.get("first_replay_transmittance_state_sha256")
+    second_hash = initial.get("second_replay_transmittance_state_sha256")
+    if not isinstance(first_hash, str) or len(first_hash) != 64:
+        errors.append("posthoc initial replay lacks first T state hash")
+    if not isinstance(second_hash, str) or len(second_hash) != 64:
+        errors.append("posthoc initial replay lacks second T state hash")
+    if first_hash != second_hash:
+        errors.append("posthoc replay T state hash mismatch across repeated replay")
+    if manifest.get("no_optimizer_execution_during_materialization") is not True:
+        errors.append("posthoc materialization must not run optimizer")
+    return manifest
 
 
 def _load_checkpoint(path: Path, node: int, errors: list[str]) -> dict | None:
@@ -208,16 +279,10 @@ def _audit(args: argparse.Namespace) -> tuple[dict, str]:
             errors.append("metadata T update count mismatch")
         if metadata.get("expected_t_count") != 4096:
             errors.append("metadata T count mismatch")
-        init = metadata.get("actual_transmittance_initialization", {})
-        filter_meta = init.get("internal_object_filter", {})
-        for key in (
-            "pre_filter_D_indices_sha256",
-            "selected_D_indices_sha256",
-            "rejected_D_indices_sha256",
-            "random_fill_count",
-        ):
-            if key not in filter_meta:
-                errors.append(f"T initialization lacks {key}")
+        try:
+            filter_meta = _internal_object_filter_metadata(metadata)
+        except ValueError as exc:
+            errors.append(str(exc))
 
     telemetry_path = output / "stage_d_telemetry.jsonl"
     rows = []
@@ -263,8 +328,23 @@ def _audit(args: argparse.Namespace) -> tuple[dict, str]:
                 errors.append(f"missing split internal-object metrics at {step}: {missing_split}")
                 break
 
+    posthoc = _posthoc_manifest(output, errors)
+    posthoc_filter = (
+        posthoc.get("posthoc_replayed_initial_state", {})
+        .get("internal_object_filter", {})
+        if isinstance(posthoc, dict) else {}
+    )
+    if metadata and isinstance(posthoc_filter, dict):
+        try:
+            runtime_filter = _internal_object_filter_metadata(metadata)
+            for key in sorted(FILTER_REQUIRED_KEYS):
+                if posthoc_filter.get(key) != runtime_filter.get(key):
+                    errors.append(f"posthoc replay filter identity mismatch for {key}")
+        except ValueError:
+            pass
+
     checkpoints = {}
-    for node in INTERNAL_OBJECT_NODES:
+    for node in TRAINING_NODES:
         checkpoint = _load_checkpoint(output / f"chkpnt{node}.pth", node, errors)
         if checkpoint is not None:
             checkpoints[node] = checkpoint
@@ -273,19 +353,22 @@ def _audit(args: argparse.Namespace) -> tuple[dict, str]:
             if not ply.is_file():
                 errors.append(f"missing {branch} PLY at {node}")
 
-    if INTERNAL_OBJECT_NODES[0] in checkpoints and INTERNAL_OBJECT_NODES[-1] in checkpoints:
-        first = checkpoints[INTERNAL_OBJECT_NODES[0]]
-        final = checkpoints[INTERNAL_OBJECT_NODES[-1]]
+    if INTERNAL_OBJECT_ENDPOINT in checkpoints:
+        source_path = Path(plan.get("source", ""))
+        source = torch.load(source_path, map_location="cpu") if source_path.is_file() else {}
+        final = checkpoints[INTERNAL_OBJECT_ENDPOINT]
         for branch in ("diffuse", "reflection"):
-            if _branch_hash(first, branch) != _branch_hash(final, branch):
+            if branch not in source:
+                errors.append(f"source checkpoint lacks {branch} branch")
+                continue
+            if state_sha256(source[branch]) != _branch_hash(final, branch):
                 errors.append(f"{branch} parameters changed")
-            if _optimizer_hash(first, branch) != _optimizer_hash(final, branch):
-                errors.append(f"{branch} optimizer state changed")
-        if _branch_hash(first, "transmittance") == _branch_hash(final, "transmittance"):
+        initial_t = posthoc.get("posthoc_replayed_initial_state", {}).get("first_replay_transmittance_state_sha256")
+        if initial_t and initial_t == _branch_hash(final, "transmittance"):
             errors.append("T parameters did not change")
 
     for node in INTERNAL_OBJECT_NODES:
-        debug_root = output / "debug" / f"iteration_{node:06d}"
+        debug_root = output / "posthoc_review" / "debug" / f"iteration_{node:06d}"
         if not (debug_root / "contact_sheet.png").is_file():
             errors.append(f"missing contact sheet at {node}")
         for stem in FORMAL_STEMS:
@@ -319,6 +402,13 @@ def _audit(args: argparse.Namespace) -> tuple[dict, str]:
         "telemetry_rows": len(rows),
         "telemetry_range": [15001, 15500],
         "required_nodes": list(INTERNAL_OBJECT_NODES),
+        "actual_training_checkpoints": [str(output / f"chkpnt{node}.pth") for node in TRAINING_NODES],
+        "posthoc_replayed_initial_state": posthoc.get("posthoc_replayed_initial_state", {}),
+        "posthoc_review_artifacts": posthoc.get("posthoc_review_artifacts", {}),
+        "raw_pilot_output_tree_sha256_before_materialization": posthoc.get("raw_pilot_output_tree_sha256_before_materialization"),
+        "immutable_files_before_after": posthoc.get("immutable_files_before_after", {}),
+        "newly_added_derived_files": posthoc.get("newly_added_derived_files", []),
+        "no_optimizer_execution_during_materialization": posthoc.get("no_optimizer_execution_during_materialization"),
         "review_stems": list(FORMAL_STEMS),
     }
     return result, verdict

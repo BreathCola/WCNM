@@ -7,6 +7,25 @@ import tools.audit_stage_d_internal_object_townership as audit
 from stage_d_training import FORMAL_RELEASE_SHA256, FORMAL_SOURCE_SHA256, INTERNAL_OBJECT_NODES
 
 
+FILTER_METADATA = {
+    "schema": "rtgs_stage_d_internal_object_transfer_filter_v3",
+    "pre_filter_D_indices_sha256": "pre",
+    "selected_D_indices_sha256": "selected",
+    "rejected_D_indices_sha256": "rejected",
+    "random_fill_count": 2864,
+    "pre_object_mask_candidate_count": 4096,
+    "post_object_mask_candidate_count": 1232,
+    "selected_transferred_count": 1232,
+    "rejected_min_views_count": 10,
+    "rejected_support_ratio_count": 20,
+    "valid_projection_views_histogram": {"3": 1},
+    "visible_domain_views_histogram": {"4": 2},
+    "positive_object_views_histogram": {"5": 3},
+    "per_surfel_support_summary": {"min": 0.6, "max": 1.0},
+}
+INITIAL_T_HASH = "0" * 64
+
+
 def _write_json(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
@@ -55,10 +74,13 @@ def _make_output(tmp_path):
     output = tmp_path / "stage_d_tihubird_c03r8_internal_object_townership_pilot_v1"
     output.mkdir()
     plan = tmp_path / "d016_plan.json"
+    source = tmp_path / "source_chkpnt15000.pth"
+    torch.save(_checkpoint(15000, t_delta=0.0), source)
     _write_json(plan, {
         "schema": "rtgs_stage_d_internal_object_operator_plan_v1",
         "execute": True,
         "output": str(output),
+        "source": str(source),
         "source_sha256": FORMAL_SOURCE_SHA256,
         "release_aggregate_sha256": FORMAL_RELEASE_SHA256,
         "internal_object_manifest_sha256": "manifest",
@@ -71,11 +93,8 @@ def _make_output(tmp_path):
         "transmittance_optimizer_updates": 500,
         "expected_t_count": 4096,
         "actual_transmittance_initialization": {
-            "internal_object_filter": {
-                "pre_filter_D_indices_sha256": "a",
-                "selected_D_indices_sha256": "b",
-                "rejected_D_indices_sha256": "c",
-                "random_fill_count": 12,
+            "selection": {
+                "internal_object_filter": dict(FILTER_METADATA),
             }
         },
     })
@@ -99,13 +118,45 @@ def _make_output(tmp_path):
     (output / "stage_d_telemetry.jsonl").write_text(
         "".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8"
     )
-    for node in INTERNAL_OBJECT_NODES:
-        torch.save(_checkpoint(node, t_delta=0.0 if node == 15000 else 1.0), output / f"chkpnt{node}.pth")
+    for node in audit.TRAINING_NODES:
+        torch.save(_checkpoint(node, t_delta=1.0), output / f"chkpnt{node}.pth")
         for branch in ("diffuse", "reflection", "transmittance"):
             ply = output / "point_cloud" / branch / f"iteration_{node}" / "point_cloud.ply"
             ply.parent.mkdir(parents=True, exist_ok=True)
             ply.write_text("ply\n", encoding="utf-8")
-        debug_root = output / "debug" / f"iteration_{node:06d}"
+    posthoc = output / "posthoc_review"
+    _write_json(posthoc / "initial_state_replay" / "initial_state_replay.json", {
+        "schema": "rtgs_stage_d_internal_object_initial_replay_v1",
+        "initial_state_kind": "deterministic_zero_update_replay",
+        "optimizer_updates": 0,
+        "transmittance_count": 4096,
+        "first_replay_transmittance_state_sha256": INITIAL_T_HASH,
+        "second_replay_transmittance_state_sha256": INITIAL_T_HASH,
+        "replay_deterministic": True,
+        "internal_object_filter": dict(FILTER_METADATA),
+    })
+    _write_json(posthoc / "materialization_manifest.json", {
+        "schema": audit.POSTHOC_SCHEMA,
+        "posthoc_replayed_initial_state": {
+            "initial_state_kind": "deterministic_zero_update_replay",
+            "optimizer_updates": 0,
+            "transmittance_count": 4096,
+            "first_replay_transmittance_state_sha256": INITIAL_T_HASH,
+            "second_replay_transmittance_state_sha256": INITIAL_T_HASH,
+            "replay_deterministic": True,
+            "internal_object_filter": dict(FILTER_METADATA),
+        },
+        "posthoc_review_artifacts": {
+            "debug_root": "posthoc_review/debug",
+            "nodes": list(INTERNAL_OBJECT_NODES),
+        },
+        "raw_pilot_output_tree_sha256_before_materialization": "raw-tree",
+        "immutable_files_before_after": {},
+        "newly_added_derived_files": [],
+        "no_optimizer_execution_during_materialization": True,
+    })
+    for node in INTERNAL_OBJECT_NODES:
+        debug_root = posthoc / "debug" / f"iteration_{node:06d}"
         (debug_root / "contact_sheet.png").parent.mkdir(parents=True, exist_ok=True)
         (debug_root / "contact_sheet.png").write_bytes(b"png")
         for stem in audit.FORMAL_STEMS:
@@ -184,3 +235,69 @@ def test_internal_object_cpu_audit_blocks_missing_split_metrics(monkeypatch, tmp
 
     assert verdict == audit.VERDICT_BLOCKED
     assert any("missing split internal-object metrics" in error for error in result["errors"])
+
+
+def test_internal_object_cpu_audit_rejects_old_filter_metadata_path(monkeypatch, tmp_path):
+    output, plan = _make_output(tmp_path)
+    _patch_identities(monkeypatch)
+    metadata = json.loads((output / "internal_object_townership_metadata.json").read_text(encoding="utf-8"))
+    metadata["actual_transmittance_initialization"] = {
+        "internal_object_filter": dict(FILTER_METADATA),
+    }
+    _write_json(output / "internal_object_townership_metadata.json", metadata)
+
+    result, verdict = audit._audit(_args(output, plan))
+
+    assert verdict == audit.VERDICT_BLOCKED
+    assert any("actual_transmittance_initialization.selection" in error for error in result["errors"])
+
+
+def test_internal_object_cpu_audit_does_not_require_root_15000_checkpoint(monkeypatch, tmp_path):
+    output, plan = _make_output(tmp_path)
+    _patch_identities(monkeypatch)
+
+    result, verdict = audit._audit(_args(output, plan))
+
+    assert verdict == audit.VERDICT_PASS
+    assert not (output / "chkpnt15000.pth").exists()
+    assert result["actual_training_checkpoints"] == [
+        str(output / "chkpnt15100.pth"),
+        str(output / "chkpnt15250.pth"),
+        str(output / "chkpnt15500.pth"),
+    ]
+
+
+def test_internal_object_cpu_audit_blocks_without_posthoc_manifest(monkeypatch, tmp_path):
+    output, plan = _make_output(tmp_path)
+    _patch_identities(monkeypatch)
+    (output / "posthoc_review" / "materialization_manifest.json").unlink()
+
+    result, verdict = audit._audit(_args(output, plan))
+
+    assert verdict == audit.VERDICT_BLOCKED
+    assert "missing posthoc review materialization manifest" in result["errors"]
+
+
+def test_internal_object_cpu_audit_blocks_missing_real_training_checkpoint(monkeypatch, tmp_path):
+    output, plan = _make_output(tmp_path)
+    _patch_identities(monkeypatch)
+    (output / "chkpnt15250.pth").unlink()
+
+    result, verdict = audit._audit(_args(output, plan))
+
+    assert verdict == audit.VERDICT_BLOCKED
+    assert "missing checkpoint 15250" in result["errors"]
+
+
+def test_internal_object_cpu_audit_blocks_filter_replay_mismatch(monkeypatch, tmp_path):
+    output, plan = _make_output(tmp_path)
+    _patch_identities(monkeypatch)
+    manifest_path = output / "posthoc_review" / "materialization_manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["posthoc_replayed_initial_state"]["internal_object_filter"]["selected_D_indices_sha256"] = "wrong"
+    _write_json(manifest_path, manifest)
+
+    result, verdict = audit._audit(_args(output, plan))
+
+    assert verdict == audit.VERDICT_BLOCKED
+    assert any("posthoc replay filter identity mismatch" in error for error in result["errors"])

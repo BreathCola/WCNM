@@ -3636,3 +3636,46 @@ contract, weaken fail-closed validation, or invent a resume source.
 Impact: The launch gate now matches the previously documented D-016 operator
 contract. The failed user attempt remains zero-update evidence only and is not a
 resume source. A real pilot retry still requires separate user execution.
+
+## D-016e — Post-run review materialization and audit contract
+
+Date: 2026-07-14
+
+Question: How should the completed D-016 pilot be audited when the fresh
+15,001--15,500 run correctly has no real 15,000 checkpoint/debug products?
+
+Chosen implementation: Treat 15,000 as a posthoc deterministic zero-update
+initial-state replay, not as a real training checkpoint. The CPU audit no
+longer requires root `chkpnt15000.pth` or root 15,000 PLYs. Instead it requires
+real training checkpoints and PLYs at 15,100 / 15,250 / 15,500, plus a
+`posthoc_review/materialization_manifest.json` proving that 15,000 evidence was
+derived by replaying the original source, Stage-C release, formal masks,
+initialization seed/config, and transferred-D internal-object filter without
+optimizer execution.
+
+The audit now reads the internal-object transfer filter only at
+`actual_transmittance_initialization.selection.internal_object_filter`, with the
+`rtgs_stage_d_internal_object_transfer_filter_v3` schema and explicit hash/count
+fields. The legacy direct path is rejected rather than discovered recursively.
+
+Add `tools/materialize_stage_d_internal_object_review.py` as a fail-closed,
+post-run materializer. It refuses an existing `posthoc_review/`, checks the
+source checkpoint and Stage-C identities, verifies 15,100 / 15,250 / 15,500
+checkpoints exist before heavy work, replays the initial T state twice and
+requires identical T state hashes, writes derived review products under
+`posthoc_review/`, and records immutable before/after hashes for the original
+pilot files plus source/release/mask manifests. It is a review materializer, not
+a trainer: no optimizer update, scheduler advance, densification, pruning, or
+resume source is allowed.
+
+Alternatives: Forge a synthetic root `chkpnt15000.pth`; keep requiring an
+impossible 15,000 pilot checkpoint; search metadata recursively for a matching
+filter; or accept the completed pilot without fixed-nine posthoc artifacts.
+These would blur real-vs-derived evidence, keep the audit permanently blocked,
+make metadata identity ambiguous, or weaken human review provenance.
+
+Impact: The completed D-016 pilot can now be followed by a separately
+user-executed posthoc materialization command and then the CPU audit. This
+change did not rerun training, run the materializer on the real output, launch
+an optimizer, overwrite the pilot output, modify Stage C or formal masks, or
+authorize Stage E.
