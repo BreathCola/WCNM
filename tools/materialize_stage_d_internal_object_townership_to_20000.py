@@ -361,7 +361,7 @@ def _write_masks_and_float_metrics(view: Path, stem: str, mask_manifest: dict, p
     masks = {
         "bird": _mask_tensor(bird_path, size=mask_size),
         "internal_base": _mask_tensor(base_path, size=mask_size),
-        "union": union,
+        "internal_object_union": union,
     }
     metrics = object_domain_metrics(package, domains, masks, alpha_floor=0.35, erode_px=3, dilate_px=3)
     metrics.update({
