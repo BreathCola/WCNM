@@ -37,7 +37,7 @@ from utils.stage_d_static_cache import state_sha256
 VERDICT_PASS = "D016_TO_20000_PASS_AWAITING_USER_REVIEW"
 VERDICT_HOLD = "D016_TO_20000_HOLD"
 VERDICT_BLOCKED = "D016_TO_20000_BLOCKED"
-TELEMETRY_SCHEMA = "rtgs_stage_d_internal_object_townership_to_20000_telemetry_v1"
+TELEMETRY_SCHEMA = "rtgs_stage_d_internal_object_townership_telemetry_v1"
 METADATA_SCHEMA = "rtgs_stage_d_internal_object_townership_to_20000_v1"
 POSTHOC_SCHEMA = "rtgs_stage_d_internal_object_townership_to_20000_posthoc_review_v1"
 PLAN_SCHEMA = "rtgs_stage_d_internal_object_townership_to_20000_operator_plan_v1"
