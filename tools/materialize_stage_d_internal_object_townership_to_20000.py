@@ -309,8 +309,10 @@ def _mask_entry(mask_manifest: dict, stem: str) -> dict:
     raise KeyError(stem)
 
 
-def _mask_tensor(path: Path, *, device: str = "cuda") -> torch.Tensor:
+def _mask_tensor(path: Path, *, device: str = "cuda", size: tuple[int, int] | None = None) -> torch.Tensor:
     image = Image.open(path).convert("L")
+    if size is not None and image.size != size:
+        image = image.resize(size, Image.Resampling.NEAREST)
     data = torch.ByteTensor(torch.ByteStorage.from_buffer(image.tobytes()))
     data = data.reshape(image.height, image.width, 1).to(device=device)
     return (data.float() / 255.0).clamp(0, 1)
@@ -348,15 +350,17 @@ def _write_masks_and_float_metrics(view: Path, stem: str, mask_manifest: dict, p
     _overlay_mask(final_path, bird_path, view / "bird_mask_overlay.png", (255, 220, 0))
     _overlay_mask(final_path, base_path, view / "internal_base_mask_overlay.png", (0, 180, 255))
     _overlay_mask(final_path, union_path, view / "union_mask_overlay.png", (255, 80, 80))
-    union = _mask_tensor(union_path)
-    glass = _mask_tensor(glass_path)
+    h, w = package["inside_alpha"].shape[:2]
+    mask_size = (int(w), int(h))
+    union = _mask_tensor(union_path, size=mask_size)
+    glass = _mask_tensor(glass_path, size=mask_size)
     valid = package["two_hit_valid"].detach()
     ignore = torch.zeros_like(union)
     domains = object_occupancy_domains(union, glass, valid, ignore, erode_px=3, dilate_px=3)
     _save_domain_visual(domains, view / "mpos_mignore_mneg.png")
     masks = {
-        "bird": _mask_tensor(bird_path),
-        "internal_base": _mask_tensor(base_path),
+        "bird": _mask_tensor(bird_path, size=mask_size),
+        "internal_base": _mask_tensor(base_path, size=mask_size),
         "union": union,
     }
     metrics = object_domain_metrics(package, domains, masks, alpha_floor=0.35, erode_px=3, dilate_px=3)
@@ -364,6 +368,11 @@ def _write_masks_and_float_metrics(view: Path, stem: str, mask_manifest: dict, p
         "schema": "rtgs_stage_d_internal_object_townership_to_20000_float_metrics_v1",
         "stem": stem,
         "source": "float tensors rendered during materialization; masks are formal reviewed v3",
+        "mask_alignment": {
+            "mode": "explicit_nearest_resize_to_render_resolution",
+            "render_height": int(h),
+            "render_width": int(w),
+        },
     })
     _atomic_json(view / FLOAT_METRICS_NAME, metrics)
     return metrics
