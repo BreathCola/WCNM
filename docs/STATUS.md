@@ -4,6 +4,30 @@ Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `feature/stage-d-transmittance`
 
+Current bounded user task: TiHuBird glass-mask full v2 proposal generation for
+human review only. It does not run training, does not create formal
+`reviewed_v2`, does not modify `specular_masks_reviewed_v1`, and does not touch
+Stage B/C/D checkpoints, mesh, caches, or training outputs.
+
+The full v2 proposal artifact is
+`output/stage_b_tihubird_glass_mask_full_review_v2_proposal/`. It contains
+111/111 source-resolution candidate PNGs and 111/111 source-resolution review
+pages for stems `000000`--`000110`, plus chronological contact sheets,
+risk-ranked contact sheets, `review_queue.csv`, `review_template.json`,
+`proposal_manifest.json`, `proposal_summary.json`, `per_frame_metrics.*`,
+`v1_source_audit.json`, `audit_manifest.json`, and `source_tree_hashes.json`.
+The generated verdict is `GLASS_MASK_V2_PROPOSAL_READY_FOR_USER_REVIEW`.
+Automatic risk ranking is review-queue-only and never promotes a mask.
+
+The v1 source audit records that `specular_masks_reviewed_v1` used local repair
+candidates only for `000039`, `000040`, and `000041`; the other 108 frames were
+byte-copied from frozen proposal v1. The old repair report is explicitly
+subtractive-only top-boundary clipping and does not mean all 111 masks were
+refined. The reviewed-v1 tree hash before and after v2 proposal generation is
+unchanged:
+`1435a7f13219c466fa3cc3b76869f3ca7c586244786562f17ae07ed3f7a9b25c`
+over 112 files.
+
 The current authorized task is D-016, Grounded-SAM2 guided internal-object
 T ownership. It replaces any continuation of D-015 Arms 0--3. D-015 code and
 historical outputs remain read-only evidence and must not be deleted,

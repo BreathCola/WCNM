@@ -11,6 +11,7 @@ from utils.dr_mask_proposal import (
     ProposalAuditError,
     audit_dr_artifacts,
     generate_proposals,
+    sha256_file,
 )
 from utils.specular_mask import validate_specular_mask_set
 from utils.dr_mask_review import (
@@ -30,6 +31,7 @@ from utils.dr_mask_repair import (
     detect_repair_top_line,
     reference_top_line,
 )
+from utils.dr_mask_full_review_v2 import generate_full_review_v2_proposal
 
 
 def _save_rgb(path: Path, values: np.ndarray):
@@ -356,3 +358,141 @@ def test_reference_top_line_selects_long_upper_polygon_edge():
     assert line.length > 50
     assert abs(line.slope) < 0.1
     assert line.y_at(40) < 15
+
+
+def _write_reviewed_v1_fixture(
+    scene: Path,
+    proposal_root: Path,
+    repair_root: Path,
+    count: int,
+    repair_stems=("000001",),
+):
+    reviewed = scene / "specular_masks_reviewed_v1"
+    reviewed.mkdir()
+    repair_candidate_root = repair_root / "repair_candidates"
+    repair_candidate_root.mkdir(parents=True)
+    entries = []
+    for index in range(count):
+        stem = f"{index:06d}"
+        source = proposal_root / "proposal_soft" / stem / "proposal_soft.png"
+        if stem == "000000":
+            mask = np.zeros((40, 64), dtype=np.uint8)
+            mask[8:32, 11:53] = 255
+            mask[15:21, 26:33] = 0
+            mask[2:5, 2:5] = 255
+            Image.fromarray(mask).save(source)
+        source_kind = "proposal_v1"
+        if stem in repair_stems:
+            repair_source = repair_candidate_root / f"{stem}.png"
+            repair_source.write_bytes(source.read_bytes())
+            source = repair_source
+            source_kind = "repair_candidate_v1"
+        target = reviewed / f"{stem}.png"
+        target.write_bytes(source.read_bytes())
+        with Image.open(target) as image:
+            values = np.asarray(image, dtype=np.uint8)
+        hard = values >= 128
+        ys, xs = np.nonzero(hard)
+        entries.append(
+            {
+                "stem": stem,
+                "rgb_path": f"images/{stem}.jpg",
+                "rgb_sha256": sha256_file(scene / "images" / f"{stem}.jpg"),
+                "mask_path": f"{stem}.png",
+                "mask_sha256": sha256_file(target),
+                "source": source_kind,
+                "source_reference": str(source),
+                "source_sha256": sha256_file(source),
+                "size": [64, 40],
+                "mode": "L",
+                "dtype": "uint8",
+                "area_ratio": float(hard.mean()),
+                "bbox_xyxy": [int(xs.min()), int(ys.min()), int(xs.max()) + 1, int(ys.max()) + 1],
+                "human_status": "accepted",
+            }
+        )
+    manifest = {
+        "schema_version": 1,
+        "role": "stage_b_formal_reviewed_specular_soft_masks",
+        "version": "reviewed_v1",
+        "human_status": "accepted",
+        "count": count,
+        "ordered_stems": [f"{index:06d}" for index in range(count)],
+        "mask_interpolation": "opencv.INTER_LINEAR",
+        "aggregate_mask_sha256": "mini-fixture",
+        "padding_exclusion_proof": {"excluded_stems": [], "mixed_count": 0},
+        "entries": entries,
+    }
+    (reviewed / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    repair_report = {
+        "schema_version": 1,
+        "artifact": "three localized automatic glass-mask repair candidates",
+        "status": "PASS",
+        "repair_stems": list(repair_stems),
+        "repairs": {
+            stem: {"repair_operation": "subtractive top-boundary clipping only"}
+            for stem in repair_stems
+        },
+    }
+    (repair_root / "repair_report.json").write_text(json.dumps(repair_report), encoding="utf-8")
+    return reviewed / "manifest.json"
+
+
+def test_full_v2_proposal_audits_v1_scope_and_allows_add_remove(tmp_path):
+    scene, raw_root, _ = _fixture(tmp_path, count=4)
+    proposal_root = tmp_path / "proposal_v1"
+    audit = audit_dr_artifacts(scene, raw_root, expected_count=4)
+    generate_all_real_proposals(audit, proposal_root, expected_count=4)
+    build_review_package(audit, proposal_root, expected_count=4)
+    high_risk_root = tmp_path / "high_risk_v1"
+    high_risk_root.mkdir()
+    (high_risk_root / "review_pack_manifest.json").write_text(
+        json.dumps({"status": "PASS", "view_count": 1}), encoding="utf-8"
+    )
+    repair_root = tmp_path / "repair_v1"
+    reviewed_manifest = _write_reviewed_v1_fixture(
+        scene, proposal_root, repair_root, count=4, repair_stems=("000001",)
+    )
+
+    output = tmp_path / "full_v2"
+    manifest = generate_full_review_v2_proposal(
+        scene=scene,
+        raw_root=raw_root,
+        reviewed_v1_manifest=reviewed_manifest,
+        proposal_v1_root=proposal_root,
+        high_risk_root=high_risk_root,
+        repair_v1_root=repair_root,
+        output_root=output,
+        expected_count=4,
+        source_size=(64, 40),
+        require_formal_loader=False,
+        repair_stems=("000001",),
+    )
+
+    assert manifest["status"] == "PASS"
+    assert manifest["source_audit"]["source_counts"] == {
+        "proposal_v1": 3,
+        "repair_candidate_v1": 1,
+    }
+    assert manifest["source_audit"]["old_repair_scope"][
+        "old_repair_was_subtractive_only"
+    ]
+    assert len(list((output / "candidate_masks").glob("*.png"))) == 4
+    assert len(list((output / "review_pages").glob("*_review.png"))) == 4
+    assert (output / "review_queue.csv").is_file()
+    assert (output / "review_template.json").is_file()
+    assert (output / "proposal_summary.json").is_file()
+    assert (output / "per_frame_metrics.csv").is_file()
+    assert (output / "source_tree_hashes.json").is_file()
+    assert not (scene / "specular_masks_reviewed_v2").exists()
+
+    rows = {row["stem"]: row for row in manifest["frames"]}
+    assert rows["000000"]["added_hard_pixel_count"] > 0
+    assert rows["000000"]["removed_hard_pixel_count"] > 0
+    with Image.open(output / "candidate_masks" / "000000.png") as candidate:
+        assert candidate.mode == "L"
+        assert candidate.size == (64, 40)
+        values = np.asarray(candidate, dtype=np.uint8)
+    assert values.min() == 0
+    assert values.max() == 255
+    assert manifest["outputs"]["source_tree_hashes_unchanged"] is True

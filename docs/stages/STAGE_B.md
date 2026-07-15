@@ -464,6 +464,22 @@ single-channel uint8 proposals and retained review artifacts pass the strict
 review manifest; padding slots 111--119 contribute zero proposals. The next
 gate is human review/correction of every queue item, not `L_spec` or training.
 
+The later full v2 review-only proposal is
+`output/stage_b_tihubird_glass_mask_full_review_v2_proposal/`. It audits the
+existing provenance and records that reviewed-v1 incorporated old local repair
+only for `000039`, `000040`, and `000041`; the other 108 masks inherited frozen
+proposal v1, and the old repair was subtractive-only. The v2 proposal is
+generated for all stems `000000`--`000110` and is allowed to add missing glass
+pixels, remove exterior leaks, adjust top/bottom/left/right/base boundaries, and
+rebuild soft edges. It writes 111 source-resolution candidate PNGs, 111
+source-resolution review pages, chronological contact sheets, risk-ranked
+contact sheets, `review_queue.csv`, `review_template.json`,
+`proposal_manifest.json`, `proposal_summary.json`, per-frame metrics, and source
+tree hashes. The reviewed-v1 tree hash is unchanged before/after:
+`1435a7f13219c466fa3cc3b76869f3ca7c586244786562f17ae07ed3f7a9b25c`
+over 112 files. The artifact is not reviewed_v2, not a formal training
+manifest, and not an `L_spec` authorization.
+
 ## Debug outputs required before Stage B acceptance
 
 ```text

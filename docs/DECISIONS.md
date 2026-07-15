@@ -3766,3 +3766,50 @@ checkpoint, claim semantic separation, accept Stage D, authorize joint training,
 or authorize Stage E. Codex implemented and tested the tools but did not run
 the real materializer or audit, did not modify the completed output, and did not
 run additional training.
+
+## B-010 — TiHuBird glass-mask full v2 proposal semantics
+
+Date: 2026-07-15
+
+Question: How should a second-pass TiHuBird glass mask proposal be generated
+after discovering that the reviewed-v1 archive contains only three localized
+repairs and 108 inherited frozen automatic proposals?
+
+Chosen implementation: Generate a new, independent review-only v2 proposal for
+all 111 source stems at
+`output/stage_b_tihubird_glass_mask_full_review_v2_proposal/`. The v2 candidate
+starts from the formal reviewed-v1 mask as a draft, but its operation policy is
+not subtractive-only: it may add missing glass pixels, remove exterior leaks,
+adjust top/bottom/left/right/lower-base boundaries, and rebuild soft edges. The
+candidate generator uses source-resolution RGB, reviewed-v1 masks, audited
+DiffusionRenderer normal/depth boundary evidence, and adjacent-view continuity
+metrics. It does not read target colors as training supervision and does not run
+network training.
+
+Mask semantics are fixed for review: the mask is the complete projected glass
+enclosure. Bird, yellow base board, and white platform pixels visible through
+the glass remain inside the glass mask; internal objects are not holes. Table,
+ceiling, dinosaur, external background, and large lights outside the glass are
+excluded.
+
+The tool fails closed on exact stems, source size `3827x2152`, mode `L` uint8
+candidates, empty/full/constant masks, source RGB/DR/reviewed-v1 hash mismatch,
+and source-tree mutation. It records that reviewed-v1 used old local repair
+only for `000039`, `000040`, and `000041`; the remaining 108 frames inherit
+frozen proposal v1; and the old repair was subtractive-only. Automatic risk
+ranking writes only `review_queue.csv` and contact sheets. No automatic
+promotion is possible.
+
+Alternatives: Treat reviewed-v1 as if all 111 masks had been manually refined;
+generate only three more local repairs; keep the old subtractive-only repair
+constraint; or create `data/TiHuBird/specular_masks_reviewed_v2` immediately.
+These would overstate the v1 provenance, leave most frames unaudited, prevent
+adding missing glass regions, or bypass the required human review gate.
+
+Impact: The artifact contains 111 candidate PNGs, 111 review pages,
+chronological and risk-ranked contact sheets, `review_queue.csv`,
+`review_template.json`, `proposal_manifest.json`, `proposal_summary.json`,
+per-frame metrics, source tree hashes, and code identity. It is not a formal
+mask release and cannot be loaded as training supervision. This work did not
+train, did not create reviewed_v2, did not modify reviewed_v1, and did not touch
+Stage C/D mesh, cache, checkpoint, or output state.
