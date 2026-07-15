@@ -649,3 +649,54 @@ existing 40,000 start schedule.
 This mode must not initialize T, rerun transferred-D selection, rerun
 internal-object mask filtering, rerun random fill, densify, prune, change
 topology, run 20,001+, enter joint training, or authorize Stage E.
+
+### D-016g 20k continuation posthoc review
+
+The user-authorized D-016 continuation has completed through global 20,000 in
+`output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/`.
+Technical review is not complete until a separate posthoc materialization and
+CPU audit are run.
+
+`tools/materialize_stage_d_internal_object_townership_to_20000.py` is the only
+posthoc review materializer for this continuation. It must:
+
+- refuse an existing `posthoc_review/`;
+- load node 15,500 from the immutable pilot `chkpnt15500.pth`;
+- load nodes 16,000--20,000 only from the real continuation checkpoints;
+- write derived review products under `posthoc_review/` using a temporary
+  directory and atomic rename;
+- render fixed-nine products for stems 000000, 000012, 000039, 000040, 000041,
+  000053, 000063, 000083, and 000110;
+- write `float_metrics.json`, object-mask overlays, Mpos/Mignore/Mneg
+  visualizations, contact sheets, semantic comparison sheets, and cross-node
+  overview sheets;
+- record immutable before/after hashes for existing checkpoint/PLY/telemetry,
+  source checkpoint, Stage-C release, and formal internal-object release;
+- record `no_optimizer_execution=true`, `no_backward=true`, and
+  `no_checkpoint_write=true`.
+
+It must not run the old 500-step materializer, replay transferred-D selection,
+reinitialize T, random-fill T, resume training, step an optimizer, call
+backward, write new training checkpoints, mutate existing PLYs, modify Stage C,
+or modify formal masks.
+
+`tools/audit_stage_d_internal_object_townership_to_20000.py` is the CPU-only
+audit. It checks exact 4,500-row telemetry continuity, global 15,501--20,000,
+T-local 501--5,000, T-only optimizer updates, D/R frozen parameter and
+optimizer hashes, finite nonzero T change, T optimizer continuation, T count
+4,096, no topology changes, all required checkpoints and PLYs, source/pilot
+audit/Stage-C/formal-mask identities, materializer immutability, complete
+fixed-nine artifacts, overview sheets, and finite float metrics. It also emits
+trend tables and engineering review candidates, but the final checkpoint remains
+a human visual-review decision.
+
+Allowed audit verdicts are:
+
+```text
+D016_TO_20000_PASS_AWAITING_USER_REVIEW
+D016_TO_20000_HOLD
+D016_TO_20000_BLOCKED
+```
+
+Even PASS does not authorize joint D/R/T training, Stage D acceptance, final
+semantic claims, or Stage E.

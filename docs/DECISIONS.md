@@ -3716,3 +3716,53 @@ Impact: A user can now launch a bounded D-016 T-only continuation to global
 20,000 as a separate action. This change does not authorize joint D/R/T
 training, Stage D acceptance, Stage E, or any run beyond global 20,000. Codex
 did not execute the continuation.
+
+## D-016g — 20k continuation posthoc review materializer and CPU audit
+
+Date: 2026-07-15
+
+Question: How should the completed D-016 15,500--20,000 continuation be reviewed
+without treating the 15,500 source as a replayed initialization or accidentally
+authorizing joint training?
+
+Chosen implementation: Add dedicated post-run tools for this continuation:
+`tools/materialize_stage_d_internal_object_townership_to_20000.py` and
+`tools/audit_stage_d_internal_object_townership_to_20000.py`. The materializer
+is fail-closed on an existing `posthoc_review/`, reads the real pilot
+`chkpnt15500.pth` as node 15,500, reads only the real continuation checkpoints
+for nodes 16,000--20,000, renders fixed-nine products into a derived
+`posthoc_review/` directory through a temporary directory and atomic rename,
+writes per-view `float_metrics.json`, mask/domain overlays, contact sheets,
+cross-node overviews, checkpoint branch hashes, immutable before/after hashes,
+and records `no_optimizer_execution=true`, `no_backward=true`, and
+`no_checkpoint_write=true`.
+
+The materializer does not call the old 500-step pilot replay path. It does not
+rerun transferred-D selection, internal-object filtering, random fill, T
+initialization, optimizer updates, scheduler steps, backward, resume training,
+or 20,001+ execution.
+
+The CPU audit is CPU-only and fail-closed. It verifies telemetry is exactly
+global 15,501--20,000 and T-local 501--5,000, every row is
+`internal_object_townership_t_only`, every row updates only T, T count remains
+4,096, no densification/pruning/topology change occurs, checkpoints and PLYs
+exist at all required nodes, checkpoint tensors are finite, D/R parameter and
+optimizer hashes match between source 15,500 and final 20,000, T parameters and
+optimizer state change finitely, source/pilot-audit/Stage-C/internal-object
+identities match, and posthoc review products are complete. The audit also
+emits trend tables and engineering review candidates for best RGB, best object
+ownership, leakage tradeoff, and endpoint 20,000, while explicitly leaving final
+checkpoint choice to human visual review.
+
+Alternatives: Reuse the 500-step posthoc materializer; replay a 15,500 initial
+state; accept the continuation from telemetry alone; or let PASS authorize joint
+training. These would mix node contracts, risk changing T provenance, omit
+visual review products, or cross the current authorization boundary.
+
+Impact: The completed continuation can now be materialized and audited as a
+separate user-run posthoc step. A PASS verdict is only
+`D016_TO_20000_PASS_AWAITING_USER_REVIEW`; it does not select a final
+checkpoint, claim semantic separation, accept Stage D, authorize joint training,
+or authorize Stage E. Codex implemented and tested the tools but did not run
+the real materializer or audit, did not modify the completed output, and did not
+run additional training.

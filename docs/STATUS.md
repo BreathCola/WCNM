@@ -1081,7 +1081,34 @@ evidence is judged sufficient by the user.
   PASS, Stage-C release, formal internal-object release, and the read-only pilot
   static cache before emitting a plan. Only explicit `--execute` launches
   `train.py`.
-- Codex added the operator and resume contract but did not run `--execute`, did
-  not start training, did not start tmux/nohup, did not create the continuation
-  output, did not run materializer/audit for the continuation, did not modify
-  Stage C or masks, and did not authorize joint training or Stage E.
+- The user-authorized continuation has completed in
+  `output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/`.
+  The run exited 0 after 24 minutes 29 seconds, produced exactly 4,500
+  telemetry rows for global 15,501--20,000 / T-local 501--5,000, kept
+  `training_phase = internal_object_townership_t_only`, updated only T once
+  per step, kept D/R optimizer updates at zero, kept T count at 4,096, recorded
+  no topology/densification/pruning changes, and wrote checkpoints
+  16,000--20,000 every 500 steps. Final recorded loss total is approximately
+  0.055259835.
+- Dedicated posthoc review tooling has been added for this completed
+  continuation. `tools/materialize_stage_d_internal_object_townership_to_20000.py`
+  refuses an existing `posthoc_review/`, loads the real 15,500 source
+  checkpoint and real 16,000--20,000 continuation checkpoints, renders fixed-nine
+  review products under `posthoc_review/`, writes per-view float metrics,
+  overview sheets, immutable before/after hashes, and records
+  `no_optimizer_execution=true`. It must not replay T initialization, rerun
+  transferred-D selection, rerun random fill, resume training, write new
+  training checkpoints, or mutate existing PLY/checkpoint/telemetry/source data.
+- `tools/audit_stage_d_internal_object_townership_to_20000.py` is the CPU-only
+  fail-closed audit for the materialized continuation. It checks exact telemetry
+  continuity, T-local continuity, D/R frozen parameter and optimizer hashes,
+  finite nonzero T change, T optimizer continuation, fixed T count, no topology
+  changes, checkpoint/PLY presence, source/pilot-audit/Stage-C/internal-object
+  identities, materializer immutability, fixed-nine review artifacts, overview
+  sheets, and trend/recommended-review-candidate summaries. Its PASS verdict is
+  only `D016_TO_20000_PASS_AWAITING_USER_REVIEW`; it does not select a final
+  checkpoint, accept Stage D, authorize joint training, or authorize Stage E.
+- Codex implemented and tested these posthoc review tools but did not run the
+  materializer or CPU audit on the real continuation output, did not continue
+  training, did not resume, did not run optimizer/backward, did not modify Stage
+  C or masks, and did not authorize joint training or Stage E.
