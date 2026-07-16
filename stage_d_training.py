@@ -3790,6 +3790,10 @@ def training_stage_d(
                 _render_formal_review_node(
                     scene, state, pipe, background, release, iteration,
                     stems=CACHED_STEMS, static_cache=static_cache,
+                    internal_object_opt=opt,
+                    internal_object_float_schema=(
+                        "rtgs_stage_d_internal_object_tcolor_recovery_float_metrics_v1"
+                    ),
                 )
                 last_record["formal_review_node"] = True
             elif _tscale_recovery_mode(opt) and iteration in _required_nodes(opt):

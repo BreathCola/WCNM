@@ -1,3 +1,4 @@
+import ast
 import io
 import json
 from contextlib import redirect_stdout
@@ -25,10 +26,10 @@ from utils.stage_d_static_cache import state_sha256
 def _branch(count):
     return {
         "xyz": torch.ones(count, 3),
-        "opacity": torch.ones(count, 1),
-        "scaling": torch.ones(count, 2),
+        "opacity_raw": torch.ones(count, 1),
+        "scaling_2d": torch.ones(count, 2),
         "rotation": torch.ones(count, 4),
-        "color": torch.zeros(count, 3),
+        "color_raw": torch.zeros(count, 3),
         "optimizer": {"state": {0: {"step": torch.tensor(1)}}},
     }
 
@@ -84,7 +85,7 @@ def _checkpoint_for_audit(node, *, color_value=0.0):
     checkpoint["global_iteration"] = node
     checkpoint["reflection_iteration"] = 12000
     checkpoint["transmittance_iteration"] = node - 15000
-    checkpoint["transmittance"]["color"] = torch.full((4096, 3), color_value)
+    checkpoint["transmittance"]["color_raw"] = torch.full((4096, 3), color_value)
     return checkpoint
 
 
@@ -380,3 +381,35 @@ def test_color_recovery_training_gate_phase_and_topology():
         internal_object_color_recovery=True,
     ) == "internal_object_tcolor_recovery"
     assert _transmittance_topology_update_allowed(opt, 1501) is False
+
+
+def test_color_recovery_review_nodes_write_internal_object_products():
+    tree = ast.parse(Path("stage_d_training.py").read_text(encoding="utf-8"))
+    matching_calls = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.If):
+            continue
+        test_source = ast.unparse(node.test)
+        if (
+            "stage_d_internal_object_color_recovery" not in test_source
+            or "INTERNAL_OBJECT_COLOR_RECOVERY_NODES" not in test_source
+        ):
+            continue
+        for statement in node.body:
+            for child in ast.walk(statement):
+                if (
+                    isinstance(child, ast.Call)
+                    and getattr(child.func, "id", None) == "_render_formal_review_node"
+                ):
+                    matching_calls.append({
+                        keyword.arg: keyword.value for keyword in child.keywords
+                    })
+
+    assert matching_calls
+    for keywords in matching_calls:
+        assert "internal_object_opt" in keywords
+        assert "internal_object_float_schema" in keywords
+        assert (
+            ast.literal_eval(keywords["internal_object_float_schema"])
+            == "rtgs_stage_d_internal_object_tcolor_recovery_float_metrics_v1"
+        )

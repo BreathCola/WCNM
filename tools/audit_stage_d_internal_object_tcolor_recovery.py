@@ -49,6 +49,13 @@ OUTPUT = ROOT / "output" / INTERNAL_OBJECT_COLOR_RECOVERY_OUTPUT_NAME
 EXPECTED_INTERNAL_AGGREGATE = (
     "c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052"
 )
+T_FROZEN_PARAMETER_KEYS = {
+    "xyz": "xyz",
+    "opacity": "opacity_raw",
+    "scaling": "scaling_2d",
+    "rotation": "rotation",
+}
+T_APPEARANCE_PARAMETER_KEY = "color_raw"
 REQUIRED_DEBUG = {
     "ground_truth.png",
     "final.png",
@@ -274,13 +281,17 @@ def _audit(args: argparse.Namespace) -> tuple[dict, str]:
         for branch in ("diffuse", "reflection"):
             if state_sha256(source[branch]) != state_sha256(final[branch]):
                 errors.append(f"{branch} changed between 16500 and 17000")
-        for key in ("xyz", "opacity", "scaling", "rotation"):
+        for label, key in T_FROZEN_PARAMETER_KEYS.items():
             if not torch.equal(source["transmittance"][key], final["transmittance"][key]):
-                errors.append(f"T {key} changed between 16500 and 17000")
-        if torch.equal(source["transmittance"]["color"], final["transmittance"]["color"]):
+                errors.append(f"T {label} changed between 16500 and 17000")
+        if torch.equal(
+            source["transmittance"][T_APPEARANCE_PARAMETER_KEY],
+            final["transmittance"][T_APPEARANCE_PARAMETER_KEY],
+        ):
             errors.append("T color did not change")
         color_delta = torch.abs(
-            final["transmittance"]["color"] - source["transmittance"]["color"]
+            final["transmittance"][T_APPEARANCE_PARAMETER_KEY]
+            - source["transmittance"][T_APPEARANCE_PARAMETER_KEY]
         )
         if not torch.isfinite(color_delta).all():
             errors.append("T color delta contains NaN/Inf")
