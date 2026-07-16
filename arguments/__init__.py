@@ -180,6 +180,7 @@ class OptimizationParams(ParamGroup):
         self.stage_d_internal_object_pilot = False
         self.stage_d_internal_object_to_20000 = False
         self.stage_d_internal_object_color_recovery = False
+        self.stage_d_internal_object_gated_joint = False
         self.stage_d_phase_a_end_iteration = 18_000
         self.stage_d_cache_parity_atol = 2e-5
         self.stage_d_cache_parity_mean_atol = 2e-6
