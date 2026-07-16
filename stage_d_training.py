@@ -152,7 +152,7 @@ INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS = (
     "xyz", "opacity", "scaling", "rotation",
 )
 INTERNAL_OBJECT_GATED_JOINT_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v1"
+    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v2"
 )
 INTERNAL_OBJECT_GATED_JOINT_SOURCE_SHA256 = (
     INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256
@@ -1040,7 +1040,7 @@ def _validate_semantic_repair_contract(
         "lambda_spec": float(opt.lambda_spec) == 0.2,
         "specular_k0": float(opt.specular_k0) == 0.9,
         "resolution": int(dataset.resolution) == 8,
-        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
+        "ray_chunk": int(dataset.ray_chunk_size) == 512,
         "t_init": (
             dataset.transmittance_init_mode == "random_bbox"
             and int(dataset.transmittance_init_count) == 4096
@@ -2086,7 +2086,7 @@ def _filter_transferred_candidates_by_internal_object_masks(
 def _render_formal_review_node(
     scene, state, pipe, background, release, iteration,
     stems=FORMAL_STEMS, static_cache=None, internal_object_opt=None,
-    internal_object_float_schema=None,
+    internal_object_float_schema=None, ray_chunk_size=512,
 ):
     cameras = {
         Path(str(camera.image_name)).stem: camera
@@ -2099,9 +2099,11 @@ def _render_formal_review_node(
     prior_checkpoint_mode = state.ray_checkpoint_chunks
     prior_chunk_size = state.ray_chunk_size
     state.ray_checkpoint_chunks = False
-    state.ray_chunk_size = 512
+    state.ray_chunk_size = int(ray_chunk_size)
     try:
         for stem in stems:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
             camera = cameras[stem]
             if static_cache is not None:
                 static_inputs = static_cache.load(stem)
@@ -2134,6 +2136,8 @@ def _render_formal_review_node(
             del debug
             if static_cache is not None:
                 del static_inputs
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         if state.semantic_repair:
             make_semantic_repair_contact_sheet(iteration_directory, stems)
         else:
@@ -3668,6 +3672,7 @@ def training_stage_d(
                 if _internal_object_gated_joint_mode(opt)
                 else "rtgs_stage_d_internal_object_tcolor_recovery_float_metrics_v1"
             ),
+            ray_chunk_size=64 if _internal_object_gated_joint_mode(opt) else 512,
         )
         if _tscale_recovery_mode(opt):
             node_telemetry = {
@@ -4137,6 +4142,7 @@ def training_stage_d(
                     internal_object_float_schema=(
                         "rtgs_stage_d_internal_object_gated_joint_float_metrics_v1"
                     ),
+                    ray_chunk_size=64,
                 )
                 last_record["formal_review_node"] = True
             elif _tscale_recovery_mode(opt) and iteration in _required_nodes(opt):

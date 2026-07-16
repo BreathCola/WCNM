@@ -338,7 +338,7 @@ def main() -> int:
     parser.add_argument("--object-alpha-floor", type=float, default=0.35)
     parser.add_argument("--lambda-object-negative", type=float, default=0.05)
     parser.add_argument("--lambda-object-cin-color", type=float, default=0.05)
-    parser.add_argument("--ray-chunk-size", type=int, default=2048)
+    parser.add_argument("--ray-chunk-size", type=int, default=512)
     args = parser.parse_args()
     plan = build_plan(args)
     print(json.dumps(plan, indent=2, sort_keys=True))
