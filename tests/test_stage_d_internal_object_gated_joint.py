@@ -157,6 +157,7 @@ def test_gated_joint_plan_only_does_not_execute(monkeypatch, tmp_path):
     assert "--stage_d_internal_object_color_recovery" not in plan["command"]
     assert plan["renderer"]["transparent_direct_mode"] == "interface_only"
     assert plan["renderer"]["transparent_reflection_mode"] == "support_safe_outside"
+    assert plan["command"][plan["command"].index("--ray_chunk_size") + 1] == "2048"
     assert plan["parameter_group_contract"]["trainable"]["transmittance"] == [
         "color", "opacity",
     ]

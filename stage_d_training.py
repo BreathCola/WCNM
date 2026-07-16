@@ -152,7 +152,7 @@ INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS = (
     "xyz", "opacity", "scaling", "rotation",
 )
 INTERNAL_OBJECT_GATED_JOINT_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v4"
+    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v5"
 )
 INTERNAL_OBJECT_GATED_JOINT_SOURCE_SHA256 = (
     INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256
@@ -1373,7 +1373,7 @@ def _validate_internal_object_gated_joint_contract(
         == INTERNAL_OBJECT_GATED_JOINT_ENDPOINT,
         "depth_disabled": int(opt.stage_d_depth_start_iteration) == 40000,
         "resolution": int(dataset.resolution) == 8,
-        "ray_chunk": int(dataset.ray_chunk_size) == 512,
+        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
         "output": Path(dataset.model_path).name
         == INTERNAL_OBJECT_GATED_JOINT_OUTPUT_NAME,
         "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations)))
