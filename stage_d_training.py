@@ -152,7 +152,7 @@ INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS = (
     "xyz", "opacity", "scaling", "rotation",
 )
 INTERNAL_OBJECT_GATED_JOINT_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v3"
+    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v4"
 )
 INTERNAL_OBJECT_GATED_JOINT_SOURCE_SHA256 = (
     INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256
@@ -2083,6 +2083,7 @@ def _filter_transferred_candidates_by_internal_object_masks(
     return filtered, metadata
 
 
+@torch.no_grad()
 def _render_formal_review_node(
     scene, state, pipe, background, release, iteration,
     stems=FORMAL_STEMS, static_cache=None, internal_object_opt=None,

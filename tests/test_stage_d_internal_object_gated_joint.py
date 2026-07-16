@@ -1,4 +1,5 @@
 import io
+import inspect
 import json
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -9,6 +10,7 @@ import torch
 
 import tools.audit_stage_d_internal_object_gated_joint as audit
 import tools.run_stage_d_internal_object_gated_joint as operator
+import stage_d_training
 from stage_d_training import (
     FORMAL_RELEASE_SHA256,
     FORMAL_SOURCE_SHA256,
@@ -158,6 +160,11 @@ def test_gated_joint_plan_only_does_not_execute(monkeypatch, tmp_path):
     assert plan["parameter_group_contract"]["trainable"]["transmittance"] == [
         "color", "opacity",
     ]
+
+
+def test_formal_review_node_is_no_grad_for_gated_joint_memory_contract():
+    source = inspect.getsource(stage_d_training._render_formal_review_node)
+    assert "@torch.no_grad()" in source
 
 
 def test_gated_joint_optimizer_contract_freezes_geometry_and_exposure():
