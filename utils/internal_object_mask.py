@@ -849,6 +849,77 @@ def object_occupancy_loss(
     return {"total": total, "positive": positive, "negative": negative}
 
 
+def object_cin_color_loss(
+    inside_color: torch.Tensor,
+    inside_alpha: torch.Tensor,
+    outside_color: torch.Tensor,
+    target_rgb: torch.Tensor,
+    domains: dict[str, torch.Tensor],
+    masks: dict[str, torch.Tensor],
+    *,
+    inside_contribution: torch.Tensor | None = None,
+    cout_contribution: torch.Tensor | None = None,
+    final_t_off: torch.Tensor | None = None,
+    erode_px: int = 3,
+    lambda_color: float = 0.0,
+    threshold: float = HARD_THRESHOLD,
+) -> dict[str, torch.Tensor]:
+    cin = inside_color
+    if cin.ndim != 3 or cin.shape[-1] != 3:
+        raise ValueError("inside_color must be HWC RGB")
+    ain = _as_hwc1(inside_alpha, "inside_alpha").to(device=cin.device, dtype=cin.dtype)
+    cout = outside_color.to(device=cin.device, dtype=cin.dtype)
+    gt = target_rgb.to(device=cin.device, dtype=cin.dtype)
+    if cout.shape != cin.shape or gt.shape != cin.shape:
+        raise ValueError("Cin, Cout, and target RGB shapes must match")
+    ignore = _as_hwc1(domains["Mignore"], "Mignore").to(cin.device) > 0.5
+    valid_domain = _as_hwc1(domains["domain"], "domain").to(cin.device) > 0.5
+    if inside_contribution is not None:
+        if cout_contribution is None or final_t_off is None:
+            raise ValueError("inside_contribution target requires cout_contribution and final_t_off")
+        prediction = inside_contribution.to(device=cin.device, dtype=cin.dtype)
+        cout_term = cout_contribution.to(device=cin.device, dtype=cin.dtype)
+        base = final_t_off.to(device=cin.device, dtype=cin.dtype)
+        if prediction.shape != cin.shape or cout_term.shape != cin.shape or base.shape != cin.shape:
+            raise ValueError("inside/Cout contribution and final_t_off shapes must match Cin")
+        target = (gt - base.detach() - cout_term.detach()).clamp(0.0, 1.0)
+        target_mode = "inside_contribution_from_final_composition"
+    else:
+        prediction = cin
+        target = (gt - (1.0 - ain.detach()) * cout.detach()).clamp(0.0, 1.0)
+        target_mode = "raw_cin_minus_detached_cout"
+
+    def role_loss(role: str) -> tuple[torch.Tensor, torch.Tensor]:
+        raw = _as_hwc1(masks[role], role).to(device=cin.device, dtype=cin.dtype)
+        eroded = _morph((raw >= threshold).float(), int(erode_px), "erode") > 0.5
+        domain = eroded & valid_domain & ~ignore
+        denom = domain.sum().clamp_min(1.0).to(cin.dtype)
+        diff = torch.abs(prediction - target)
+        value = (diff * domain.to(cin.dtype).expand_as(diff)).sum() / (denom * 3.0)
+        return value, domain
+
+    bird, bird_domain = role_loss("bird")
+    internal_base, base_domain = role_loss("internal_base")
+    union_domain = (bird_domain | base_domain).to(cin.dtype)
+    denom = union_domain.sum().clamp_min(1.0).to(cin.dtype)
+    diff = torch.abs(prediction - target)
+    union = (diff * union_domain.expand_as(diff)).sum() / (denom * 3.0)
+    total = float(lambda_color) * union
+    if not torch.isfinite(total):
+        raise FloatingPointError("internal-object Cin color loss is NaN/Inf")
+    return {
+        "total": total,
+        "union": union,
+        "bird": bird,
+        "internal_base": internal_base,
+        "target": target.detach(),
+        "target_mode": target_mode,
+        "bird_pixels": bird_domain.sum().to(cin.dtype),
+        "internal_base_pixels": base_domain.sum().to(cin.dtype),
+        "union_pixels": union_domain.sum().to(cin.dtype),
+    }
+
+
 def object_domain_metrics(
     package: dict[str, torch.Tensor],
     domains: dict[str, torch.Tensor],

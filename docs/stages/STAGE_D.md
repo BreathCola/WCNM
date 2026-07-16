@@ -700,3 +700,95 @@ D016_TO_20000_BLOCKED
 
 Even PASS does not authorize joint D/R/T training, Stage D acceptance, final
 semantic claims, or Stage E.
+
+### D-016g T-color recovery pilot
+
+The D-016 T-color recovery pilot is a bounded diagnostic for final-render black
+holes and dark blocks after internal-object ownership. It is not an Ain
+ownership continuation and not D/R/T joint training.
+
+Source checkpoint:
+
+```text
+output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/chkpnt16500.pth
+```
+
+Source SHA-256:
+
+```text
+9f1242fb4d1e4953d7ba3103a682a4c70d0f8da5db8a9d4c9446c02d055bd750
+```
+
+Checkpoint 16,500 is selected because the completed to-20,000 CPU audit
+recommended `best_rgb=16500` and `best_leakage_tradeoff=16500`. Checkpoint
+20,000 is only the best object-ownership reference and must not replace 16,500
+automatically.
+
+The operator is:
+
+```text
+tools/run_stage_d_internal_object_tcolor_recovery.py
+```
+
+It defaults to plan-only. Training may start only with explicit `--execute`.
+The output is:
+
+```text
+output/stage_d_tihubird_c03r8_internal_object_color_recovery_16500_17000_v1/
+```
+
+The output must be new; any existing output is fail-closed.
+
+Training contract:
+
+- global 16,501--17,000 only, exactly 500 updates;
+- review/checkpoint/PLY/debug nodes 16,500, 16,600, 16,750, and 17,000;
+- complete restore from the 16,500 Stage-D checkpoint;
+- no T reinitialization, transferred-D reselection, random fill, densification,
+  pruning, or topology change;
+- T count remains 4,096;
+- D/R parameters and optimizer state remain frozen;
+- T position, scale, rotation, and opacity remain frozen;
+- only the T `color` optimizer group is trainable;
+- missing/semi-merged T appearance and opacity groups must block with
+  `BLOCKED_BY_PARAMETER_GROUP_CONTRACT`.
+
+Loss and renderer contract:
+
+- full-frame RGB loss remains active;
+- formal reviewed-v3 internal-object masks remain the only object masks;
+- Mneg alpha suppression remains active;
+- positive Ain push is set to zero for this pilot;
+- Mignore participates in neither positive/negative alpha nor Cin supervision;
+- the Cin color term supervises T inside contribution on eroded bird and
+  internal_base domains with target
+  `clamp(gt_rgb - detach(final_t_off) - detach(cout_contribution), 0, 1)`;
+- transparent direct and transparent reflection remain off;
+- D/R must not participate in the transparent region;
+- Cout remains active and the ray domain is unchanged.
+
+Each review node must include final RGB, ground truth, Cin, Ain, Cout,
+`final_t_off`, RGB difference, bird/internal_base/internal_object masks,
+Mpos/Mignore/Mneg visualization, fixed-nine contact sheet, and float metrics.
+
+The CPU-only audit is:
+
+```text
+tools/audit_stage_d_internal_object_tcolor_recovery.py
+```
+
+It checks telemetry continuity, no 17,001+ iterations, D/R frozen hashes,
+T geometry/opacity hashes, finite T color changes, T count, no topology,
+review products, formal internal-object release identity, Stage-C identity,
+and source checkpoint identity.
+
+Allowed audit verdicts are:
+
+```text
+D016_COLOR_RECOVERY_PASS_AWAITING_USER_REVIEW
+D016_COLOR_RECOVERY_HOLD
+D016_COLOR_RECOVERY_BLOCKED
+```
+
+PASS means engineering evidence is complete and still awaits visual review. It
+does not accept Stage D, authorize D/R/T joint training, or authorize Stage E.

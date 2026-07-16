@@ -3813,3 +3813,46 @@ per-frame metrics, source tree hashes, and code identity. It is not a formal
 mask release and cannot be loaded as training supervision. This work did not
 train, did not create reviewed_v2, did not modify reviewed_v1, and did not touch
 Stage C/D mesh, cache, checkpoint, or output state.
+
+## D-016g T-color recovery pilot infrastructure
+
+Date: 2026-07-16
+
+Question: How should the TiHuBird D-016 black-hole/dark-block issue be tested
+after T-ownership improved but final RGB still looked poor?
+
+Chosen implementation: Add a bounded, default-off D-016 T-color recovery pilot
+rather than jumping directly to D/R/T joint training. The source is fixed to
+`output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/chkpnt16500.pth`
+with SHA-256
+`9f1242fb4d1e4953d7ba3103a682a4c70d0f8da5db8a9d4c9446c02d055bd750`.
+Checkpoint 16,500 is selected because the completed to-20,000 CPU audit
+recommended `best_rgb=16500` and `best_leakage_tradeoff=16500`; 20,000 remains
+only the best object-ownership reference and is not automatically substituted.
+
+The pilot runs only global 16,501--17,000, 500 updates, with review nodes
+16,500, 16,600, 16,750, and 17,000. D and R are frozen. T topology, position,
+scale, rotation, and opacity are frozen. The only trainable T optimizer group
+is `color`; if the T optimizer ever lacks a separable `color` group, the
+operator must fail with `BLOCKED_BY_PARAMETER_GROUP_CONTRACT`.
+
+The loss keeps full-frame RGB and formal reviewed-v3 internal-object masks,
+keeps Mneg alpha suppression, sets positive Ain push to zero, and adds
+internal-object Cin color supervision. The color target is defined from the
+existing final composition as an inside-contribution target:
+`clamp(gt_rgb - detach(final_t_off) - detach(cout_contribution), 0, 1)`.
+This avoids copying raw RGB into Cin and avoids double-counting Cout or frozen
+non-T contributions. Mignore is excluded from both alpha and Cin supervision.
+
+Alternatives rejected: Continue pushing Ain/object ownership from 20,000;
+resume the endpoint only because it has the best ownership metric; unfreeze D/R
+immediately; or implement full joint D/R/T. Those paths would test a different
+hypothesis and would exceed the current authorization boundary.
+
+Impact: `tools/run_stage_d_internal_object_tcolor_recovery.py` is the
+plan-only/default-off operator and
+`tools/audit_stage_d_internal_object_tcolor_recovery.py` is the CPU-only
+post-run audit. This change does not run training, does not create the color
+recovery output, does not modify Stage C or formal masks, and does not
+authorize Stage E. If color recovery still leaves black holes, the next step is
+only to separately plan a gated partial D/R/T joint pilot.

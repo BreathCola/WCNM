@@ -9,6 +9,22 @@ human review only. It does not run training, does not create formal
 `reviewed_v2`, does not modify `specular_masks_reviewed_v1`, and does not touch
 Stage B/C/D checkpoints, mesh, caches, or training outputs.
 
+Current TiHuBird Stage-D implementation update: D-016g T-color recovery pilot
+infrastructure is implemented as plan-only/default-off code. It targets the
+visual best 16,500 checkpoint from the completed D-016 15,500--20,000
+continuation:
+`output/stage_d_tihubird_c03r8_internal_object_townership_15500_20000_v1/chkpnt16500.pth`
+with SHA-256
+`9f1242fb4d1e4953d7ba3103a682a4c70d0f8da5db8a9d4c9446c02d055bd750`.
+The operator is `tools/run_stage_d_internal_object_tcolor_recovery.py`; it
+defaults to plan-only and requires explicit `--execute` for training. The
+planned output is
+`output/stage_d_tihubird_c03r8_internal_object_color_recovery_16500_17000_v1/`
+and must not pre-exist. This infrastructure work did not run training, did not
+update an optimizer, did not create the output, did not create checkpoint/PLY,
+did not modify Stage C, did not rerun mask propagation, and did not authorize
+Stage E or D/R/T joint training.
+
 The full v2 proposal artifact is
 `output/stage_b_tihubird_glass_mask_full_review_v2_proposal/`. It contains
 111/111 source-resolution candidate PNGs and 111/111 source-resolution review

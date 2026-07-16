@@ -18,6 +18,7 @@ from utils.internal_object_mask import (
     canonical_payload_sha256,
     clip_mask_to_glass,
     load_resized_internal_object_masks,
+    object_cin_color_loss,
     object_domain_metrics,
     object_occupancy_domains,
     object_occupancy_loss,
@@ -415,6 +416,45 @@ def test_object_metrics_keep_cout_in_negative_region():
     }
     metrics = object_domain_metrics(package, domains)
     assert metrics["cout_energy_mneg"] == 1.0
+
+
+def test_object_cin_color_loss_uses_composition_target_and_detaches_alpha_cout():
+    cin = torch.zeros((2, 2, 3), requires_grad=True)
+    ain = torch.full((2, 2, 1), 0.25, requires_grad=True)
+    cout = torch.full((2, 2, 3), 0.2, requires_grad=True)
+    inside_contribution = torch.zeros((2, 2, 3), requires_grad=True)
+    cout_contribution = torch.full((2, 2, 3), 0.2, requires_grad=True)
+    final_t_off = torch.full((2, 2, 3), 0.1, requires_grad=True)
+    gt = torch.full((2, 2, 3), 0.6)
+    domains = {
+        "domain": torch.ones((2, 2, 1)),
+        "Mignore": torch.zeros((2, 2, 1)),
+    }
+    masks = {
+        "bird": torch.tensor([[[1.0], [0.0]], [[0.0], [0.0]]]),
+        "internal_base": torch.tensor([[[0.0], [0.0]], [[1.0], [0.0]]]),
+        "internal_object_union": torch.tensor([[[1.0], [0.0]], [[1.0], [0.0]]]),
+    }
+
+    loss = object_cin_color_loss(
+        cin, ain, cout, gt, domains, masks,
+        inside_contribution=inside_contribution,
+        cout_contribution=cout_contribution,
+        final_t_off=final_t_off,
+        erode_px=0, lambda_color=0.5,
+    )
+
+    expected_target = 0.6 - 0.1 - 0.2
+    assert float(loss["union"].detach()) == pytest.approx(expected_target)
+    assert float(loss["total"].detach()) == pytest.approx(0.5 * expected_target)
+    loss["total"].backward()
+    assert inside_contribution.grad is not None
+    assert inside_contribution.grad.abs().sum() > 0
+    assert cin.grad is None
+    assert ain.grad is None
+    assert cout.grad is None
+    assert cout_contribution.grad is None
+    assert final_t_off.grad is None
 
 
 def test_object_metrics_include_float_split_regions():

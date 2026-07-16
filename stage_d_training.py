@@ -18,6 +18,7 @@ import torch.nn.functional as F
 from torch.autograd.profiler import record_function
 from plyfile import PlyData
 from tqdm import tqdm
+from torchvision.utils import save_image
 
 from gaussian_renderer.transmittance_renderer import (
     StageDRenderState, build_static_dr_inputs, render, render_from_static_dr,
@@ -45,6 +46,7 @@ from utils.internal_object_mask import (
     INTERNAL_OBJECT_SEMANTICS_VERSION,
     REVIEWED_ROLE,
     object_domain_metrics,
+    object_cin_color_loss,
     object_occupancy_domains,
     object_occupancy_loss,
     validate_internal_object_mask_set,
@@ -136,12 +138,26 @@ INTERNAL_OBJECT_TO_20000_SOURCE_SHA256 = (
 )
 INTERNAL_OBJECT_TO_20000_NODES = tuple(range(16000, 20001, 500))
 INTERNAL_OBJECT_TO_20000_ENDPOINT = 20000
+INTERNAL_OBJECT_COLOR_RECOVERY_OUTPUT_NAME = (
+    "stage_d_tihubird_c03r8_internal_object_color_recovery_16500_17000_v1"
+)
+INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256 = (
+    "9f1242fb4d1e4953d7ba3103a682a4c70d0f8da5db8a9d4c9446c02d055bd750"
+)
+INTERNAL_OBJECT_COLOR_RECOVERY_NODES = (16500, 16600, 16750, 17000)
+INTERNAL_OBJECT_COLOR_RECOVERY_TRAINING_NODES = (16600, 16750, 17000)
+INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT = 17000
+INTERNAL_OBJECT_COLOR_RECOVERY_TRAINABLE_T_GROUPS = ("color",)
+INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS = (
+    "xyz", "opacity", "scaling", "rotation",
+)
 
 
 def _internal_object_mode(opt):
     return bool(
         getattr(opt, "stage_d_internal_object_pilot", False)
         or getattr(opt, "stage_d_internal_object_to_20000", False)
+        or getattr(opt, "stage_d_internal_object_color_recovery", False)
     )
 
 
@@ -181,6 +197,8 @@ def _required_nodes(opt):
         return OWNERSHIP_T_LONG_NODES
     if opt.stage_d_ownership_pilot:
         return OWNERSHIP_NODES
+    if getattr(opt, "stage_d_internal_object_color_recovery", False):
+        return INTERNAL_OBJECT_COLOR_RECOVERY_NODES
     if getattr(opt, "stage_d_internal_object_to_20000", False):
         return INTERNAL_OBJECT_TO_20000_NODES
     if getattr(opt, "stage_d_internal_object_pilot", False):
@@ -195,6 +213,8 @@ def _telemetry_schema(opt):
         return "rtgs_stage_d_ownership_t_long_telemetry_v1"
     if opt.stage_d_ownership_pilot:
         return "rtgs_stage_d_cuboid_path_ownership_telemetry_v4"
+    if getattr(opt, "stage_d_internal_object_color_recovery", False):
+        return "rtgs_stage_d_internal_object_tcolor_recovery_telemetry_v1"
     if _internal_object_mode(opt):
         return "rtgs_stage_d_internal_object_townership_telemetry_v1"
     if opt.stage_d_semantic_repair_pilot:
@@ -257,6 +277,19 @@ def _config(dataset, opt, release, source):
     )
     recovery_updates = 50 if recovery_preflight else 3950
     internal_to_20000 = bool(getattr(opt, "stage_d_internal_object_to_20000", False))
+    internal_color_recovery = bool(
+        getattr(opt, "stage_d_internal_object_color_recovery", False)
+    )
+    internal_endpoint = (
+        INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT if internal_color_recovery else (
+        INTERNAL_OBJECT_TO_20000_ENDPOINT if internal_to_20000 else INTERNAL_OBJECT_ENDPOINT)
+    )
+    internal_start = 16501 if internal_color_recovery else (
+        15501 if internal_to_20000 else 15001
+    )
+    internal_updates = 500 if internal_color_recovery else (
+        4500 if internal_to_20000 else 500
+    )
     return {
         "stage": "stage_d", "model_type": "surfel",
         "experiment": dataset.experiment, "resolution": int(dataset.resolution),
@@ -284,6 +317,11 @@ def _config(dataset, opt, release, source):
         "stage_d_ownership_t_long": bool(opt.stage_d_ownership_t_long),
         "stage_d_tscale_recovery_preflight": recovery_preflight,
         "stage_d_tscale_recovery_long": recovery_long,
+        "stage_d_internal_object_pilot": bool(
+            getattr(opt, "stage_d_internal_object_pilot", False)
+        ),
+        "stage_d_internal_object_to_20000": internal_to_20000,
+        "stage_d_internal_object_color_recovery": internal_color_recovery,
         "transparent_path_mode": str(dataset.transparent_path_mode),
         "transparent_direct_mode": str(dataset.transparent_direct_mode),
         "transparent_reflection_mode": str(dataset.transparent_reflection_mode),
@@ -292,12 +330,13 @@ def _config(dataset, opt, release, source):
             {
                 "phase_a_global": [
                     recovery_start if recovery else (
-                        15501 if opt.stage_d_ownership_t_long else 15001
+                        internal_start if _internal_object_mode(opt) else (
+                        15501 if opt.stage_d_ownership_t_long else 15001)
                     ),
                     recovery_endpoint if recovery else (
                         OWNERSHIP_T_LONG_ENDPOINT if opt.stage_d_ownership_t_long else (
                     OWNERSHIP_ENDPOINT if opt.stage_d_ownership_pilot else (
-                    INTERNAL_OBJECT_ENDPOINT if getattr(opt, "stage_d_internal_object_pilot", False) else (
+                    internal_endpoint if _internal_object_mode(opt) else (
                     SEMANTIC_ENDPOINT if opt.stage_d_semantic_repair_pilot
                     else CACHED_PHASE_A_END
                     ))))
@@ -307,11 +346,10 @@ def _config(dataset, opt, release, source):
                     "transmittance": (
                         recovery_updates if recovery else (
                         4500 if opt.stage_d_ownership_t_long else (
-                        4500 if internal_to_20000 else (
+                        internal_updates if _internal_object_mode(opt) else (
                         500 if opt.stage_d_ownership_pilot else (
-                        500 if getattr(opt, "stage_d_internal_object_pilot", False) else (
                         1000 if opt.stage_d_semantic_repair_pilot else 3000)
-                    ))))),
+                    )))),
                 },
                 "phase_b_global": (
                     None if (
@@ -417,17 +455,75 @@ def _config(dataset, opt, release, source):
                     "dilate_px": int(getattr(opt, "object_mask_dilate_px", 3)),
                     "lambda_positive": float(getattr(opt, "lambda_object_positive", 0.0)),
                     "lambda_negative": float(getattr(opt, "lambda_object_negative", 0.0)),
-                    "supervised_field": "Ain_only",
-                    "cin_rgb_supervision": False,
+                    "supervised_field": (
+                        "Ain_Mneg_plus_Cin_color"
+                        if internal_color_recovery else "Ain_only"
+                    ),
+                    "cin_rgb_supervision": internal_color_recovery,
+                    "lambda_cin_color": float(
+                        getattr(opt, "lambda_object_cin_color", 0.0)
+                    ),
+                    "cin_target": (
+                        "inside_contribution target = clamp(gt_rgb - detach(final_t_off) - detach(cout_contribution), 0, 1)"
+                        if internal_color_recovery else None
+                    ),
                 },
                 "ray_domain": "unchanged_mask_hard_and_valid_two_hit",
                 "full_frame_rgb_loss": True,
                 "cout_retained": True,
                 "novel_view_requires_object_mask": False,
-                "pilot_global": [15001, INTERNAL_OBJECT_ENDPOINT],
+                "pilot_global": [internal_start, internal_endpoint],
             }
             if _internal_object_mode(opt)
             else None
+        ),
+        "internal_object_color_recovery": (
+            {
+                "schema": "rtgs_stage_d_internal_object_tcolor_recovery_v1",
+                "source_checkpoint_sha256": getattr(
+                    dataset, "_stage_d_start_checkpoint_sha256", None,
+                ),
+                "source_selection_reason": {
+                    "best_rgb": 16500,
+                    "best_leakage_tradeoff": 16500,
+                    "best_object_ownership_reference": 20000,
+                    "endpoint_20000_is_not_auto_selected": True,
+                },
+                "global": [16501, INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT],
+                "t_local": [1501, 2000],
+                "updates": {
+                    "diffuse": 0,
+                    "reflection": 0,
+                    "transmittance_color": 500,
+                    "transmittance_geometry_or_opacity": 0,
+                },
+                "review_nodes": list(INTERNAL_OBJECT_COLOR_RECOVERY_NODES),
+                "checkpoint_nodes": list(INTERNAL_OBJECT_COLOR_RECOVERY_TRAINING_NODES),
+                "trainable_t_parameter_groups": list(
+                    INTERNAL_OBJECT_COLOR_RECOVERY_TRAINABLE_T_GROUPS
+                ),
+                "frozen_t_parameter_groups": list(
+                    INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS
+                ),
+                "frozen_parameter_tensors": [
+                    "_xyz", "_opacity", "_scaling", "_rotation",
+                ],
+                "appearance_parameter_tensors": ["_color"],
+                "t_reinitialization": False,
+                "transferred_d_selection_rerun": False,
+                "random_fill_rerun": False,
+                "optimizer_resume": True,
+                "static_cache_reused": True,
+                "depth_enabled": False,
+                "semantic_claim": False,
+                "transparent_direct_mode": dataset.transparent_direct_mode,
+                "transparent_reflection_mode": dataset.transparent_reflection_mode,
+                "cin_color_target": (
+                    "inside_contribution target = clamp(gt_rgb - detach(final_t_off) - detach(cout_contribution), 0, 1)"
+                ),
+                "mignore_supervision": False,
+            }
+            if internal_color_recovery else None
         ),
         "internal_object_to_20000": (
             {
@@ -571,14 +667,17 @@ def _validate_args(dataset, opt, start_checkpoint):
         getattr(opt, "stage_d_tscale_recovery_long", False),
         getattr(opt, "stage_d_internal_object_pilot", False),
         getattr(opt, "stage_d_internal_object_to_20000", False),
+        getattr(opt, "stage_d_internal_object_color_recovery", False),
     ))
     if modes > 1:
         raise ValueError("Stage D cached/semantic/ownership modes are mutually exclusive")
     object_enabled = (
         bool(getattr(opt, "stage_d_internal_object_pilot", False))
         or bool(getattr(opt, "stage_d_internal_object_to_20000", False))
+        or bool(getattr(opt, "stage_d_internal_object_color_recovery", False))
         or float(getattr(opt, "lambda_object_positive", 0.0)) > 0.0
         or float(getattr(opt, "lambda_object_negative", 0.0)) > 0.0
+        or float(getattr(opt, "lambda_object_cin_color", 0.0)) > 0.0
     )
     if object_enabled:
         if not getattr(dataset, "internal_object_masks", ""):
@@ -599,6 +698,8 @@ def _validate_args(dataset, opt, start_checkpoint):
         expected_phase_end = OWNERSHIP_T_LONG_ENDPOINT
     elif getattr(opt, "stage_d_internal_object_to_20000", False):
         expected_phase_end = INTERNAL_OBJECT_TO_20000_ENDPOINT
+    elif getattr(opt, "stage_d_internal_object_color_recovery", False):
+        expected_phase_end = INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT
     elif opt.stage_d_ownership_pilot:
         expected_phase_end = OWNERSHIP_ENDPOINT
     elif getattr(opt, "stage_d_internal_object_pilot", False):
@@ -680,6 +781,28 @@ def _validate_args(dataset, opt, start_checkpoint):
         if failures:
             raise ValueError(
                 "D-016 internal-object to-20000 configuration mismatch: "
+                + ", ".join(failures)
+            )
+    if getattr(opt, "stage_d_internal_object_color_recovery", False):
+        required = {
+            "path": dataset.transparent_path_mode == "cuboid_front_v1",
+            "direct": dataset.transparent_direct_mode == "off",
+            "reflection": dataset.transparent_reflection_mode == "off",
+            "cout": dataset.cout_ownership_mode == "support_safe_outside",
+            "init_identity": dataset.transmittance_init_mode == "transferred_d_inside",
+            "reuse_cache": bool(opt.stage_d_reuse_static_cache),
+            "depth": int(opt.stage_d_depth_start_iteration) == 40000,
+            "positive_alpha_push_disabled": float(
+                getattr(opt, "lambda_object_positive", 0.0)
+            ) == 0.0,
+            "cin_color_enabled": float(
+                getattr(opt, "lambda_object_cin_color", 0.0)
+            ) > 0.0,
+        }
+        failures = [name for name, passed in required.items() if not passed]
+        if failures:
+            raise ValueError(
+                "D-016 internal-object color-recovery configuration mismatch: "
                 + ", ".join(failures)
             )
 
@@ -1040,6 +1163,73 @@ def _validate_internal_object_to_20000_contract(
         )
 
 
+def _validate_internal_object_color_recovery_contract(
+    dataset, opt, release, source, fresh_from_stage_b, saved_config,
+    global_iteration, reflection_iteration, transmittance_iteration,
+    saving_iterations, checkpoint_iterations,
+):
+    if not getattr(opt, "stage_d_internal_object_color_recovery", False):
+        return
+    current_mask = getattr(dataset, "_validated_specular_mask_manifest", {})
+    internal = getattr(dataset, "_validated_internal_object_mask_manifest", {})
+    prior_internal = (saved_config or {}).get("internal_object_ownership", {})
+    prior_to_20000 = (saved_config or {}).get("internal_object_to_20000", {})
+    prior_cache = (saved_config or {}).get("cached_t_warmup", {})
+    expected_cache = Path(
+        "output/stage_d_tihubird_c03r8_internal_object_townership_pilot_v1/"
+        "static_dr_cache"
+    ).resolve()
+    required = {
+        "stage_d_resume": not fresh_from_stage_b,
+        "start_hash": getattr(dataset, "_stage_d_start_checkpoint_sha256", None)
+        == INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256,
+        "start_global": int(global_iteration) == 16500,
+        "start_r_local": int(reflection_iteration) == 12000,
+        "start_t_local": int(transmittance_iteration) == 1500,
+        "source_sha256": source.get("sha256") == FORMAL_SOURCE_SHA256,
+        "release_id": release.manifest.get("geometry_release_id") == FORMAL_RELEASE_ID,
+        "release_sha256": release.validation.get("aggregate_sha256") == FORMAL_RELEASE_SHA256,
+        "endpoint": int(opt.iterations) == INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT,
+        "phase_end": int(opt.stage_d_phase_a_end_iteration)
+        == INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT,
+        "depth_disabled": int(opt.stage_d_depth_start_iteration) == 40000,
+        "resolution": int(dataset.resolution) == 8,
+        "ray_chunk": int(dataset.ray_chunk_size) == 2048,
+        "output": Path(dataset.model_path).name
+        == INTERNAL_OBJECT_COLOR_RECOVERY_OUTPUT_NAME,
+        "cache": Path(dataset.stage_d_static_cache_path).resolve() == expected_cache,
+        "cache_reuse": bool(opt.stage_d_reuse_static_cache),
+        "checkpoint_nodes": tuple(sorted(set(checkpoint_iterations)))
+        == INTERNAL_OBJECT_COLOR_RECOVERY_NODES,
+        "ply_nodes": tuple(sorted(set(saving_iterations)))
+        == INTERNAL_OBJECT_COLOR_RECOVERY_NODES,
+        "path": dataset.transparent_path_mode == "cuboid_front_v1",
+        "direct_off": dataset.transparent_direct_mode == "off",
+        "reflection_off": dataset.transparent_reflection_mode == "off",
+        "cout_safe": dataset.cout_ownership_mode == "support_safe_outside",
+        "glass_mask": current_mask.get("role") == "stage_b_formal_reviewed_specular_soft_masks",
+        "internal_mask": internal.get("role") == REVIEWED_ROLE,
+        "internal_mask_hash": internal.get("aggregate_sha256")
+        == "c0e49503e5f5c30b1ab26b7cfd79332ac9c486f35656f1425c9cefea516d4052",
+        "prior_internal_schema": prior_internal.get("schema")
+        == "rtgs_stage_d_internal_object_townership_v1",
+        "prior_to_20000_schema": prior_to_20000.get("schema")
+        == "rtgs_stage_d_internal_object_townership_to_20000_v1",
+        "prior_cache_path": Path(prior_cache.get("cache_path", "")).resolve()
+        == expected_cache,
+        "t_count": int(dataset.transmittance_init_count) == 4096,
+        "positive_alpha_push_disabled": float(getattr(opt, "lambda_object_positive", 0.0)) == 0.0,
+        "negative_alpha_suppression_enabled": float(getattr(opt, "lambda_object_negative", 0.0)) > 0.0,
+        "cin_color_enabled": float(getattr(opt, "lambda_object_cin_color", 0.0)) > 0.0,
+    }
+    failures = [name for name, passed in required.items() if not passed]
+    if failures:
+        raise ValueError(
+            "D-016 internal-object color recovery contract mismatch: "
+            + ", ".join(failures)
+        )
+
+
 def _validate_tscale_recovery_contract(
     dataset, opt, release, source, fresh_from_stage_b, saved_config,
     global_iteration, reflection_iteration, transmittance_iteration,
@@ -1117,6 +1307,7 @@ def _validate_tscale_recovery_contract(
 def _phase_for_iteration(
     iteration, semantic_repair=False, ownership=False, ownership_t_long=False,
     tscale_recovery=False, internal_object=False,
+    internal_object_color_recovery=False,
 ):
     if tscale_recovery:
         return "cuboid_path_ownership_tscale_recovery"
@@ -1124,6 +1315,8 @@ def _phase_for_iteration(
         return "cuboid_path_ownership_t_long"
     if ownership:
         return "cuboid_path_ownership_t_only"
+    if internal_object_color_recovery:
+        return "internal_object_tcolor_recovery"
     if internal_object:
         return "internal_object_townership_t_only"
     if semantic_repair:
@@ -1252,6 +1445,50 @@ def _set_branch_trainable(model, enabled):
         value = getattr(model, name, None)
         if torch.is_tensor(value) and value.is_floating_point():
             value.requires_grad_(bool(enabled))
+
+
+def _configure_transmittance_color_recovery_optimizer(transmittance):
+    if transmittance.optimizer is None:
+        raise RuntimeError("BLOCKED_BY_PARAMETER_GROUP_CONTRACT: T optimizer is missing")
+    groups = {
+        group.get("name"): group
+        for group in transmittance.optimizer.param_groups
+    }
+    expected = set(INTERNAL_OBJECT_COLOR_RECOVERY_TRAINABLE_T_GROUPS) | set(
+        INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS
+    )
+    if set(groups) != expected:
+        raise RuntimeError(
+            "BLOCKED_BY_PARAMETER_GROUP_CONTRACT: unexpected T optimizer groups "
+            f"{sorted(groups)}"
+        )
+    for name, group in groups.items():
+        if len(group.get("params", [])) != 1:
+            raise RuntimeError(
+                "BLOCKED_BY_PARAMETER_GROUP_CONTRACT: each T group must own one tensor"
+            )
+        parameter = group["params"][0]
+        trainable = name in INTERNAL_OBJECT_COLOR_RECOVERY_TRAINABLE_T_GROUPS
+        parameter.requires_grad_(trainable)
+        if not trainable:
+            parameter.grad = None
+            group["lr"] = 0.0
+    return {
+        "schema": "rtgs_stage_d_tcolor_recovery_parameter_groups_v1",
+        "trainable_t_parameter_groups": list(
+            INTERNAL_OBJECT_COLOR_RECOVERY_TRAINABLE_T_GROUPS
+        ),
+        "frozen_t_parameter_groups": list(
+            INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS
+        ),
+        "optimizer_group_lrs": {
+            name: float(group.get("lr", 0.0)) for name, group in sorted(groups.items())
+        },
+        "requires_grad": {
+            name: bool(group["params"][0].requires_grad)
+            for name, group in sorted(groups.items())
+        },
+    }
 
 
 def _ownership_long_guard_result(window):
@@ -1607,7 +1844,8 @@ def _filter_transferred_candidates_by_internal_object_masks(
 
 def _render_formal_review_node(
     scene, state, pipe, background, release, iteration,
-    stems=FORMAL_STEMS, static_cache=None,
+    stems=FORMAL_STEMS, static_cache=None, internal_object_opt=None,
+    internal_object_float_schema=None,
 ):
     cameras = {
         Path(str(camera.image_name)).stem: camera
@@ -1642,6 +1880,16 @@ def _render_formal_review_node(
                 release.manifest["geometry_release_id"],
                 release.validation["aggregate_sha256"],
             )
+            if internal_object_opt is not None:
+                _write_internal_object_review_products(
+                    directory,
+                    stem,
+                    camera,
+                    debug,
+                    internal_object_opt,
+                    internal_object_float_schema
+                    or "rtgs_stage_d_internal_object_float_metrics_v1",
+                )
             del debug
             if static_cache is not None:
                 del static_inputs
@@ -1705,6 +1953,10 @@ def _forward_backward_stage_d(
         anti_soft_high = image.new_zeros(())
         object_positive = image.new_zeros(())
         object_negative = image.new_zeros(())
+        object_cin_total = image.new_zeros(())
+        object_cin_union = image.new_zeros(())
+        object_cin_bird = image.new_zeros(())
+        object_cin_internal_base = image.new_zeros(())
         object_total = image.new_zeros(())
         object_metrics = {}
         if opt.stage_d_semantic_repair_pilot:
@@ -1758,6 +2010,24 @@ def _forward_backward_stage_d(
             object_total = object_loss["total"]
             object_positive = object_loss["positive"]
             object_negative = object_loss["negative"]
+            if float(getattr(opt, "lambda_object_cin_color", 0.0)) > 0.0:
+                color_loss = object_cin_color_loss(
+                    package["inside_color"],
+                    package["inside_alpha"],
+                    package["outside_color"],
+                    gt.permute(1, 2, 0),
+                    domains,
+                    masks,
+                    inside_contribution=package.get("inside_contribution"),
+                    cout_contribution=package.get("cout_contribution"),
+                    final_t_off=package.get("final_t_off"),
+                    erode_px=int(getattr(opt, "object_mask_erode_px", 3)),
+                    lambda_color=float(getattr(opt, "lambda_object_cin_color", 0.0)),
+                )
+                object_cin_total = color_loss["total"]
+                object_cin_union = color_loss["union"]
+                object_cin_bird = color_loss["bird"]
+                object_cin_internal_base = color_loss["internal_base"]
             object_metrics = object_domain_metrics(
                 package,
                 domains,
@@ -1771,6 +2041,7 @@ def _forward_backward_stage_d(
             + opt.lambda_perc * perceptual_loss + opt.lambda_spec * specular_loss
             + (opt.lambda_depth * depth_loss if depth_enabled else 0.0)
             + object_total
+            + object_cin_total
             + anti_ramp * (
                 opt.lambda_anti_veil_black * anti_black
                 + opt.lambda_anti_veil_saturation * anti_saturation
@@ -1793,6 +2064,10 @@ def _forward_backward_stage_d(
         "object_loss_total": object_total,
         "object_loss_positive": object_positive,
         "object_loss_negative": object_negative,
+        "object_cin_color_total": object_cin_total,
+        "object_cin_color_union": object_cin_union,
+        "object_cin_color_bird": object_cin_bird,
+        "object_cin_color_internal_base": object_cin_internal_base,
         "object_metrics": object_metrics,
         "depth_enabled": bool(depth_enabled),
     }
@@ -2036,6 +2311,72 @@ def _absolute_difference(first, second):
         "max_abs": float(difference.max()) if difference.numel() else 0.0,
         "mean_abs": float(difference.mean()) if difference.numel() else 0.0,
     }
+
+
+def _review_mask_hwc1(mask: torch.Tensor, *, device: torch.device) -> torch.Tensor:
+    value = mask.detach().to(device=device).float()
+    if value.ndim == 2:
+        value = value[..., None]
+    elif value.ndim == 3 and value.shape[0] == 1:
+        value = value.permute(1, 2, 0)
+    elif value.ndim != 3 or value.shape[-1] != 1:
+        raise ValueError(f"expected single-channel mask for review, got {tuple(value.shape)}")
+    return value.clamp(0, 1)
+
+
+@torch.no_grad()
+def _write_internal_object_review_products(directory, stem, camera, package, opt, schema):
+    masks = getattr(camera, "internal_object_masks", None)
+    if not masks:
+        return None
+    target = Path(directory)
+    device = package["inside_alpha"].device
+    review_masks = {
+        role: _review_mask_hwc1(masks[role], device=device)
+        for role in ("bird", "internal_base", "internal_object_union")
+    }
+    if masks.get("internal_ignore") is not None:
+        review_masks["internal_ignore"] = _review_mask_hwc1(
+            masks["internal_ignore"], device=device,
+        )
+    for role, value in review_masks.items():
+        save_image(
+            value.permute(2, 0, 1).repeat(3, 1, 1).clamp(0, 1),
+            target / f"{role}_mask.png",
+        )
+    domains = object_occupancy_domains(
+        review_masks["internal_object_union"],
+        camera.specular_mask,
+        package["transmittance_valid"],
+        internal_ignore=review_masks.get("internal_ignore"),
+        erode_px=int(getattr(opt, "object_mask_erode_px", 3)),
+        dilate_px=int(getattr(opt, "object_mask_dilate_px", 3)),
+    )
+    domain_rgb = torch.cat(
+        [
+            domains["Mneg"].detach().cpu().permute(2, 0, 1),
+            domains["Mpos"].detach().cpu().permute(2, 0, 1),
+            domains["Mignore"].detach().cpu().permute(2, 0, 1),
+        ],
+        dim=0,
+    )
+    save_image(domain_rgb.clamp(0, 1), target / "mpos_mignore_mneg.png")
+    metrics = object_domain_metrics(
+        package,
+        domains,
+        review_masks,
+        alpha_floor=float(getattr(opt, "object_alpha_floor", 0.35)),
+        erode_px=int(getattr(opt, "object_mask_erode_px", 3)),
+        dilate_px=int(getattr(opt, "object_mask_dilate_px", 3)),
+    )
+    metrics.update({
+        "schema": schema,
+        "stem": str(stem),
+        "source": "float tensors rendered during D-016 color-recovery training node",
+        "mask_alignment": "camera-loaded formal reviewed v3 mask tensors",
+    })
+    _atomic_json(target / "float_metrics.json", metrics)
+    return metrics
 
 
 def _t_gradients(transmittance):
@@ -2477,6 +2818,11 @@ def training_stage_d(
         global_iteration, reflection_iteration, transmittance_iteration,
         saving_iterations, checkpoint_iterations,
     )
+    _validate_internal_object_color_recovery_contract(
+        dataset, opt, release, source, fresh_from_stage_b, saved_config,
+        global_iteration, reflection_iteration, transmittance_iteration,
+        saving_iterations, checkpoint_iterations,
+    )
     _validate_ownership_t_long_contract(
         dataset, opt, release, source, fresh_from_stage_b, saved_config,
         global_iteration, reflection_iteration, transmittance_iteration,
@@ -2487,6 +2833,11 @@ def training_stage_d(
         global_iteration, reflection_iteration, transmittance_iteration,
         saving_iterations, checkpoint_iterations,
     )
+    color_recovery_parameter_groups = None
+    if getattr(opt, "stage_d_internal_object_color_recovery", False):
+        color_recovery_parameter_groups = (
+            _configure_transmittance_color_recovery_optimizer(transmittance)
+        )
     if opt.stage_d_formal_onset:
         metadata = {
             "schema": "rtgs_stage_d_formal_onset_run_v2",
@@ -2670,6 +3021,62 @@ def training_stage_d(
             Path(scene.model_path, "internal_object_townership_to_20000_metadata.json"),
             metadata,
         )
+    elif getattr(opt, "stage_d_internal_object_color_recovery", False):
+        metadata = {
+            "schema": "rtgs_stage_d_internal_object_tcolor_recovery_v1",
+            "source": source,
+            "config": config,
+            "start_checkpoint": str(Path(start_checkpoint).resolve()),
+            "start_checkpoint_sha256": dataset._stage_d_start_checkpoint_sha256,
+            "source_selection_reason": {
+                "best_rgb": 16500,
+                "best_leakage_tradeoff": 16500,
+                "best_object_ownership_reference": 20000,
+                "endpoint_20000_is_not_auto_selected": True,
+            },
+            "required_nodes": list(INTERNAL_OBJECT_COLOR_RECOVERY_NODES),
+            "review_stems": list(CACHED_STEMS),
+            "global": [16501, INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT],
+            "transmittance_local": [1501, 2000],
+            "mode": "grounded_sam2_reviewed_mask_resume_frozen_dr_t_color_only",
+            "diffuse_optimizer_updates": 0,
+            "reflection_optimizer_updates": 0,
+            "transmittance_color_optimizer_updates": 500,
+            "transmittance_geometry_opacity_optimizer_updates": 0,
+            "t_topology_updates_allowed": False,
+            "expected_t_count": 4096,
+            "t_reinitialization": False,
+            "transferred_d_selection_rerun": False,
+            "random_fill_rerun": False,
+            "optimizer_resume": True,
+            "parameter_group_contract": color_recovery_parameter_groups,
+            "cuboid_space": semantic_cuboid.metadata(),
+            "future_depth_activation_global": 40000,
+            "depth_enabled_during_run": False,
+            "full_frame_rgb_loss": True,
+            "cout_retained": True,
+            "transparent_direct_mode": dataset.transparent_direct_mode,
+            "transparent_reflection_mode": dataset.transparent_reflection_mode,
+            "cin_color_supervision": {
+                "lambda": float(getattr(opt, "lambda_object_cin_color", 0.0)),
+                "target": "inside_contribution target = clamp(gt_rgb - detach(final_t_off) - detach(cout_contribution), 0, 1)",
+                "positive_domains": ["eroded bird", "eroded internal_base"],
+                "mignore_participates": False,
+                "raw_rgb_direct_copy": False,
+            },
+            "alpha_supervision": {
+                "lambda_positive": float(getattr(opt, "lambda_object_positive", 0.0)),
+                "lambda_negative": float(getattr(opt, "lambda_object_negative", 0.0)),
+                "positive_push_reduced_to_zero": True,
+                "mneg_suppression_retained": True,
+            },
+            "novel_view_requires_internal_object_mask": False,
+            "semantic_claim": False,
+        }
+        _atomic_json(
+            Path(scene.model_path, "internal_object_tcolor_recovery_metadata.json"),
+            metadata,
+        )
     elif opt.stage_d_cached_twarmup:
         metadata = {
             "schema": "rtgs_stage_d_cached_twarmup_then_joint_v1",
@@ -2758,6 +3165,7 @@ def training_stage_d(
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
                 or getattr(opt, "stage_d_internal_object_to_20000", False)
+                or getattr(opt, "stage_d_internal_object_color_recovery", False)
             )
             else Path(scene.model_path) / "static_dr_cache"
         )
@@ -2766,6 +3174,7 @@ def training_stage_d(
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
                 or getattr(opt, "stage_d_internal_object_to_20000", False)
+                or getattr(opt, "stage_d_internal_object_color_recovery", False)
             )
             and opt.stage_d_reuse_static_cache
         ):
@@ -2824,6 +3233,7 @@ def training_stage_d(
                     opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                     or _tscale_recovery_mode(opt)
                     or getattr(opt, "stage_d_internal_object_to_20000", False)
+                    or getattr(opt, "stage_d_internal_object_color_recovery", False)
                 )
                 and opt.stage_d_reuse_static_cache
             ),
@@ -2855,6 +3265,7 @@ def training_stage_d(
             opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
             or _tscale_recovery_mode(opt)
             or getattr(opt, "stage_d_internal_object_to_20000", False)
+            or getattr(opt, "stage_d_internal_object_color_recovery", False)
         ):
             benchmark_camera = next(
                 camera for camera in cameras
@@ -2877,10 +3288,12 @@ def training_stage_d(
                 if opt.stage_d_ownership_t_long else (
                 "CUBOID_PATH_OWNERSHIP_PILOT_BLOCKED"
                 if opt.stage_d_ownership_pilot else (
+                "D016_COLOR_RECOVERY_BLOCKED"
+                if getattr(opt, "stage_d_internal_object_color_recovery", False) else (
                 "D016_TO_20000_BLOCKED"
                 if getattr(opt, "stage_d_internal_object_to_20000", False) else (
                 "SEMANTIC_REPAIR_PILOT_BLOCKED"
-                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED"))))
+                if opt.stage_d_semantic_repair_pilot else "CACHED_T_WARMUP_BLOCKED")))))
             )
             raise RuntimeError(f"{verdict}: D/R changed during cache preflight")
         metadata["cache_identity"] = cache_identity
@@ -2891,18 +3304,23 @@ def training_stage_d(
             "ownership_t_long_metadata.json" if opt.stage_d_ownership_t_long else (
             "internal_object_townership_to_20000_metadata.json"
             if getattr(opt, "stage_d_internal_object_to_20000", False) else (
+            "internal_object_tcolor_recovery_metadata.json"
+            if getattr(opt, "stage_d_internal_object_color_recovery", False) else (
             "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot else (
             "semantic_repair_run_metadata.json"
-            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json"))))
+            if opt.stage_d_semantic_repair_pilot else "cached_twarmup_run_metadata.json")))))
         )
         _atomic_json(Path(scene.model_path, metadata_name), metadata)
         restore_rng_state(restored_rng_state)
     viewpoints, camera_indices = restore_camera_deck(cameras, runtime_state)
     if opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long \
-            or _tscale_recovery_mode(opt):
+            or _tscale_recovery_mode(opt) \
+            or getattr(opt, "stage_d_internal_object_color_recovery", False):
         initial_iteration = (
             global_iteration if _tscale_recovery_mode(opt)
-            else (15500 if opt.stage_d_ownership_t_long else 15000)
+            else (global_iteration if getattr(
+                opt, "stage_d_internal_object_color_recovery", False,
+            ) else (15500 if opt.stage_d_ownership_t_long else 15000))
         )
         initial_checkpoint = make_stage_d_checkpoint(
             diffuse, reflection, transmittance, initial_iteration,
@@ -2925,6 +3343,13 @@ def training_stage_d(
         _render_formal_review_node(
             scene, state, pipe, background, release, initial_iteration,
             stems=CACHED_STEMS, static_cache=static_cache,
+            internal_object_opt=(
+                opt if getattr(opt, "stage_d_internal_object_color_recovery", False)
+                else None
+            ),
+            internal_object_float_schema=(
+                "rtgs_stage_d_internal_object_tcolor_recovery_float_metrics_v1"
+            ),
         )
         if _tscale_recovery_mode(opt):
             node_telemetry = {
@@ -2971,12 +3396,14 @@ def training_stage_d(
                 opt.stage_d_ownership_t_long,
                 _tscale_recovery_mode(opt),
                 _internal_object_mode(opt),
+                getattr(opt, "stage_d_internal_object_color_recovery", False),
             )
             if _cached_mode(opt) else "exact_joint"
         )
         phase_a = phase in (
             "cached_t_warmup", "semantic_repair_cached_t_only",
             "internal_object_townership_t_only",
+            "internal_object_tcolor_recovery",
             "cuboid_path_ownership_t_only", "cuboid_path_ownership_t_long",
             "cuboid_path_ownership_tscale_recovery",
         )
@@ -2997,6 +3424,10 @@ def training_stage_d(
             diffuse.update_learning_rate(iteration)
             reflection.update_learning_rate(reflection_iteration)
         transmittance.update_learning_rate(transmittance_iteration)
+        if getattr(opt, "stage_d_internal_object_color_recovery", False):
+            color_recovery_parameter_groups = (
+                _configure_transmittance_color_recovery_optimizer(transmittance)
+            )
         if not viewpoints:
             viewpoints, camera_indices = cameras.copy(), list(range(len(cameras)))
         selected = randint(0, len(camera_indices) - 1)
@@ -3030,6 +3461,10 @@ def training_stage_d(
         object_loss_total = payload["object_loss_total"]
         object_loss_positive = payload["object_loss_positive"]
         object_loss_negative = payload["object_loss_negative"]
+        object_cin_color_total = payload["object_cin_color_total"]
+        object_cin_color_union = payload["object_cin_color_union"]
+        object_cin_color_bird = payload["object_cin_color_bird"]
+        object_cin_color_internal_base = payload["object_cin_color_internal_base"]
 
         with torch.no_grad():
             reflection_aux = package.get("ray_aux")
@@ -3102,6 +3537,10 @@ def training_stage_d(
                     getattr(opt, "stage_d_internal_object_to_20000", False)
                     and iteration == INTERNAL_OBJECT_TO_20000_ENDPOINT
                 )
+                or (
+                    getattr(opt, "stage_d_internal_object_color_recovery", False)
+                    and iteration == INTERNAL_OBJECT_COLOR_RECOVERY_ENDPOINT
+                )
                 or (opt.stage_d_ownership_t_long and iteration == OWNERSHIP_T_LONG_ENDPOINT)
                 or (
                     opt.stage_d_tscale_recovery_preflight
@@ -3133,8 +3572,10 @@ def training_stage_d(
                         if getattr(opt, "stage_d_internal_object_pilot", False) else (
                         "internal_object_townership_to_20000_metadata.json"
                         if getattr(opt, "stage_d_internal_object_to_20000", False) else (
+                        "internal_object_tcolor_recovery_metadata.json"
+                        if getattr(opt, "stage_d_internal_object_color_recovery", False) else (
                         "ownership_arm_metadata.json" if opt.stage_d_ownership_pilot
-                        else "semantic_repair_run_metadata.json")))),
+                        else "semantic_repair_run_metadata.json"))))),
                     ), metadata
                 )
             finite_counts = _finite_models({
@@ -3155,6 +3596,11 @@ def training_stage_d(
                     "reflection": int(not phase_a),
                     "transmittance": 1,
                 },
+                "t_parameter_group_contract": (
+                    color_recovery_parameter_groups
+                    if getattr(opt, "stage_d_internal_object_color_recovery", False)
+                    else None
+                ),
                 "reflection_local_iteration": int(reflection_iteration),
                 "transmittance_local_iteration": int(transmittance_iteration),
                 "camera_stem": str(camera.image_name),
@@ -3194,6 +3640,10 @@ def training_stage_d(
                     "l_object": float(object_loss_total),
                     "l_object_positive": float(object_loss_positive),
                     "l_object_negative": float(object_loss_negative),
+                    "l_object_cin_color": float(object_cin_color_total),
+                    "l_object_cin_union": float(object_cin_color_union),
+                    "l_object_cin_bird": float(object_cin_color_bird),
+                    "l_object_cin_internal_base": float(object_cin_color_internal_base),
                     "lambda_depth_enabled": bool(depth_enabled), "total": float(loss),
                 },
                 "valid_two_hit_fraction_hard_release": release.validation["coverage"]["valid_fraction_hard_mean"],
@@ -3306,6 +3756,10 @@ def training_stage_d(
                 _render_formal_review_node(
                     scene, state, pipe, background, release, iteration,
                     stems=CACHED_STEMS, static_cache=static_cache,
+                    internal_object_opt=opt,
+                    internal_object_float_schema=(
+                        "rtgs_stage_d_internal_object_tcolor_recovery_float_metrics_v1"
+                    ),
                 )
                 last_record["formal_review_node"] = True
             elif opt.stage_d_ownership_pilot and iteration in OWNERSHIP_NODES:
@@ -3329,6 +3783,15 @@ def training_stage_d(
                     stems=CACHED_STEMS, static_cache=static_cache,
                 )
                 last_record["formal_review_node"] = True
+            elif (
+                getattr(opt, "stage_d_internal_object_color_recovery", False)
+                and iteration in INTERNAL_OBJECT_COLOR_RECOVERY_NODES
+            ):
+                _render_formal_review_node(
+                    scene, state, pipe, background, release, iteration,
+                    stems=CACHED_STEMS, static_cache=static_cache,
+                )
+                last_record["formal_review_node"] = True
             elif _tscale_recovery_mode(opt) and iteration in _required_nodes(opt):
                 _render_formal_review_node(
                     scene, state, pipe, background, release, iteration,
@@ -3346,6 +3809,8 @@ def training_stage_d(
         del l1_value, ssim_value, rgb_loss, normal_loss, mono_loss
         del perceptual_loss, specular_loss, depth_loss
         del object_loss_total, object_loss_positive, object_loss_negative
+        del object_cin_color_total, object_cin_color_union
+        del object_cin_color_bird, object_cin_color_internal_base
         del anti_black, anti_saturation, anti_soft_saturation, anti_soft_high
         del reflection_aux, trans_aux, valid, depth_order
         device_free_before_release, _ = torch.cuda.mem_get_info()
@@ -3411,6 +3876,8 @@ def training_stage_d(
             if opt.stage_d_tscale_recovery_long else (
             "STAGE_D_OWNERSHIP_T_LONG_COMPLETED"
             if opt.stage_d_ownership_t_long else (
+            "STAGE_D_INTERNAL_OBJECT_TCOLOR_RECOVERY_COMPLETED"
+            if getattr(opt, "stage_d_internal_object_color_recovery", False) else (
             "STAGE_D_CUBOID_PATH_OWNERSHIP_ARM_COMPLETED"
             if opt.stage_d_ownership_pilot else (
             "STAGE_D_SEMANTIC_REPAIR_PILOT_COMPLETED"
@@ -3419,7 +3886,7 @@ def training_stage_d(
             if opt.stage_d_cached_twarmup else (
                 "STAGE_D_FORMAL_ONSET_COMPLETED" if opt.stage_d_formal_onset
                 else "STAGE_D_SMOKE_COMPLETED"
-            ))))))
+            )))))))
         ),
         "start_checkpoint": str(Path(start_checkpoint).resolve()),
         "final_checkpoint": str(Path(scene.model_path) / f"chkpnt{opt.iterations}.pth"),
@@ -3435,6 +3902,7 @@ def training_stage_d(
             if (
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
+                or getattr(opt, "stage_d_internal_object_color_recovery", False)
             )
             else "T from D position + epsilon*d_cam"
         ),
@@ -3453,7 +3921,20 @@ def training_stage_d(
             0 if (
                 opt.stage_d_ownership_pilot or opt.stage_d_ownership_t_long
                 or _tscale_recovery_mode(opt)
+                or getattr(opt, "stage_d_internal_object_color_recovery", False)
             ) else None
+        ),
+        "internal_object_color_recovery": bool(
+            getattr(opt, "stage_d_internal_object_color_recovery", False)
+        ),
+        "internal_object_color_recovery_updates": (
+            500 if getattr(opt, "stage_d_internal_object_color_recovery", False)
+            else None
+        ),
+        "t_parameter_group_contract": (
+            color_recovery_parameter_groups
+            if getattr(opt, "stage_d_internal_object_color_recovery", False)
+            else None
         ),
         "ownership_t_long": bool(opt.stage_d_ownership_t_long),
         "ownership_t_long_updates": 4500 if opt.stage_d_ownership_t_long else None,
@@ -3471,13 +3952,15 @@ def training_stage_d(
     summary_name = (
         "stage_d_tscale_recovery_summary.json" if _tscale_recovery_mode(opt) else (
         "stage_d_ownership_t_long_summary.json" if opt.stage_d_ownership_t_long else (
+        "stage_d_internal_object_tcolor_recovery_summary.json"
+        if getattr(opt, "stage_d_internal_object_color_recovery", False) else (
         "stage_d_ownership_arm_summary.json" if opt.stage_d_ownership_pilot else (
         "stage_d_semantic_repair_summary.json"
         if opt.stage_d_semantic_repair_pilot else (
         "stage_d_cached_twarmup_summary.json" if opt.stage_d_cached_twarmup else (
             "stage_d_formal_summary.json" if opt.stage_d_formal_onset
             else "stage_d_smoke_summary.json"
-        )))))
+        ))))))
     )
     with open(os.path.join(scene.model_path, summary_name), "w", encoding="utf-8") as handle:
         json.dump(summary, handle, indent=2, sort_keys=True, allow_nan=False)
