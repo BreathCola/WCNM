@@ -152,7 +152,7 @@ INTERNAL_OBJECT_COLOR_RECOVERY_FROZEN_T_GROUPS = (
     "xyz", "opacity", "scaling", "rotation",
 )
 INTERNAL_OBJECT_GATED_JOINT_OUTPUT_NAME = (
-    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v5"
+    "stage_d_tihubird_c03r8_internal_object_gated_joint_16500_17500_v6"
 )
 INTERNAL_OBJECT_GATED_JOINT_SOURCE_SHA256 = (
     INTERNAL_OBJECT_COLOR_RECOVERY_SOURCE_SHA256
