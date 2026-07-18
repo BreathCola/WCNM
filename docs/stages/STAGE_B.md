@@ -602,3 +602,30 @@ metrics, hashes and review queue. It is not a formal mask and has no promotion
 path. `000058` used the explicitly review-only fallback and is ranked first as
 over-inclusive. The gate is `TAO_GLASS_MASK_REVIEW_REQUIRED`; no
 `data/Tao/specular_masks_reviewed_v1/` directory was created.
+
+## TAO-DR-MASK-REPAIR-001 multi-view review proposal
+
+The old Tao threshold proposal failed as a geometry source: it segmented each
+view independently and `000058` required a relaxed-depth fallback covering
+0.88398 of the frame. It is now restricted to after-fit comparison and failure
+analysis. It cannot enter the cuboid objective or be copied into a new mask.
+
+`tools/build_tao_dr_glass_mask_repair_proposal.py` and the isolated
+`geometry/tao_dr_cuboid_bootstrap.py` / `utils/tao_dr_mask_repair.py` path use
+DR normal/depth/basecolor/diffuse/RGB cues with Tao COLMAP to fit one review-only
+cuboid. All 48 signed normal mappings are recorded; the selected mapping is
+`diag(+x,-y,-z)` with p50 alignment 0.99734. Depth remains per-view-relative:
+112 independent depth/inverse-depth affine fits are recorded, 94 are trusted,
+and low-quality fits only reduce view weight.
+
+The local output is
+`output/stage_b_tao_glass_mask_dr_geometry_repair_proposal_v2/`. Its manifest
+SHA-256 is `8593a297cf7cb9c7311ffcdbd771fa6bfbf6a0fc9d4e7dc5f533e165da5a34ea`;
+the 1,087-file pre-manifest aggregate is
+`006d3f2cfe60e9a30800f3be87b2bb11d4190fcac1e312cf140ecf6eac602711`.
+All 112 views contain source-resolution soft/hard/eroded/boundary masks and
+review products generated from the same geometry hash. `000058` now has area
+0.13909, has no inherited fallback, and does not trip the declared large-area
+or background risk. This is still automatic evidence only: no mask was
+accepted or promoted, and the Stage-B verdict is
+`TAO_GLASS_MASK_REVIEW_REQUIRED`.

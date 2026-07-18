@@ -4,12 +4,12 @@ Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
 Current implementation branch: `codex/tao-layered-early-joint`
 
-Current bounded user task: TAO-LJ-001, Tao scene-local infrastructure for a
-from-global-0 layered early-joint D/R/T trajectory. This task is code,
-tests, local DiffusionRenderer/mask-review assets, a formally gated geometry
-builder, and a plan-only/default-off operator only. It does not run the formal
-global 1--3,000 trajectory, does not update an optimizer, does not create a
-training checkpoint/PLY, does not accept a Tao mask, and does not enter Stage E.
+Current bounded user task: `TAO-DR-MASK-REPAIR-001`, a review-only rebuild of
+the Tao glass-mask proposal from multi-view DiffusionRenderer geometry cues and
+Tao COLMAP. It does not accept a mask, create a formal geometry release, run
+global 1--3,000, update an optimizer, create a checkpoint/PLY, or enter Stage E.
+The previously implemented TAO-LJ-001 renderer, geometry-builder, initializer,
+and plan-only operator remain gated and unchanged.
 
 The real Tao DiffusionRenderer artifact is local at
 `output/stage_a_tao_dr_raw_112_v1/`. It covers 112/112 stems `000000`--`000111`
@@ -37,6 +37,37 @@ review fallback, has area ratio 0.884, is visibly over-inclusive, is ranked
 first, and has every risk flag set. No
 `data/Tao/specular_masks_reviewed_v1/` release was created.
 
+That threshold proposal is superseded for review by
+`output/stage_b_tao_glass_mask_dr_geometry_repair_proposal_v2/`. The v2 tool
+does not threshold DR into independent frame masks. It searches all 48 signed
+normal permutations, transforms evidence with the 112 COLMAP cameras, fits
+depth or inverse-depth scale/shift separately per view, builds continuous DR
+boundary/interior likelihoods, and optimizes one watertight six-plane cuboid in
+COLMAP world scale. The old v1 proposal is opened only after the cuboid passes
+the pre-artifact gates, and only for comparison/review output.
+
+The selected normal mapping is `diag(+x,-y,-z)` (candidate 4), with alignment
+p10/p50/p90 0.94735/0.99734/0.99938. All 112 depth calibrations have 862--3,601
+valid observations; 94 are trusted, using 71 direct-depth and 41 inverse-depth
+fits across all views. The fixed cuboid extents are
+`[2.17074, 1.15034, 1.26004]`, and every per-frame record binds the same geometry
+SHA-256 `eed47ea43dfcdf3bfc2dd02f681d325d7edcf4a8e3970b03e9dc321732db3d22`.
+All 23 predeclared final gates pass: 112/112 projections are nonempty,
+mean/minimum boundary alignment is 0.49787/0.37296, mean normal alignment is
+0.97051, mean calibrated-depth relative residual is 0.15463, only four views
+touch a border, and zero views are below the declared confidence threshold.
+
+The v2 proposal manifest SHA-256 is
+`8593a297cf7cb9c7311ffcdbd771fa6bfbf6a0fc9d4e7dc5f533e165da5a34ea`;
+its 1,087 pre-manifest files independently reproduce aggregate SHA-256
+`006d3f2cfe60e9a30800f3be87b2bb11d4190fcac1e312cf140ecf6eac602711`.
+It contains 112 soft/hard/eroded/boundary masks, overlays and review pages plus
+all required chronological, risk, area-change, weak-support, weak-depth,
+boundary and fixed-view contact sheets. View `000058` changes from old area
+ratio 0.88398 to new 0.13909, comes only from the fixed 3D cuboid projection,
+does not inherit the old fallback, and no longer triggers the declared
+large-area/background risk. This remains a proposal requiring human review.
+
 The Tao cuboid builder, analytic numpy/torch two-hit intersection, v1 layered
 renderer/exporter, support-safe global-0 initialization planner, and
 `tools/run_tao_layered_early_joint.py` are implemented. Geometry execution and
@@ -46,17 +77,17 @@ rejects checkpoint/resume tokens, defaults to read-only planning, and dispatches
 only from explicit `--execute`. The formal output remains absent:
 `output/stage_d_tao_layered_early_joint_g00000_g03000_v1/`.
 
-Current Tao blocker and exact next task: human review/correction of all 112 mask
-candidates, especially `000058`, followed by an explicit user decision. Until
-then the only verdict is `TAO_GLASS_MASK_REVIEW_REQUIRED`.
+Current Tao blocker and exact next task: human review/correction of all 112 v2
+mask candidates followed by an explicit user decision. Until then the only
+verdict is `TAO_GLASS_MASK_REVIEW_REQUIRED`.
 
-TAO-LJ-001 verification: relevant `py_compile` passes; the four new targeted
-files pass 12/12 tests; the repository suite passes 292 tests when the single
-known base defect is deselected. The untouched test
+TAO-DR-MASK-REPAIR-001 verification: relevant `py_compile` passes and the
+targeted Tao/DR/cuboid group passes 43/43 tests. The full repository suite
+passes 310 tests and has one known base defect. The untouched test
 `test_semantic_contract_rejects_stage_d_resume_and_schedule_drift` fails because
 its TiHuBird fixture sets ray chunk 2,048 while the unchanged legacy contract
 requires 512. The same failure was reproduced from an isolated archive of base
-HEAD `77fe09298f56b1ef639c22ea1335dfecb1e2dafe`; it is not a Tao regression and
+HEAD `9077622b87f7e94e10db45b5d93fceffc7bc457c`; it is not a Tao regression and
 was not modified under this task.
 
 Current bounded user task: TiHuBird glass-mask full v2 proposal generation for

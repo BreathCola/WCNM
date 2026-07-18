@@ -3932,3 +3932,55 @@ post-run audit. This change does not run training, does not create the color
 recovery output, does not modify Stage C or formal masks, and does not
 authorize Stage E. If color recovery still leaves black holes, the next step is
 only to separately plan a gated partial D/R/T joint pilot.
+
+## TAO-DR-MASK-REPAIR-001 — Rebuild glass masks from multi-view DR geometry cues
+
+Date: 2026-07-18
+
+Question: How should Tao recover from the low-quality per-view threshold mask
+proposal, especially the `000058` relaxed-depth fallback, without treating that
+proposal as supervision or prematurely creating formal geometry?
+
+Chosen implementation: Add a separate review-only Tao bootstrap. Decode and
+unit-normalize DR normals, transform them with the Tao COLMAP camera rotations,
+and score all 48 signed axis permutations jointly. The selected convention is
+candidate 4, `diag(+x,-y,-z)`, with alignment p10/p50/p90
+0.94735/0.99734/0.99938. Treat raw DR depth strictly as per-view-relative:
+robustly select a depth or inverse-depth affine fit on projectable Tao COLMAP
+observations for each view, record all slopes/intercepts/R²/residuals, trust 94
+of 112 calibrations, and downweight rather than force the other 18.
+
+Fuse native-resolution normal/depth/RGB/basecolor/diffuse discontinuities,
+planar consistency, and reflection uncertainty into continuous likelihoods.
+Use these likelihoods, calibrated depth evidence, and robust Tao sparse bounds
+to optimize one positive-extent watertight cuboid in COLMAP world coordinates.
+The old proposal is not an objective argument and is loaded only after the
+cuboid passes pre-artifact gates. Project that same geometry into all 112 views;
+generate soft masks from the new silhouette distance field. If any geometry
+gate fails, stop before materializing masks and provide no ellipse, hull,
+full-frame, or old-mask fallback.
+
+The resulting local proposal is
+`output/stage_b_tao_glass_mask_dr_geometry_repair_proposal_v2/`, with proposal
+manifest SHA-256
+`8593a297cf7cb9c7311ffcdbd771fa6bfbf6a0fc9d4e7dc5f533e165da5a34ea`,
+pre-manifest tree SHA-256
+`006d3f2cfe60e9a30800f3be87b2bb11d4190fcac1e312cf140ecf6eac602711`,
+and fixed geometry SHA-256
+`eed47ea43dfcdf3bfc2dd02f681d325d7edcf4a8e3970b03e9dc321732db3d22`.
+All 23 declared gates pass. For `000058`, the comparison-only old area is
+0.88398 and the new fixed-cuboid projection area is 0.13909; no old fallback is
+inherited and no declared large-area/background risk remains.
+
+Alternatives rejected: Continue tuning thresholds on the old masks; fit the
+cuboid to old silhouettes; assume a DR normal convention; treat DR depth as
+metric across views; or force a visually complete fallback when fitting fails.
+Those alternatives would repeat the failure, introduce circular supervision,
+or violate the DR and review-only contracts.
+
+Impact: The bootstrap schema is deliberately incompatible with formal mask and
+geometry loaders. The artifact records `training_eligible=false`,
+`promotion_performed=false`, `formal_geometry_release=false`, and
+`human_status=proposal_requires_review`. No formal Tao mask, geometry release,
+two-hit cache, checkpoint, optimizer update, PLY, or training output was
+created. The required stop verdict is `TAO_GLASS_MASK_REVIEW_REQUIRED`.
