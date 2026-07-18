@@ -589,3 +589,16 @@ C geometry source; Branch B (R onset 7k) remains a complete control. This does
 not establish globally optimal onset or completed Reflection separation. Stage
 B is closed. Stage C was subsequently accepted, and Stage D is now the current
 authorized stage; this Stage B file imposes no current Stage D block.
+
+## TAO-LJ-001 scene-local glass proposal
+
+The proposal code now accepts a manifest-declared scene/count/stem set and new
+outputs use generic subject/background/glass-edge/reflection/confidence risks.
+Legacy TiHuBird risk naming remains only as a compatibility adapter and its
+behavior is unchanged. The Tao artifact
+`output/stage_b_tao_glass_mask_proposal_112_v1/` contains 112 soft/hard/eroded
+masks, overlays and review pages, plus chronological/risk contact sheets,
+metrics, hashes and review queue. It is not a formal mask and has no promotion
+path. `000058` used the explicitly review-only fallback and is ranked first as
+over-inclusive. The gate is `TAO_GLASS_MASK_REVIEW_REQUIRED`; no
+`data/Tao/specular_masks_reviewed_v1/` directory was created.

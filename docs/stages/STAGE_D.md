@@ -792,3 +792,27 @@ D016_COLOR_RECOVERY_BLOCKED
 
 PASS means engineering evidence is complete and still awaits visual review. It
 does not accept Stage D, authorize D/R/T joint training, or authorize Stage E.
+
+## TAO-LJ-001 layered early-joint infrastructure (not executed)
+
+The independent `rtgs_tao_layered_renderer_v1` and versioned exporter implement
+Master Plan §22 without changing the TiHuBird renderer/exporter. The formal fast
+path has exactly four ownership-qualified traces: strict-outside R front
+reflection, strict-inside T direct, a back-face reflection into that same T,
+and strict-outside D Cout. Composition is unclamped linear; Cin is already
+premultiplied; final/no-reflection/reflection closure is hard-checked and
+exported. Optional unfiltered/ownership diagnostics are detached and `no_grad`.
+
+`tools/run_tao_layered_early_joint.py --help` exposes only Tao scene, reviewed
+mask, geometry release, fresh output, and `--execute`; it has no checkpoint
+source. It defaults to read-only plan generation, rejects checkpoint/resume
+tokens, and fails closed before planning because the formal Tao mask is absent.
+The future plan is global 1--250 appearance-first, 251--1,000 low-rate R/T
+geometry without R/T topology changes, and 1,001--3,000 bounded refinement,
+with nodes 0/100/250/500/1,000/2,000/3,000 and four traces per training step.
+
+No `--execute` was run. The planned output
+`output/stage_d_tao_layered_early_joint_g00000_g03000_v1/` does not exist. No
+training/backward/optimizer/checkpoint/PLY was created, Stage D is not accepted
+for Tao, and Stage E remains forbidden. The current verdict is
+`TAO_GLASS_MASK_REVIEW_REQUIRED`.

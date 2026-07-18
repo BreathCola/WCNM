@@ -178,3 +178,23 @@ CUDA_VISIBLE_DEVICES='' conda run --no-capture-output -n RT-GS \
   --audit output/stage_c_tihubird_c03r8_g15000_mesh_audit_ks090_v2 \
   --output output/stage_c_tihubird_c03r8_g15000_two_hit_v4
 ```
+
+## TAO-LJ-001 gated cuboid infrastructure
+
+`tools/build_tao_cuboid_geometry.py` is a Tao-only builder that accepts Tao
+COLMAP, Tao RGB, audited Tao DR normal/relative-depth, and a complete accepted
+`rtgs_tao_reviewed_glass_masks_v1` manifest. It reads no training checkpoint.
+It searches the DR normal signed-axis convention, calibrates per-view DR depth
+or inverse depth only on registered COLMAP observations, initializes scale from
+masked sparse points, optimizes six cuboid planes from source-resolution
+silhouettes, exports a watertight mesh, and writes analytic front/back
+position/normal/face/t-near/t-far/crossing audit caches and fixed-view products.
+
+The predeclared release gates are mean/minimum IoU 0.90/0.75, mean/minimum hard
+two-hit coverage 0.95/0.85, normal alignment p50 0.75, 100% finite and ordered
+hits, exactly two crossings, and watertight topology. Runtime torch intersection
+is analytic and tested against numpy audit results; novel views never require a
+cache. The release ID is Tao-owned `stage_c_tao_geometry_release_v1`, never the
+TiHuBird release. The builder has not run because no formal Tao mask exists, so
+no Tao geometry output/release/cache/PLY exists and the current gate is
+`BLOCKED_BY_GLASS_MASK_IDENTITY`.

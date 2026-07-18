@@ -2,7 +2,62 @@
 
 Current stage: Stage D — Transmittance Gaussian and Full RT-GS
 
-Current implementation branch: `feature/stage-d-transmittance`
+Current implementation branch: `codex/tao-layered-early-joint`
+
+Current bounded user task: TAO-LJ-001, Tao scene-local infrastructure for a
+from-global-0 layered early-joint D/R/T trajectory. This task is code,
+tests, local DiffusionRenderer/mask-review assets, a formally gated geometry
+builder, and a plan-only/default-off operator only. It does not run the formal
+global 1--3,000 trajectory, does not update an optimizer, does not create a
+training checkpoint/PLY, does not accept a Tao mask, and does not enter Stage E.
+
+The real Tao DiffusionRenderer artifact is local at
+`output/stage_a_tao_dr_raw_112_v1/`. It covers 112/112 stems `000000`--`000111`
+plus eight explicitly identified fixed-length model padding slots. The upstream
+source is NVIDIA DiffusionRenderer HEAD
+`8fcf0057ad3422139cd53281037025ff725d34e9`; the inverse/SVD aggregate identity
+is `f899dd4a003ce27df12cd8fa929d000bb9e9313a6c5c14e9af395b3064729cf0`.
+The manifest SHA-256 is
+`a3036bc7662f96f6913367bb3dcfb81a3dd351e67820065d945c74630e6a85e9`.
+Stored RGB/normal/depth/basecolor/diffuse-albedo files are real model outputs.
+Depth is a per-view relative visualization only. The source replay made with
+repository Pillow 11.3 differs from upstream Pillow 12.2 bilinear resize by at
+most five uint8 levels (global mean 0.095039); replay in the upstream environment
+is exact, and the discrepancy is explicitly bounded and recorded.
+
+The scene-agnostic Tao glass proposal is local at
+`output/stage_b_tao_glass_mask_proposal_112_v1/`. It contains 112 soft, hard,
+eroded, overlay, and review-page PNGs; ten chronological and ten risk-ranked
+contact sheets; per-frame JSON/CSV; source/DR hashes; and a review queue. Its
+manifest SHA-256 is
+`5b80d2e5708ca0603797aa511403660dcfe2981e4bcbae32dfbcfd0b07fb4cd0`.
+It has `human_status=proposal_requires_review`, `training_eligible=false`, and
+`promotion_performed=false`. View `000058` required a generic relaxed-depth
+review fallback, has area ratio 0.884, is visibly over-inclusive, is ranked
+first, and has every risk flag set. No
+`data/Tao/specular_masks_reviewed_v1/` release was created.
+
+The Tao cuboid builder, analytic numpy/torch two-hit intersection, v1 layered
+renderer/exporter, support-safe global-0 initialization planner, and
+`tools/run_tao_layered_early_joint.py` are implemented. Geometry execution and
+plan emission are fail-closed until a complete accepted Tao mask manifest and
+Tao-owned geometry release exist. The operator has no checkpoint-source option,
+rejects checkpoint/resume tokens, defaults to read-only planning, and dispatches
+only from explicit `--execute`. The formal output remains absent:
+`output/stage_d_tao_layered_early_joint_g00000_g03000_v1/`.
+
+Current Tao blocker and exact next task: human review/correction of all 112 mask
+candidates, especially `000058`, followed by an explicit user decision. Until
+then the only verdict is `TAO_GLASS_MASK_REVIEW_REQUIRED`.
+
+TAO-LJ-001 verification: relevant `py_compile` passes; the four new targeted
+files pass 12/12 tests; the repository suite passes 292 tests when the single
+known base defect is deselected. The untouched test
+`test_semantic_contract_rejects_stage_d_resume_and_schedule_drift` fails because
+its TiHuBird fixture sets ray chunk 2,048 while the unchanged legacy contract
+requires 512. The same failure was reproduced from an isolated archive of base
+HEAD `77fe09298f56b1ef639c22ea1335dfecb1e2dafe`; it is not a Tao regression and
+was not modified under this task.
 
 Current bounded user task: TiHuBird glass-mask full v2 proposal generation for
 human review only. It does not run training, does not create formal

@@ -1846,3 +1846,82 @@ Git commit：
 未测试就声称完成；
 不记录论文未公开的技术假设。
 ```
+
+---
+
+# 22. Tao layered early-joint scene-local annex (TAO-LJ-001)
+
+This annex is part of the sole master plan; it is not a second specification.
+Tao is an independent scene and must start from global 0. Existing Tao D-only
+1k/20k/30k outputs and every TiHuBird checkpoint, mask, geometry release,
+two-hit cache, or D/R/T output are historical evidence only and are forbidden
+as Tao initialization, scale calibration, proxy geometry, optimizer state, or
+resume input.
+
+The Tao input identity is 112 RGB stems `000000`--`000111`, 112 StableNormal
+priors, Tao COLMAP cameras/images/points3D, and 66,187 sparse points. Real
+DiffusionRenderer inverse priors live under a fresh local Stage-A output and
+must bind source/code/model/config/environment and per-file hashes. Its depth is
+per-view relative evidence only; metric use requires a per-view depth or
+inverse-depth scale/shift fit on projectable Tao COLMAP observations.
+
+Automatic glass masks are review proposals only. They must be scene-agnostic,
+contain soft/hard/eroded/overlay/contact-sheet/risk/metric products, and expose
+no training or promotion path. Only a later explicitly accepted
+`rtgs_tao_reviewed_glass_masks_v1` manifest may authorize geometry. The Tao
+geometry builder then fits a six-plane cuboid from Tao COLMAP, Tao reviewed
+masks, Tao RGB, and Tao DR normal/depth only. It must predeclare source-resolution
+IoU, hard-mask two-hit coverage, 100% finite/order, crossing-count, watertight,
+and fixed-view review gates. Runtime uses analytic cuboid intersection; caches
+are audit/parity evidence and are never required for a novel view. Failure of
+any gate blocks release rather than forcing a cuboid.
+
+The versioned Tao renderer does not alter legacy TiHuBird behavior. Its formal
+fast path issues exactly four black-background Gaussian traces in order:
+`R_front` to strict-outside R, `T_direct` to strict-inside T,
+`R_back_from_T` to the same strict-inside T after one back-face reflection, and
+`Cout` to strict-outside D. D-interface position, normal, coverage, tint, ks,
+f0, and roughness remain in the D/material namespace and do not form a fourth
+radiance field. There is one back internal reflection, no recursion, no Snell
+refraction, no dispersion, no caustics, and no multiple bounce.
+
+All composition uses unclamped linear float values:
+
+```text
+internal = alpha * ks * (1-Ffront) * Cin
+front_reflection = alpha * ks * Ffront * Rfront
+back_internal_reflection =
+  alpha * ks * (1-Ffront) * (1-Ain) * Fback * Rback
+Cout_only =
+  alpha * ks * (1-Ffront) * (1-Ain) * (1-Fback) * Cout
+reflection = front_reflection + back_internal_reflection
+no_reflection = D_direct + internal + Cout_only + uncovered_background
+final = no_reflection + reflection
+```
+
+`Cin` is already premultiplied over black and must not be multiplied by `Ain`
+again. Formal review exports preserve float tensors and write display-clamped
+PNGs for final, ground truth, no-reflection, reflection, internal, front/back
+reflection, Cout, D-direct, Cin/Ain, internal intrinsic RGB, and internal alpha.
+Every export records max/mean linear closure error for
+`final == no_reflection + reflection`.
+
+Global-0 initialization uses all Tao COLMAP points for D, frozen analytic proxy
+geometry for D-interface, fresh deterministic complete-3-sigma strict-outside R,
+and strict-inside Tao COLMAP points plus deterministic support-safe fill for T.
+No semantic internal-object mask, Ain positive push, TiHuBird internal loss,
+checkpoint, resume, optimizer state, or PLY initialization is permitted.
+
+The default operator is plan-only and must refuse an existing output. Only
+explicit `--execute` may dispatch training. The planned schedule is global
+1--250 appearance-first joint participation, 251--1,000 low-rate R/T geometry
+with no R/T topology changes, and 1,001--3,000 bounded joint refinement, never
+3,001+. Review/checkpoint nodes are 0, 100, 250, 500, 1,000, 2,000, and 3,000.
+Full-frame RGB is always retained; the glass mask controls transparent paths and
+interface supervision only. Unfiltered and ownership-class diagnostics run only
+under `no_grad` review nodes.
+
+TAO-LJ-001 stops after infrastructure and review proposal. No formal mask,
+geometry release, plan execution, optimizer update, checkpoint, or PLY is
+created. Until explicit human mask approval, the required verdict is
+`TAO_GLASS_MASK_REVIEW_REQUIRED`; Stage E remains forbidden.

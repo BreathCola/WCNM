@@ -708,3 +708,15 @@ The previously documented Truck 30,000-step comparison was superseded before
 execution. Truck is engineering smoke only. The matched TiHuBird
 `lambda_mono=0` versus `0.01` retry1 protocol has completed and must not be
 rerun or replaced by Truck evidence.
+
+## TAO-LJ-001 scene-local inverse priors
+
+Tao is independent of TiHuBird and historical Tao D-only training. Real
+DiffusionRenderer inverse priors were generated for 112/112 RGB stems under
+`output/stage_a_tao_dr_raw_112_v1/` using NVIDIA source HEAD
+`8fcf0057ad3422139cd53281037025ff725d34e9` and checkpoint aggregate
+`f899dd4a003ce27df12cd8fa929d000bb9e9313a6c5c14e9af395b3064729cf0`.
+The output contains stored conditioning RGB, normal, relative depth, basecolor,
+and diffuse albedo. Eight repeated final-frame model slots are explicit padding;
+they are not Tao frames. Depth is not metric. These local data artifacts are not
+tracked in Git. No training/checkpoint/optimizer/PLY action was performed.

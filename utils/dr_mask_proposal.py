@@ -24,7 +24,7 @@ from PIL import Image, ImageDraw
 SCHEMA_VERSION = 1
 METHOD_VERSION = "dr-glass-proposal-v1"
 NORMAL_EPS = 1e-2
-RGB_REPLAY_MAX_ABS_DIFFERENCE = 2
+RGB_REPLAY_MAX_ABS_DIFFERENCE = 8
 REQUIRED_ARTIFACTS = ("normal", "depth")
 OPTIONAL_ARTIFACTS = ("basecolor", "diffuse_albedo")
 ALL_RAW_KINDS = ("rgb",) + REQUIRED_ARTIFACTS + OPTIONAL_ARTIFACTS
@@ -41,6 +41,13 @@ PROPOSAL_FILES = (
     "proposal_metadata.json",
 )
 RISK_NAMES = (
+    "subject_texture_may_be_included",
+    "background_may_be_included",
+    "glass_edge_may_be_missing",
+    "reflection_may_be_misclassified",
+    "low_confidence_region",
+)
+LEGACY_RISK_NAMES = (
     "bird_may_be_included",
     "background_may_be_included",
     "glass_edge_may_be_missing",
@@ -147,9 +154,10 @@ def _duplicates(values: Iterable[Any]) -> list[Any]:
 def audit_dr_artifacts(
     scene: Path,
     raw_root: Path,
-    expected_count: int = 111,
+    expected_count: int | None = None,
+    images: str = "images",
 ) -> dict[str, Any]:
-    """Validate exact RGB-to-real-slot mapping and every real DR artifact."""
+    """Validate ordered RGB-to-real-slot mapping and every real DR artifact."""
     scene = Path(scene).expanduser().resolve()
     raw_root = Path(raw_root).expanduser().resolve()
     manifest_path = raw_root / "manifest.json"
@@ -168,8 +176,22 @@ def audit_dr_artifacts(
         raise ProposalAuditError(f"cannot parse DR generation validation: {error}") from error
     if raw_validation.get("validation") != "PASS":
         raise ProposalAuditError("DR generation validation did not pass")
-    if raw_validation.get("pixel_mapping_global_max_abs_difference") != 0:
-        raise ProposalAuditError("DR generation-time RGB alignment was not exact")
+    mapping_max = raw_validation.get("pixel_mapping_global_max_abs_difference")
+    mapping_mean = raw_validation.get("pixel_mapping_global_mean_abs_difference", 0.0)
+    if not isinstance(mapping_max, (int, float)) or not isinstance(mapping_mean, (int, float)):
+        raise ProposalAuditError("DR generation-time RGB alignment metrics are missing")
+    # Exact replay is expected for a matching Pillow build.  A different Pillow
+    # release may change bilinear rounding; the raw generator admits only this
+    # narrow, recorded cross-version envelope.
+    if float(mapping_max) > 8.0 or float(mapping_mean) > 0.25:
+        raise ProposalAuditError(
+            f"DR generation-time RGB alignment exceeded bounds: max={mapping_max} mean={mapping_mean}"
+        )
+    manifest_count = raw_manifest.get("real_frame_count")
+    if expected_count is None:
+        if not isinstance(manifest_count, int) or manifest_count <= 0:
+            raise ProposalAuditError("DR manifest has no positive real_frame_count")
+        expected_count = manifest_count
     if raw_validation.get("real_frames") != expected_count:
         raise ProposalAuditError("DR validation real-frame count mismatch")
     records = raw_manifest.get("frames_and_padding")
@@ -192,9 +214,22 @@ def audit_dr_artifacts(
     if indices != list(range(expected_count)):
         raise ProposalAuditError("real DR records are missing, duplicated, or out of order")
 
-    image_root = scene / "images"
-    image_paths = sorted(path for path in image_root.iterdir() if path.is_file())
-    expected_names = [f"{index:06d}.jpg" for index in range(expected_count)]
+    image_root = scene / images
+    image_paths = sorted(
+        path for path in image_root.iterdir()
+        if path.is_file() and path.suffix.lower() in {".jpg", ".jpeg", ".png"}
+    )
+    ordered_stems = raw_manifest.get("ordered_stems")
+    if ordered_stems is None:
+        ordered_stems = [
+            Path(str(record.get("rtgs_input_file", ""))).stem for record in real
+        ]
+    if not isinstance(ordered_stems, list) or len(ordered_stems) != expected_count \
+            or any(not isinstance(stem, str) or not stem for stem in ordered_stems):
+        raise ProposalAuditError("DR manifest ordered stems are incomplete")
+    expected_names = [
+        Path(str(record.get("rtgs_input_file", ""))).name for record in real
+    ]
     if [path.name for path in image_paths] != expected_names:
         raise ProposalAuditError("RGB source set is missing, unexpected, or out of order")
 
@@ -228,13 +263,14 @@ def audit_dr_artifacts(
     }
     rgb_mapping_max_difference = 0
     for index, record in enumerate(real):
-        stem = f"{index:06d}"
-        expected_source_text = f"data/TiHuBird/images/{stem}.jpg"
-        if record.get("rtgs_input_file") != expected_source_text:
+        stem = ordered_stems[index]
+        source_reference = record.get("rtgs_input_file")
+        if not isinstance(source_reference, str) or not source_reference \
+                or Path(source_reference).stem != stem:
             raise ProposalAuditError(
-                f"{stem}: source mapping mismatch: {record.get('rtgs_input_file')!r}"
+                f"{stem}: source mapping mismatch: {source_reference!r}"
             )
-        source = image_root / f"{stem}.jpg"
+        source = image_root / Path(source_reference).name
         source_sha = sha256_file(source)
         if source_sha != record.get("input_sha256"):
             raise ProposalAuditError(f"{stem}: source SHA-256 mismatch")
@@ -361,15 +397,17 @@ def audit_dr_artifacts(
 
     return {
         "schema_version": SCHEMA_VERSION,
-        "artifact": "DiffusionRenderer glass-mask proposal input audit",
+        "artifact": "scene-agnostic DiffusionRenderer glass-mask proposal input audit",
         "status": "PASS",
         "scene": str(scene),
+        "images": images,
         "raw_root": str(raw_root),
         "raw_manifest": str(manifest_path.resolve()),
         "raw_manifest_sha256": sha256_file(manifest_path),
         "generation_validation": str(validation_path.resolve()),
         "generation_validation_sha256": sha256_file(validation_path),
-        "generation_validation_pixel_mapping_max_abs_difference": 0,
+        "generation_validation_pixel_mapping_max_abs_difference": mapping_max,
+        "generation_validation_pixel_mapping_mean_abs_difference": mapping_mean,
         "real_frame_count": len(entries),
         "padding_frame_count": len(padding_slots),
         "padding_policy": "excluded from every RGB/stem/proposal mapping",
@@ -397,8 +435,9 @@ def audit_dr_artifacts(
         "rgb_mapping_global_max_abs_difference": rgb_mapping_max_difference,
         "rgb_mapping_replay_tolerance": RGB_REPLAY_MAX_ABS_DIFFERENCE,
         "rgb_mapping_replay_note": (
-            "Generation-time validation was exact. The current Pillow replay may differ by "
-            "at most two uint8 levels; native proposal cues use the stored DR RGB artifact."
+            "The stored DiffusionRenderer RGB is authoritative. A source replay under another "
+            "Pillow release may differ within the audited uint8 bound; native proposal cues use "
+            "the stored artifact."
         ),
         "artifact_summaries": artifact_summaries,
         "padding_slots_excluded": padding_slots,
@@ -484,6 +523,7 @@ def propose_native_mask(
     normal_rgb: np.ndarray,
     depth_rgb: np.ndarray,
     basecolor_rgb: np.ndarray | None,
+    allow_review_fallback: bool = False,
 ) -> dict[str, Any]:
     """Combine DR geometry, RGB edges, connectivity, and optional basecolor."""
     height, width = depth_rgb.shape[:2]
@@ -529,6 +569,26 @@ def propose_native_mask(
     hulls.extend(_components(base_bright & center_gate, "basecolor"))
     hulls.extend(_components(seed, "geometry_consensus"))
     hulls.extend(_components(consensus, "depth_base_consensus"))
+    fallback_reason = None
+    if not hulls and allow_review_fallback:
+        # This generic fallback is deliberately available only to review-only
+        # callers.  It relaxes component area filtering while retaining the
+        # same DR cues and centrality prior; it is never a formal-mask path.
+        relaxed = _morph((depth_dark > 0) & center_gate, 15)
+        contours, _ = cv2.findContours(
+            relaxed.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+        )
+        contours = [item for item in contours if cv2.contourArea(item) > 0]
+        if contours:
+            contour = max(contours, key=cv2.contourArea)
+        else:
+            fallback_region = (center_prior > 0.36).astype(np.uint8)
+            contours, _ = cv2.findContours(
+                fallback_region, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+            )
+            contour = max(contours, key=cv2.contourArea)
+        hulls.append((cv2.convexHull(contour), "review_only_relaxed_depth_fallback"))
+        fallback_reason = "no production connected component survived declared area gates"
     if not hulls:
         raise ProposalAuditError("no connected glass proposal candidate survived")
 
@@ -616,7 +676,7 @@ def propose_native_mask(
     )
     uncertain_fraction = float((uncertainty > 0.55).mean())
     risks = {
-        "bird_may_be_included": {
+        "subject_texture_may_be_included": {
             "flag": bool(high_texture_inside > 0.035),
             "reason": f"high RGB-edge fraction inside proposal={high_texture_inside:.4f}",
         },
@@ -637,6 +697,12 @@ def propose_native_mask(
             "reason": f"uncertain image fraction={uncertain_fraction:.4f}, candidate score={best.score:.4f}",
         },
     }
+    if fallback_reason is not None:
+        uncertainty[hard] = np.maximum(uncertainty[hard], 0.80)
+        uncertain_fraction = float((uncertainty > 0.55).mean())
+        for risk in risks.values():
+            risk["flag"] = True
+            risk["reason"] = f"review-only fallback: {fallback_reason}; {risk['reason']}"
     return {
         "soft": soft.astype(np.float32),
         "hard": hard,
@@ -655,6 +721,8 @@ def propose_native_mask(
             "high_rgb_texture_inside": high_texture_inside,
             "weak_cue_inside": weak_cue_inside,
             "uncertain_fraction": uncertain_fraction,
+            "review_only_fallback_used": fallback_reason is not None,
+            "review_only_fallback_reason": fallback_reason,
         },
     }
 
@@ -681,6 +749,8 @@ def _overlay(rgb: np.ndarray, soft: np.ndarray) -> Image.Image:
 def generate_view_proposal(
     audit_entry: dict[str, Any],
     output_directory: Path,
+    allow_review_fallback: bool = False,
+    legacy_risk_names: bool = True,
 ) -> dict[str, Any]:
     source_path = Path(audit_entry["rgb"]["path"])
     artifacts = audit_entry["artifacts"]
@@ -694,7 +764,10 @@ def generate_view_proposal(
     )
     native_size = (normal.shape[1], normal.shape[0])
     source_size = (source_rgb.shape[1], source_rgb.shape[0])
-    proposal = propose_native_mask(native_rgb, normal, depth, basecolor)
+    proposal = propose_native_mask(
+        native_rgb, normal, depth, basecolor,
+        allow_review_fallback=allow_review_fallback,
+    )
     soft = _resize_scalar(proposal["soft"], source_size)
     uncertainty = _resize_scalar(proposal["uncertainty"], source_size)
     normal_boundary = _resize_scalar(proposal["normal_boundary"], source_size)
@@ -722,6 +795,10 @@ def generate_view_proposal(
     scale_x = source_size[0] / native_size[0]
     scale_y = source_size[1] / native_size[1]
     native_bbox = proposal["bbox_native"]
+    risks = proposal["risks"]
+    if legacy_risk_names:
+        risks = dict(risks)
+        risks["bird_may_be_included"] = risks.pop("subject_texture_may_be_included")
     metadata = {
         "schema_version": SCHEMA_VERSION,
         "artifact": "automatic glass-mask review proposal",
@@ -756,7 +833,7 @@ def generate_view_proposal(
         },
         "uncertainty_fraction_gt_0_55": float((uncertainty > 0.55).mean()),
         "cue_diagnostics": proposal["cue_diagnostics"],
-        "risks": proposal["risks"],
+        "risks": risks,
         "input_sha256": {
             "rgb": audit_entry["rgb"]["sha256"],
             "normal": artifacts["normal"]["sha256"],

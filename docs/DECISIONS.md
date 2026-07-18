@@ -6,6 +6,82 @@ does not fully specify behavior. New entries must use the decision template from
 
 Stage A decisions and the authorized Stage B entry decision are recorded below.
 
+## TAO-LJ-001 — From-global-0 Tao layered early-joint contract
+
+Date: 2026-07-18
+
+Question: How should Tao obtain reviewable inverse-rendering/mask/geometry
+assets and an early-joint D/R/T plan without importing either historical Tao
+training state or the accepted TiHuBird trajectory?
+
+Chosen implementation: Treat Tao as an independent scene. Bind real NVIDIA
+DiffusionRenderer source HEAD, inverse/SVD weights, configuration, environment,
+112 RGB hashes, and all raw RGB/normal/depth/basecolor/diffuse-albedo hashes in
+a fresh local manifest. DiffusionRenderer's fixed 24-frame input repeats the
+last Tao image into eight padding slots; the manifest marks and excludes those
+slots from the 112 real-frame mapping. The stored upstream RGB is authoritative.
+Cross-Pillow bilinear replay is admitted only within max-absolute 8 and
+mean-absolute 0.25 uint8; this Tao run observed 5 and 0.095039, while replay in
+the upstream Pillow 12.2 environment was exact.
+
+Generalize proposal production at the scene boundary while retaining an
+explicit legacy-name adapter for old TiHuBird artifacts. New outputs use generic
+subject/background/edge/reflection/confidence risks and are permanently
+review-only. If the production connected-component gates yield nothing, a
+central, relaxed DR-depth hull may be emitted only by the review-only caller;
+that view is forced to all-risk and cannot be promoted. Tao view `000058` used
+this fallback and is visibly over-inclusive.
+
+Gate a Tao-owned cuboid builder on a complete accepted formal-mask manifest.
+Normal axes come from a recorded signed-permutation search transformed through
+Tao camera rotations; COLMAP supplies world scale; DR depth chooses robust
+depth versus inverse-depth per-view calibration using registered sparse
+observations; hard silhouettes optimize six bounds. Predeclared gates are mean
+IoU 0.90, minimum IoU 0.75, mean two-hit coverage 0.95, minimum coverage 0.85,
+normal alignment p50 0.75, plus 100% finite/order/two-crossing and watertight
+topology. Runtime is analytic; generated caches are audit-only.
+
+Add a separate `rtgs_tao_layered_renderer_v1`. It issues exactly four formal
+black-background traces (`R_front`, `T_direct`, `R_back_from_T`, `Cout`) with
+strict R/T/D ownership, uses Schlick front/back Fresnel, performs one back-face
+reflection into the same T field, and applies the formulas in Master Plan §22
+in unclamped linear space. `Cin` remains premultiplied. Optional ownership and
+unfiltered diagnostics are a detached `no_grad` API. The new exporter saves
+both float tensors and display-only clamped PNGs and measures linear closure.
+
+Plan D from Tao COLMAP only, D-interface from the frozen analytic proxy, R from
+fresh deterministic complete-3-sigma strict-outside samples, and T from
+support-safe strict-inside Tao COLMAP points followed by deterministic fill.
+Record counts/seeds/selection hashes/LRs/topology/nodes/paths/resource policy.
+The operator has no start-checkpoint argument, rejects checkpoint/resume tokens,
+fails closed on missing mask/geometry or existing output, and dispatches only
+under explicit `--execute`.
+
+Alternatives: Resume a Tao D-only checkpoint; reuse TiHuBird masks/release;
+treat raw DR depth as metric; auto-accept masks; force a cuboid after a failed
+gate; merge interface/R/T radiance; use clamp-subtraction layers; multiply Cin
+by Ain again; permit diagnostics in the training graph; or start the 3,000-step
+run in this task.
+
+Why: Each alternative breaks scene identity, provenance, ownership, linear
+decomposition, or the explicit human/training authorization boundary. The
+review-only fallback is retained because a missing proposal would hide a hard
+view; marking it highest risk makes the failure visible without legitimizing it.
+
+Paper fidelity: D/R/T remain separate. One back internal reflection and the
+global-0 schedule are explicit project engineering choices; Snell refraction,
+dispersion, caustics, and recursive bounce are deliberately absent.
+
+Impact: Local Stage-A/B review assets exist, but no formal Tao mask or geometry
+release exists. The geometry tool and default-off operator therefore block.
+No real training, backward, optimizer update, training checkpoint, or PLY was
+performed or created, and Stage E remains unauthorized.
+
+Required ablation: After mask acceptance and a passing Tao geometry release,
+compare one-back-reflection versus no-back-reflection, review R/T ownership and
+four-trace parity, and inspect the predeclared nodes before any trajectory beyond
+global 3,000 is considered.
+
 ## A-001 — Single master-plan location
 
 Date: 2026-06-28
