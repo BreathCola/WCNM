@@ -198,18 +198,3 @@ cache. The release ID is Tao-owned `stage_c_tao_geometry_release_v1`, never the
 TiHuBird release. The builder has not run because no formal Tao mask exists, so
 no Tao geometry output/release/cache/PLY exists and the current gate is
 `BLOCKED_BY_GLASS_MASK_IDENTITY`.
-
-## TAO-DR-MASK-REPAIR-001 bootstrap isolation
-
-The DR geometry mask-repair cuboid is a `review-only` bootstrap used solely to
-propose complete glass projections for human inspection. It is not the formal
-Tao geometry builder, mesh, release, or two-hit cache. Its schema is rejected by
-both formal mask and geometry loaders, and its projection products are not
-training eligible.
-
-The bootstrap uses COLMAP world scale and one fixed six-plane cuboid across 112
-cameras, but it does not bypass the accepted-mask gate above. No
-`data/Tao/specular_masks_reviewed_v1/` or
-`output/stage_c_tao_geometry_release_v1/` was created. Stage C therefore remains
-blocked on explicit human mask approval despite all review-proposal diagnostics
-passing.

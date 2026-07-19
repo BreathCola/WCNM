@@ -1925,29 +1925,3 @@ TAO-LJ-001 stops after infrastructure and review proposal. No formal mask,
 geometry release, plan execution, optimizer update, checkpoint, or PLY is
 created. Until explicit human mask approval, the required verdict is
 `TAO_GLASS_MASK_REVIEW_REQUIRED`; Stage E remains forbidden.
-
-## 22.1 Tao DR geometry mask repair boundary (TAO-DR-MASK-REPAIR-001)
-
-The original per-view threshold proposal is comparison evidence only. It must
-not supervise geometry, define a silhouette objective, authorize acceptance, or
-provide a fallback. Tao DR normal, relative depth, RGB, basecolor, and diffuse
-albedo are instead fused as multi-view geometric likelihoods under Tao COLMAP.
-Normal convention is selected by an exhaustive signed-permutation search after
-camera-to-world transformation. Raw DR depth is never metric and is never
-compared across views; each view independently selects a robust affine depth or
-inverse-depth calibration on its projectable COLMAP observations, with weak
-calibrations downweighted.
-
-The repair bootstrap is a separate review-only six-plane cuboid implementation,
-not the formal Tao geometry builder. It optimizes one finite, positive-extent,
-watertight cuboid against fused DR boundary/interior/normal/depth evidence in
-COLMAP scale and projects that single fixed geometry into all 112 cameras. A
-failed predeclared gate must stop before mask directories are materialized; no
-ellipse, convex hull, full-frame, or old-mask fallback is permitted. Soft masks
-come from the new projected silhouette distance field.
-
-The v2 schema is deliberately incompatible with formal mask and geometry
-loaders. Its only allowed status is `proposal_requires_review`, with
-`training_eligible=false`, `promotion_performed=false`, and
-`formal_geometry_release=false`. Human approval remains necessary before any
-formal Tao mask, geometry release, two-hit cache, or training run.
